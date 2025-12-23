@@ -1,13 +1,16 @@
 /**
  * Funzioni per la geolocalizzazione
  * Check-in GPS, calcolo distanza, verifica area cantiere
+ * 
+ * SEDE: Via G. Keplero 5, 43122 Parma
  */
 
-// Configurazione cantiere da variabili ambiente
+// Configurazione cantiere - Via Keplero 5, Parma
 const CANTIERE_CONFIG = {
-  lat: parseFloat(import.meta.env.VITE_CANTIERE_LAT) || 45.4642,
-  lng: parseFloat(import.meta.env.VITE_CANTIERE_LNG) || 9.1900,
-  raggio: parseFloat(import.meta.env.VITE_CANTIERE_RAGGIO) || 150,
+  lat: 44.84957997164342,   // Latitudine Via Keplero, Parma
+  lng: 10.349479380198963,   // Longitudine Via Keplero, Parma
+  raggio: 250,    // Raggio in metri
+  indirizzo: 'Via G. Keplero 5, 43122 Parma',
 }
 
 /**
@@ -121,6 +124,7 @@ export async function checkIn() {
       distanza: verifica.distanza,
       raggioMax: verifica.raggioMax,
       timestamp: posizione.timestamp,
+      cantiere: CANTIERE_CONFIG.indirizzo,
       messaggio: verifica.inArea
         ? `Check-in valido! Sei a ${verifica.distanza}m dal centro cantiere.`
         : `Sei fuori dall'area cantiere (${verifica.distanza}m, max ${verifica.raggioMax}m).`,
