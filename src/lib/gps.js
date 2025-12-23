@@ -7,9 +7,9 @@
 
 // Configurazione cantiere - Via Keplero 5, Parma
 const CANTIERE_CONFIG = {
-  lat: 44.7857,   // Latitudine Via Keplero, Parma
-  lng: 10.3081,   // Longitudine Via Keplero, Parma
-  raggio: 150,    // Raggio in metri
+  lat: 44.84957997164342,   // Latitudine Via Keplero, Parma
+  lng: 10.349479380198963,   // Longitudine Via Keplero, Parma
+  raggio: 250,    // Raggio in metri
   indirizzo: 'Via G. Keplero 5, 43122 Parma',
 }
 
