@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { 
   Home, 
@@ -16,14 +16,21 @@ import { useState } from 'react'
 export default function Layout() {
   const { persona, assegnazione, progetto, signOut, isAtLeast } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [showMenu, setShowMenu] = useState(false)
 
   const handleLogout = async () => {
     try {
       await signOut()
+      navigate('/login')
     } catch (error) {
       console.error('Logout error:', error)
     }
+  }
+
+  const handleImpostazioni = () => {
+    setShowMenu(false)
+    navigate('/impostazioni')
   }
 
   // Navigation items
@@ -63,18 +70,17 @@ export default function Layout() {
         {showMenu && (
           <div className="absolute right-4 top-16 bg-white rounded-lg shadow-lg border border-gray-200 py-2 min-w-48 z-50">
             {isAtLeast('cm') && (
-              <NavLink
-                to="/impostazioni"
-                onClick={() => setShowMenu(false)}
-                className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50"
+              <button
+                onClick={handleImpostazioni}
+                className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 w-full text-left"
               >
                 <Settings size={18} />
                 <span>Impostazioni</span>
-              </NavLink>
+              </button>
             )}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-3 px-4 py-2 text-danger-600 hover:bg-danger-50 w-full"
+              className="flex items-center gap-3 px-4 py-2 text-danger-600 hover:bg-danger-50 w-full text-left"
             >
               <LogOut size={18} />
               <span>Esci</span>
