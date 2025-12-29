@@ -18,7 +18,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   if (!assegnazione) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl p-6 text-center max-w-md">
+        <div className="bg-white rounded-xl shadow p-6 text-center max-w-md">
           <h2 className="text-xl font-bold mb-2">Nessun progetto assegnato</h2>
           <p className="text-gray-600">Contatta l'amministratore.</p>
         </div>
@@ -40,10 +40,26 @@ function App() {
         <Route index element={<HomePage />} />
         <Route path="checkin" element={<CheckInPage />} />
         <Route path="team" element={<TeamPage />} />
-        <Route path="rapportino" element={<ProtectedRoute allowedRoles={['foreman', 'supervisor', 'cm', 'admin']}><RapportinoPage /></ProtectedRoute>} />
-        <Route path="statistiche" element={<ProtectedRoute allowedRoles={['foreman', 'supervisor', 'cm', 'admin']}><StatistichePage /></ProtectedRoute>} />
-        <Route path="trasferimenti" element={<ProtectedRoute allowedRoles={['foreman', 'supervisor', 'cm', 'admin']}><TrasferimentiPage /></ProtectedRoute>} />
-        <Route path="impostazioni" element={<ProtectedRoute allowedRoles={['cm', 'admin']}><ImpostazioniPage /></ProtectedRoute>} />
+        <Route path="rapportino" element={
+          <ProtectedRoute allowedRoles={['foreman', 'supervisor', 'cm', 'admin']}>
+            <RapportinoPage />
+          </ProtectedRoute>
+        } />
+        <Route path="statistiche" element={
+          <ProtectedRoute allowedRoles={['foreman', 'supervisor', 'cm', 'admin']}>
+            <StatistichePage />
+          </ProtectedRoute>
+        } />
+        <Route path="trasferimenti" element={
+          <ProtectedRoute allowedRoles={['foreman', 'supervisor', 'cm', 'admin']}>
+            <TrasferimentiPage />
+          </ProtectedRoute>
+        } />
+        <Route path="impostazioni" element={
+          <ProtectedRoute allowedRoles={['cm', 'admin']}>
+            <ImpostazioniPage />
+          </ProtectedRoute>
+        } />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
