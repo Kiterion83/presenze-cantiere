@@ -8,6 +8,7 @@ import TeamPage from './pages/TeamPage'
 import TrasferimentiPage from './pages/TrasferimentiPage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
 import StatistichePage from './pages/StatistichePage'
+import PersonalePage from './pages/PersonalePage'
 import Layout from './components/Layout'
 import LoadingScreen from './components/LoadingScreen'
 
@@ -53,6 +54,11 @@ function App() {
         <Route path="trasferimenti" element={
           <ProtectedRoute allowedRoles={['foreman', 'supervisor', 'cm', 'admin']}>
             <TrasferimentiPage />
+          </ProtectedRoute>
+        } />
+        <Route path="personale" element={
+          <ProtectedRoute allowedRoles={['supervisor', 'cm', 'admin']}>
+            <PersonalePage />
           </ProtectedRoute>
         } />
         <Route path="impostazioni" element={
