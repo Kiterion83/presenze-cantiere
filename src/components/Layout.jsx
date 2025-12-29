@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { 
   Home, 
@@ -15,16 +15,17 @@ import { useState } from 'react'
 
 export default function Layout() {
   const { persona, assegnazione, progetto, signOut, isAtLeast } = useAuth()
-  const location = useLocation()
   const navigate = useNavigate()
   const [showMenu, setShowMenu] = useState(false)
 
   const handleLogout = async () => {
+    setShowMenu(false)
     try {
       await signOut()
-      navigate('/login')
+      window.location.href = '/login'
     } catch (error) {
       console.error('Logout error:', error)
+      alert('Errore durante il logout')
     }
   }
 
@@ -47,7 +48,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="header">
+      <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">
@@ -59,49 +60,63 @@ export default function Layout() {
           </div>
           
           <button 
+            type="button"
             onClick={() => setShowMenu(!showMenu)}
-            className="p-2 rounded-lg hover:bg-gray-100"
+            className="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200"
           >
             {showMenu ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
+      </header>
 
-        {/* Dropdown menu */}
-        {showMenu && (
-          <div className="absolute right-4 top-16 bg-white rounded-lg shadow-lg border border-gray-200 py-2 min-w-48 z-50">
+      {/* Dropdown menu - OUTSIDE header for better z-index */}
+      {showMenu && (
+        <>
+          {/* Overlay */}
+          <div 
+            className="fixed inset-0 z-50 bg-black/20" 
+            onClick={() => setShowMenu(false)}
+          />
+          
+          {/* Menu */}
+          <div className="fixed right-4 top-14 bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-52 z-50">
             {isAtLeast('cm') && (
               <button
+                type="button"
                 onClick={handleImpostazioni}
-                className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 w-full text-left"
+                className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-100 w-full text-left active:bg-gray-200"
               >
-                <Settings size={18} />
-                <span>Impostazioni</span>
+                <Settings size={20} />
+                <span className="font-medium">Impostazioni</span>
               </button>
             )}
             <button
+              type="button"
               onClick={handleLogout}
-              className="flex items-center gap-3 px-4 py-2 text-danger-600 hover:bg-danger-50 w-full text-left"
+              className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 w-full text-left active:bg-red-100"
             >
-              <LogOut size={18} />
-              <span>Esci</span>
+              <LogOut size={20} />
+              <span className="font-medium">Esci</span>
             </button>
           </div>
-        )}
-      </header>
+        </>
+      )}
 
       {/* Main content */}
-      <main className="page-container">
+      <main className="pb-20">
         <Outlet />
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="bottom-nav">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 px-2 py-2 flex justify-around items-center">
         {visibleNavItems.map(({ path, icon: Icon, label }) => (
           <NavLink
             key={path}
             to={path}
             className={({ isActive }) => 
-              `bottom-nav-item ${isActive ? 'active' : ''}`
+              `flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors ${
+                isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-500'
+              }`
             }
           >
             <Icon size={22} />
@@ -109,14 +124,6 @@ export default function Layout() {
           </NavLink>
         ))}
       </nav>
-
-      {/* Click outside to close menu */}
-      {showMenu && (
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => setShowMenu(false)}
-        />
-      )}
     </div>
   )
 }
