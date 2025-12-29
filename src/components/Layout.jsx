@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Home, MapPin, ClipboardList, Users, Settings, LogOut, Menu, X, BarChart3, ArrowLeftRight } from 'lucide-react'
+import { Home, MapPin, ClipboardList, Users, Settings, LogOut, Menu, X, BarChart3, ArrowLeftRight, UserCog } from 'lucide-react'
 import { useState } from 'react'
 
 export default function Layout() {
@@ -14,7 +14,6 @@ export default function Layout() {
     window.location.href = '/login'
   }
 
-  // Navbar inferiore
   const navItems = [
     { path: '/', icon: Home, label: 'Home', show: true },
     { path: '/checkin', icon: MapPin, label: 'Check-in', show: true },
@@ -25,7 +24,6 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
@@ -38,7 +36,6 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Menu dropdown */}
       {showMenu && (
         <>
           <div className="fixed inset-0 z-50 bg-black bg-opacity-20" onClick={() => setShowMenu(false)} />
@@ -47,6 +44,12 @@ export default function Layout() {
               <button type="button" onClick={() => { setShowMenu(false); navigate('/trasferimenti'); }} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 w-full text-left">
                 <ArrowLeftRight size={20} />
                 <span>Trasferimenti</span>
+              </button>
+            )}
+            {isAtLeast('supervisor') && (
+              <button type="button" onClick={() => { setShowMenu(false); navigate('/personale'); }} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 w-full text-left">
+                <UserCog size={20} />
+                <span>Gestione Personale</span>
               </button>
             )}
             {isAtLeast('cm') && (
@@ -64,12 +67,10 @@ export default function Layout() {
         </>
       )}
 
-      {/* Main */}
       <main className="pb-20">
         <Outlet />
       </main>
 
-      {/* Bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t px-2 py-2 flex justify-around">
         {navItems.filter(i => i.show).map(({ path, icon: Icon, label }) => (
           <NavLink
