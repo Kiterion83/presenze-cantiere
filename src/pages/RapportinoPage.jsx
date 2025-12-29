@@ -1,165 +1,293 @@
-/**
- * Pagina RapportinoPage
- * Inserimento rapportino giornaliero con presenze
- */
-
 import { useState, useEffect } from 'react'
-import { MapPin, Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
-import { SimpleCard, StatCard } from '../components/ui/Card'
-import Button from '../components/ui/Button'
-import RapportinoForm from '../components/forms/RapportinoForm'
-import { checkIn, formatDistanza } from '../lib/gps'
-import { formatOra } from '../lib/utils'
+import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
+import { 
+  ClipboardList, 
+  Users, 
+  Clock, 
+  Save, 
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  Check
+} from 'lucide-react'
 
-export default function RapportinoPage({ utente }) {
-  const [checkInEffettuato, setCheckInEffettuato] = useState(false)
-  const [checkInData, setCheckInData] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [errore, setErrore] = useState('')
+export default function RapportinoPage() {
+  const { persona, assegnazione } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [squadra, setSquadra] = useState([])
+  const [centriCosto, setCentriCosto] = useState([])
+  const [selectedCC, setSelectedCC] = useState(null)
+  const [orePersonale, setOrePersonale] = useState({})
+  const [message, setMessage] = useState({ type: '', text: '' })
 
-  // Esegui check-in GPS
-  const handleCheckIn = async () => {
-    setLoading(true)
-    setErrore('')
-    
-    const risultato = await checkIn()
-    
-    if (risultato.success) {
-      setCheckInData(risultato)
-      setCheckInEffettuato(true)
-    } else {
-      setErrore(risultato.error)
+  const oggi = new Date().toISOString().split('T')[0]
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      // Carica squadra (persone che riportano a questo foreman)
+      const { data: squadraData } = await supabase
+        .from('assegnazioni_progetto')
+        .select(`
+          *,
+          persona:persone(*)
+        `)
+        .eq('progetto_id', assegnazione.progetto_id)
+        .eq('riporta_a_id', assegnazione.id)
+        .eq('attivo', true)
+
+      setSquadra(squadraData || [])
+
+      // Inizializza ore
+      const oreInit = {}
+      squadraData?.forEach(s => {
+        oreInit[s.persona_id] = { ordinarie: 8, straordinario: 0, tipo: 'presente' }
+      })
+      setOrePersonale(oreInit)
+
+      // Carica centri di costo
+      const { data: ccData } = await supabase
+        .from('centri_costo')
+        .select('*')
+        .eq('progetto_id', assegnazione.progetto_id)
+        .eq('stato', 'attivo')
+        .order('ordine')
+
+      setCentriCosto(ccData || [])
+      if (ccData?.length > 0) {
+        setSelectedCC(ccData[0])
+      }
+
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
     }
-    
-    setLoading(false)
   }
 
-  // Se non ha fatto check-in, mostra schermata check-in
-  if (!checkInEffettuato) {
+  const updateOre = (personaId, field, value) => {
+    setOrePersonale(prev => ({
+      ...prev,
+      [personaId]: {
+        ...prev[personaId],
+        [field]: value
+      }
+    }))
+  }
+
+  const handleSave = async () => {
+    if (!selectedCC) {
+      setMessage({ type: 'error', text: 'Seleziona un centro di costo' })
+      return
+    }
+
+    setSaving(true)
+    setMessage({ type: '', text: '' })
+
+    try {
+      // Crea rapportino
+      const { data: rapportino, error: rapportinoError } = await supabase
+        .from('rapportini')
+        .insert({
+          foreman_persona_id: persona.id,
+          progetto_id: assegnazione.progetto_id,
+          centro_costo_id: selectedCC.id,
+          data: oggi,
+          stato: 'bozza'
+        })
+        .select()
+        .single()
+
+      if (rapportinoError) throw rapportinoError
+
+      // Inserisci ore lavorate
+      const oreLavorate = Object.entries(orePersonale).map(([personaId, ore]) => ({
+        rapportino_id: rapportino.id,
+        persona_id: personaId,
+        ore_ordinarie: ore.ordinarie,
+        ore_straordinario: ore.straordinario,
+        tipo_presenza: ore.tipo
+      }))
+
+      const { error: oreError } = await supabase
+        .from('ore_lavorate')
+        .insert(oreLavorate)
+
+      if (oreError) throw oreError
+
+      setMessage({ type: 'success', text: 'Rapportino salvato con successo!' })
+
+    } catch (error) {
+      console.error('Save error:', error)
+      setMessage({ type: 'error', text: error.message || 'Errore durante il salvataggio' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="max-w-lg mx-auto">
-        <SimpleCard>
-          <div className="text-center py-8">
-            {/* Icona */}
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
-              errore ? 'bg-red-100' : 'bg-blue-100'
-            }`}>
-              {loading ? (
-                <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-              ) : errore ? (
-                <AlertCircle className="w-10 h-10 text-red-600" />
-              ) : (
-                <MapPin className="w-10 h-10 text-blue-600" />
-              )}
-            </div>
-
-            {/* Titolo */}
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Check-in Cantiere
-            </h2>
-            <p className="text-gray-500 mb-6">
-              Prima di compilare il rapportino, registra la tua presenza in cantiere
-            </p>
-
-            {/* Errore */}
-            {errore && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-left">
-                <p className="text-red-700 text-sm">{errore}</p>
-              </div>
-            )}
-
-            {/* Info utente */}
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-500">Stai accedendo come</p>
-              <p className="font-semibold text-gray-900">{utente.nome}</p>
-              <p className="text-sm text-blue-600">{utente.ruolo}</p>
-            </div>
-
-            {/* Bottone check-in */}
-            <Button
-              onClick={handleCheckIn}
-              loading={loading}
-              size="lg"
-              fullWidth
-              icon={<MapPin size={20} />}
-            >
-              {loading ? 'Rilevamento GPS...' : 'Effettua Check-in'}
-            </Button>
-
-            {/* Note */}
-            <p className="text-xs text-gray-400 mt-4">
-              Il GPS verrà utilizzato per verificare la tua presenza nell'area del cantiere
-            </p>
-          </div>
-        </SimpleCard>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="animate-spin text-primary-600" size={32} />
       </div>
     )
   }
 
-  // Check-in effettuato - mostra form rapportino
   return (
-    <div className="space-y-6">
-      {/* Banner check-in */}
-      <div className={`p-4 rounded-xl flex items-center gap-4 ${
-        checkInData?.inArea 
-          ? 'bg-green-50 border border-green-200' 
-          : 'bg-amber-50 border border-amber-200'
-      }`}>
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-          checkInData?.inArea ? 'bg-green-500' : 'bg-amber-500'
+    <div className="p-4 space-y-4">
+      {/* Header */}
+      <div className="text-center">
+        <h1 className="text-xl font-bold text-gray-800">Rapportino</h1>
+        <p className="text-sm text-gray-500">
+          {new Date().toLocaleDateString('it-IT', { 
+            weekday: 'long', 
+            day: 'numeric', 
+            month: 'long' 
+          })}
+        </p>
+      </div>
+
+      {/* Message */}
+      {message.text && (
+        <div className={`card ${
+          message.type === 'success' ? 'bg-success-50 text-success-700' : 
+          message.type === 'error' ? 'bg-danger-50 text-danger-700' : ''
         }`}>
-          {checkInData?.inArea ? (
-            <CheckCircle className="w-6 h-6 text-white" />
-          ) : (
-            <AlertCircle className="w-6 h-6 text-white" />
-          )}
+          {message.text}
         </div>
-        <div className="flex-1">
-          <p className={`font-semibold ${
-            checkInData?.inArea ? 'text-green-800' : 'text-amber-800'
-          }`}>
-            {checkInData?.inArea ? 'Check-in Confermato' : 'Fuori Area Cantiere'}
+      )}
+
+      {/* Centro di costo selector */}
+      <div className="card">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Centro di Costo
+        </label>
+        <select
+          value={selectedCC?.id || ''}
+          onChange={(e) => {
+            const cc = centriCosto.find(c => c.id === e.target.value)
+            setSelectedCC(cc)
+          }}
+          className="input"
+        >
+          <option value="">Seleziona...</option>
+          {centriCosto.map(cc => (
+            <option key={cc.id} value={cc.id}>
+              {cc.codice} - {cc.nome}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Squadra */}
+      <div className="card">
+        <h3 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+          <Users size={18} />
+          Squadra ({squadra.length} persone)
+        </h3>
+
+        {squadra.length === 0 ? (
+          <p className="text-gray-500 text-sm">
+            Nessuna persona assegnata alla tua squadra.
           </p>
-          <p className={`text-sm ${
-            checkInData?.inArea ? 'text-green-600' : 'text-amber-600'
-          }`}>
-            {checkInData?.messaggio}
-          </p>
+        ) : (
+          <div className="space-y-3">
+            {squadra.map(({ persona: p, persona_id }) => (
+              <div key={persona_id} className="border border-gray-100 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-gray-800">
+                    {p.nome} {p.cognome}
+                  </span>
+                  <select
+                    value={orePersonale[persona_id]?.tipo || 'presente'}
+                    onChange={(e) => updateOre(persona_id, 'tipo', e.target.value)}
+                    className="text-sm border rounded px-2 py-1"
+                  >
+                    <option value="presente">Presente</option>
+                    <option value="assente">Assente</option>
+                    <option value="malattia">Malattia</option>
+                    <option value="permesso">Permesso</option>
+                    <option value="ferie">Ferie</option>
+                  </select>
+                </div>
+
+                {orePersonale[persona_id]?.tipo === 'presente' && (
+                  <div className="flex gap-4 mt-2">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500">Ordinarie</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="12"
+                        step="0.5"
+                        value={orePersonale[persona_id]?.ordinarie || 0}
+                        onChange={(e) => updateOre(persona_id, 'ordinarie', parseFloat(e.target.value))}
+                        className="input mt-1 text-center"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500">Straordinario</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="8"
+                        step="0.5"
+                        value={orePersonale[persona_id]?.straordinario || 0}
+                        onChange={(e) => updateOre(persona_id, 'straordinario', parseFloat(e.target.value))}
+                        className="input mt-1 text-center"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Summary */}
+      <div className="card bg-gray-50">
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-500">Ore ordinarie totali</span>
+          <span className="font-medium">
+            {Object.values(orePersonale)
+              .filter(o => o.tipo === 'presente')
+              .reduce((sum, o) => sum + (o.ordinarie || 0), 0)} h
+          </span>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Ora check-in</p>
-          <p className="font-mono font-semibold">
-            {checkInData?.timestamp ? formatOra(checkInData.timestamp) : '--:--'}
-          </p>
+        <div className="flex justify-between text-sm mt-1">
+          <span className="text-gray-500">Ore straordinario totali</span>
+          <span className="font-medium">
+            {Object.values(orePersonale)
+              .filter(o => o.tipo === 'presente')
+              .reduce((sum, o) => sum + (o.straordinario || 0), 0)} h
+          </span>
         </div>
       </div>
 
-      {/* Stats rapide */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard
-          title="Distanza"
-          value={checkInData?.distanza ? formatDistanza(checkInData.distanza) : '-'}
-          icon={<MapPin size={24} />}
-        />
-        <StatCard
-          title="Raggio Max"
-          value={checkInData?.raggioMax ? `${checkInData.raggioMax}m` : '-'}
-          icon={<MapPin size={24} />}
-        />
-        <StatCard
-          title="Check-in"
-          value={checkInData?.timestamp ? formatOra(checkInData.timestamp) : '-'}
-          icon={<Clock size={24} />}
-        />
-        <StatCard
-          title="Stato"
-          value={checkInData?.inArea ? 'In Area' : 'Fuori Area'}
-          icon={checkInData?.inArea ? <CheckCircle size={24} /> : <AlertCircle size={24} />}
-        />
-      </div>
-
-      {/* Form rapportino */}
-      <RapportinoForm utente={utente} />
+      {/* Save button */}
+      <button
+        onClick={handleSave}
+        disabled={saving || squadra.length === 0}
+        className="btn-primary w-full py-3 flex items-center justify-center gap-2"
+      >
+        {saving ? (
+          <>
+            <Loader2 className="animate-spin" size={20} />
+            Salvataggio...
+          </>
+        ) : (
+          <>
+            <Save size={20} />
+            Salva Rapportino
+          </>
+        )}
+      </button>
     </div>
   )
 }
