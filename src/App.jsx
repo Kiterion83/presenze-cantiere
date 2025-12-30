@@ -9,6 +9,7 @@ import TeamPage from './pages/TeamPage'
 import RapportinoPage from './pages/RapportinoPage'
 import StatistichePage from './pages/StatistichePage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
+import FeriePage from './pages/FeriePage'
 
 function MenuPage() {
   const { signOut, isAtLeast } = useAuth()
@@ -88,6 +89,7 @@ function App() {
           <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/checkin" element={<ProtectedRoute><CheckinPage /></ProtectedRoute>} />
           <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
+          <Route path="/ferie" element={<ProtectedRoute><FeriePage /></ProtectedRoute>} />
           <Route path="/menu" element={<ProtectedRoute><MenuPage /></ProtectedRoute>} />
           <Route path="/team" element={<ProtectedRoute minRole="foreman"><TeamPage /></ProtectedRoute>} />
           <Route path="/rapportino" element={<ProtectedRoute minRole="foreman"><RapportinoPage /></ProtectedRoute>} />
