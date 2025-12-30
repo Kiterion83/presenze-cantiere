@@ -149,7 +149,9 @@ export default function Layout({ children }) {
             {showProgettiDropdown && assegnazioni.length > 0 && (
               <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 <div className="p-2 border-b bg-gray-50">
-                  <p className="text-xs font-medium text-gray-500 uppercase">I tuoi progetti</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase">
+                    {assegnazioni.some(a => a.isVirtual) ? 'Tutti i progetti (Admin)' : 'I tuoi progetti'}
+                  </p>
                 </div>
                 <div className="max-h-64 overflow-y-auto">
                   {assegnazioni.map((ass) => (
@@ -158,14 +160,21 @@ export default function Layout({ children }) {
                       onClick={() => handleCambiaProgetto(ass.progetto_id)}
                       className={`w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-blue-50 transition-colors ${
                         ass.progetto_id === progetto?.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                      }`}
+                      } ${ass.isVirtual ? 'bg-amber-50/50' : ''}`}
                     >
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold ${
+                        ass.isVirtual 
+                          ? 'bg-gradient-to-br from-amber-400 to-orange-500' 
+                          : 'bg-gradient-to-br from-blue-400 to-indigo-500'
+                      }`}>
                         {ass.progetto?.codice?.slice(0, 2) || '??'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-800 truncate text-sm">{ass.progetto?.nome}</p>
-                        <p className="text-xs text-gray-500">{ass.ruolo}</p>
+                        <p className="text-xs text-gray-500">
+                          {ass.ruolo}
+                          {ass.isVirtual && <span className="ml-1 text-amber-600">(accesso admin)</span>}
+                        </p>
                       </div>
                       {ass.progetto_id === progetto?.id && (
                         <span className="text-blue-500">✔</span>
