@@ -1,248 +1,305 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { supabase } from '../lib/supabase'
-import { MapPin, Plus, Trash2, Edit2, Save, X, Loader2, Cloud, Settings, Check, AlertCircle, FolderKanban } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 export default function ImpostazioniPage() {
-  const { assegnazione, progetto } = useAuth()
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState('zone')
-  const [message, setMessage] = useState({ type: '', text: '' })
-  
-  const [zone, setZone] = useState([])
-  const [showZoneForm, setShowZoneForm] = useState(false)
-  const [editingZona, setEditingZona] = useState(null)
-  const [zonaForm, setZonaForm] = useState({ nome: '', descrizione: '', latitudine: '', longitudine: '', raggio_metri: 100 })
-  
-  const [impostazioni, setImpostazioni] = useState(null)
-  
-  const [centriCosto, setCentriCosto] = useState([])
-  const [showCCForm, setShowCCForm] = useState(false)
-  const [editingCC, setEditingCC] = useState(null)
-  const [ccForm, setCCForm] = useState({ codice: '', nome: '', budget_ore: '', budget_quantita: '', budget_quantita_secondaria: '', unita_misura_id: '', unita_misura_secondaria_id: '' })
-  const [unitaMisura, setUnitaMisura] = useState([])
+  const { progetto, isAtLeast, ruolo } = useAuth()
+  const [activeTab, setActiveTab] = useState('overview')
 
-  useEffect(() => { loadData() }, [])
-
-  const loadData = async () => {
-    try {
-      const pid = assegnazione.progetto_id
-      const { data: zoneData } = await supabase.from('zone_gps').select('*').eq('progetto_id', pid).order('nome')
-      setZone(zoneData || [])
-
-      const { data: impData } = await supabase.from('impostazioni_progetto').select('*').eq('progetto_id', pid).single()
-      if (impData) setImpostazioni(impData)
-
-      const { data: ccData } = await supabase.from('centri_costo').select('*, unita_misura:unita_misura_id(nome, simbolo), unita_misura_sec:unita_misura_secondaria_id(nome, simbolo)').eq('progetto_id', pid).order('ordine')
-      setCentriCosto(ccData || [])
-
-      const { data: umData } = await supabase.from('unita_misura').select('*').eq('attiva', true).order('nome')
-      setUnitaMisura(umData || [])
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ZONE GPS
-  const resetZonaForm = () => { setZonaForm({ nome: '', descrizione: '', latitudine: '', longitudine: '', raggio_metri: 100 }); setEditingZona(null); setShowZoneForm(false) }
-  
-  const handleEditZona = (z) => { setZonaForm({ nome: z.nome, descrizione: z.descrizione || '', latitudine: z.latitudine.toString(), longitudine: z.longitudine.toString(), raggio_metri: z.raggio_metri }); setEditingZona(z); setShowZoneForm(true) }
-  
-  const handleSaveZona = async () => {
-    if (!zonaForm.nome || !zonaForm.latitudine || !zonaForm.longitudine) { setMessage({ type: 'error', text: 'Compila i campi obbligatori' }); return }
-    setSaving(true)
-    try {
-      const data = { progetto_id: assegnazione.progetto_id, nome: zonaForm.nome, descrizione: zonaForm.descrizione || null, latitudine: parseFloat(zonaForm.latitudine), longitudine: parseFloat(zonaForm.longitudine), raggio_metri: parseInt(zonaForm.raggio_metri), attiva: true }
-      if (editingZona) await supabase.from('zone_gps').update(data).eq('id', editingZona.id)
-      else await supabase.from('zone_gps').insert(data)
-      setMessage({ type: 'success', text: 'Zona salvata!' })
-      resetZonaForm(); loadData()
-    } catch (e) { setMessage({ type: 'error', text: e.message }) }
-    finally { setSaving(false) }
-  }
-  
-  const handleDeleteZona = async (z) => { if (!confirm('Eliminare?')) return; await supabase.from('zone_gps').delete().eq('id', z.id); loadData() }
-  
-  const getCurrentPosition = () => {
-    navigator.geolocation?.getCurrentPosition(
-      (p) => setZonaForm(f => ({ ...f, latitudine: p.coords.latitude.toFixed(6), longitudine: p.coords.longitude.toFixed(6) })),
-      (e) => alert('Errore GPS: ' + e.message), { enableHighAccuracy: true }
-    )
-  }
-
-  // CENTRI COSTO
-  const resetCCForm = () => { setCCForm({ codice: '', nome: '', budget_ore: '', budget_quantita: '', budget_quantita_secondaria: '', unita_misura_id: '', unita_misura_secondaria_id: '' }); setEditingCC(null); setShowCCForm(false) }
-  
-  const handleEditCC = (cc) => { setCCForm({ codice: cc.codice, nome: cc.nome, budget_ore: cc.budget_ore?.toString() || '', budget_quantita: cc.budget_quantita?.toString() || '', budget_quantita_secondaria: cc.budget_quantita_secondaria?.toString() || '', unita_misura_id: cc.unita_misura_id || '', unita_misura_secondaria_id: cc.unita_misura_secondaria_id || '' }); setEditingCC(cc); setShowCCForm(true) }
-  
-  const handleSaveCC = async () => {
-    if (!ccForm.codice || !ccForm.nome) { setMessage({ type: 'error', text: 'Codice e nome obbligatori' }); return }
-    setSaving(true)
-    try {
-      const data = { progetto_id: assegnazione.progetto_id, codice: ccForm.codice, nome: ccForm.nome, budget_ore: ccForm.budget_ore ? parseInt(ccForm.budget_ore) : null, budget_quantita: ccForm.budget_quantita ? parseFloat(ccForm.budget_quantita) : null, budget_quantita_secondaria: ccForm.budget_quantita_secondaria ? parseFloat(ccForm.budget_quantita_secondaria) : null, unita_misura_id: ccForm.unita_misura_id || null, unita_misura_secondaria_id: ccForm.unita_misura_secondaria_id || null, stato: 'attivo' }
-      if (editingCC) await supabase.from('centri_costo').update(data).eq('id', editingCC.id)
-      else await supabase.from('centri_costo').insert(data)
-      setMessage({ type: 'success', text: 'Centro costo salvato!' })
-      resetCCForm(); loadData()
-    } catch (e) { setMessage({ type: 'error', text: e.message }) }
-    finally { setSaving(false) }
-  }
-
-  const handleDeleteCC = async (cc) => { if (!confirm('Eliminare?')) return; await supabase.from('centri_costo').update({ stato: 'chiuso' }).eq('id', cc.id); loadData() }
-
-  // IMPOSTAZIONI
-  const handleSaveImpostazioni = async () => {
-    setSaving(true)
-    try {
-      await supabase.from('impostazioni_progetto').update({ vento_warning_kmh: impostazioni.vento_warning_kmh, vento_stop_kmh: impostazioni.vento_stop_kmh, pioggia_warning_mm: impostazioni.pioggia_warning_mm, temperatura_min_celsius: impostazioni.temperatura_min_celsius, tolleranza_gps_metri: impostazioni.tolleranza_gps_metri }).eq('id', impostazioni.id)
-      setMessage({ type: 'success', text: 'Salvato!' })
-    } catch (e) { setMessage({ type: 'error', text: e.message }) }
-    finally { setSaving(false) }
-  }
-
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-blue-600" size={32} /></div>
+  const menuItems = [
+    { id: 'overview', label: 'Panoramica', emoji: '📋', minRole: 'cm' },
+    { id: 'progetto', label: 'Progetto', emoji: '🏗️', minRole: 'cm' },
+    { id: 'persone', label: 'Anagrafica Persone', emoji: '👥', minRole: 'cm' },
+    { id: 'ditte', label: 'Ditte', emoji: '🏢', minRole: 'admin' },
+    { id: 'squadre', label: 'Squadre', emoji: '👷', minRole: 'cm' },
+    { id: 'centriCosto', label: 'Centri di Costo', emoji: '💰', minRole: 'cm' },
+    { id: 'orari', label: 'Orari Lavoro', emoji: '⏰', minRole: 'cm' },
+    { id: 'festivi', label: 'Festività', emoji: '📅', minRole: 'admin' },
+  ].filter(item => isAtLeast(item.minRole))
 
   return (
-    <div className="p-4 space-y-4 pb-24">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800">Impostazioni</h1>
-        <p className="text-sm text-gray-500">{progetto?.nome}</p>
+    <div className="p-4 lg:p-8">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">⚙️ Impostazioni</h1>
+        <p className="text-gray-500">{progetto?.nome}</p>
       </div>
 
-      {message.text && (
-        <div className={`p-3 rounded-lg flex items-center gap-2 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-          {message.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
-          {message.text}
-          <button onClick={() => setMessage({ type: '', text: '' })} className="ml-auto"><X size={16} /></button>
+      <div className="grid lg:grid-cols-4 gap-6">
+        {/* Sidebar Menu - Desktop */}
+        <div className="hidden lg:block">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-4 border-b border-gray-100">
+              <h3 className="font-semibold text-gray-700">Menu</h3>
+            </div>
+            <nav className="p-2">
+              {menuItems.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-left ${
+                    activeTab === item.id
+                      ? 'bg-blue-50 text-blue-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <span>{item.emoji}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
         </div>
-      )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg overflow-x-auto">
-        {[{ id: 'zone', icon: MapPin, label: 'Zone GPS' }, { id: 'cc', icon: FolderKanban, label: 'Centri Costo' }, { id: 'meteo', icon: Cloud, label: 'Meteo' }, { id: 'gps', icon: Settings, label: 'GPS' }].map(t => (
-          <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} className={`flex items-center gap-1 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${activeTab === t.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'}`}>
-            <t.icon size={16} />{t.label}
-          </button>
-        ))}
+        {/* Mobile Menu */}
+        <div className="lg:hidden">
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {menuItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`px-4 py-2 rounded-xl font-medium whitespace-nowrap transition-colors ${
+                  activeTab === item.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200'
+                }`}
+              >
+                {item.emoji} {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="lg:col-span-3">
+          {activeTab === 'overview' && <OverviewTab />}
+          {activeTab === 'progetto' && <ProgettoTab />}
+          {activeTab === 'persone' && <PersoneTab />}
+          {activeTab === 'ditte' && <DitteTab />}
+          {activeTab === 'squadre' && <SquadreTab />}
+          {activeTab === 'centriCosto' && <CentriCostoTab />}
+          {activeTab === 'orari' && <OrariTab />}
+          {activeTab === 'festivi' && <FestivitaTab />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Overview Tab
+function OverviewTab() {
+  const { progetto } = useAuth()
+  
+  const quickActions = [
+    { label: 'Aggiungi Persona', emoji: '👤', href: '#' },
+    { label: 'Nuova Squadra', emoji: '👷', href: '#' },
+    { label: 'Centro di Costo', emoji: '💰', href: '#' },
+    { label: 'Gestione Orari', emoji: '⏰', href: '#' },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">📋 Panoramica Progetto</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-blue-50 rounded-xl p-4">
+            <p className="text-2xl font-bold text-blue-700">24</p>
+            <p className="text-sm text-blue-600">Persone attive</p>
+          </div>
+          <div className="bg-green-50 rounded-xl p-4">
+            <p className="text-2xl font-bold text-green-700">5</p>
+            <p className="text-sm text-green-600">Squadre</p>
+          </div>
+          <div className="bg-purple-50 rounded-xl p-4">
+            <p className="text-2xl font-bold text-purple-700">12</p>
+            <p className="text-sm text-purple-600">Centri di costo</p>
+          </div>
+          <div className="bg-orange-50 rounded-xl p-4">
+            <p className="text-2xl font-bold text-orange-700">3</p>
+            <p className="text-sm text-orange-600">Ditte</p>
+          </div>
+        </div>
       </div>
 
-      {/* ZONE GPS */}
-      {activeTab === 'zone' && (
-        <div className="space-y-3">
-          {!showZoneForm && (
-            <button type="button" onClick={() => setShowZoneForm(true)} className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 flex items-center justify-center gap-2">
-              <Plus size={20} />Aggiungi Zona
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 className="font-semibold text-gray-700 mb-4">⚡ Azioni Rapide</h3>
+        <div className="grid grid-cols-2 gap-3">
+          {quickActions.map(action => (
+            <button
+              key={action.label}
+              className="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors text-left"
+            >
+              <span className="text-2xl block mb-2">{action.emoji}</span>
+              <span className="font-medium text-gray-700">{action.label}</span>
             </button>
-          )}
-          {showZoneForm && (
-            <div className="bg-white rounded-xl border p-4 space-y-3">
-              <div className="flex justify-between"><h3 className="font-medium">{editingZona ? 'Modifica' : 'Nuova'} Zona</h3><button type="button" onClick={resetZonaForm}><X size={20} /></button></div>
-              <input type="text" placeholder="Nome *" value={zonaForm.nome} onChange={(e) => setZonaForm(f => ({ ...f, nome: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" />
-              <input type="text" placeholder="Descrizione" value={zonaForm.descrizione} onChange={(e) => setZonaForm(f => ({ ...f, descrizione: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" />
-              <div className="grid grid-cols-2 gap-2">
-                <input type="text" placeholder="Latitudine *" value={zonaForm.latitudine} onChange={(e) => setZonaForm(f => ({ ...f, latitudine: e.target.value }))} className="px-3 py-2 border rounded-lg" />
-                <input type="text" placeholder="Longitudine *" value={zonaForm.longitudine} onChange={(e) => setZonaForm(f => ({ ...f, longitudine: e.target.value }))} className="px-3 py-2 border rounded-lg" />
-              </div>
-              <button type="button" onClick={getCurrentPosition} className="w-full py-2 bg-gray-100 rounded-lg flex items-center justify-center gap-2"><MapPin size={18} />Posizione attuale</button>
-              <input type="number" placeholder="Raggio (m)" value={zonaForm.raggio_metri} onChange={(e) => setZonaForm(f => ({ ...f, raggio_metri: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" />
-              <div className="flex gap-2">
-                <button type="button" onClick={resetZonaForm} className="flex-1 py-2 bg-gray-200 rounded-lg">Annulla</button>
-                <button type="button" onClick={handleSaveZona} disabled={saving} className="flex-1 py-2 bg-blue-600 text-white rounded-lg flex items-center justify-center gap-2">{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}Salva</button>
-              </div>
-            </div>
-          )}
-          {zone.map(z => (
-            <div key={z.id} className="bg-white rounded-xl border p-3 flex justify-between items-start">
-              <div><h4 className="font-medium">{z.nome}</h4><p className="text-xs text-gray-500">{z.latitudine}, {z.longitudine} • {z.raggio_metri}m</p></div>
-              <div className="flex gap-1">
-                <button type="button" onClick={() => handleEditZona(z)} className="p-2 hover:bg-gray-100 rounded"><Edit2 size={16} /></button>
-                <button type="button" onClick={() => handleDeleteZona(z)} className="p-2 hover:bg-red-50 text-red-500 rounded"><Trash2 size={16} /></button>
-              </div>
-            </div>
           ))}
-          {zone.length === 0 && !showZoneForm && <p className="text-center text-gray-500 py-6">Nessuna zona</p>}
         </div>
-      )}
+      </div>
+    </div>
+  )
+}
 
-      {/* CENTRI COSTO */}
-      {activeTab === 'cc' && (
-        <div className="space-y-3">
-          {!showCCForm && (
-            <button type="button" onClick={() => setShowCCForm(true)} className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 flex items-center justify-center gap-2">
-              <Plus size={20} />Aggiungi Centro Costo
-            </button>
-          )}
-          {showCCForm && (
-            <div className="bg-white rounded-xl border p-4 space-y-3">
-              <div className="flex justify-between"><h3 className="font-medium">{editingCC ? 'Modifica' : 'Nuovo'} Centro Costo</h3><button type="button" onClick={resetCCForm}><X size={20} /></button></div>
-              <div className="grid grid-cols-2 gap-2">
-                <input type="text" placeholder="Codice *" value={ccForm.codice} onChange={(e) => setCCForm(f => ({ ...f, codice: e.target.value.toUpperCase() }))} className="px-3 py-2 border rounded-lg" />
-                <input type="text" placeholder="Nome *" value={ccForm.nome} onChange={(e) => setCCForm(f => ({ ...f, nome: e.target.value }))} className="px-3 py-2 border rounded-lg" />
-              </div>
-              <input type="number" placeholder="Budget Ore" value={ccForm.budget_ore} onChange={(e) => setCCForm(f => ({ ...f, budget_ore: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" />
-              <div className="grid grid-cols-2 gap-2">
-                <input type="number" placeholder="Budget Qtà" value={ccForm.budget_quantita} onChange={(e) => setCCForm(f => ({ ...f, budget_quantita: e.target.value }))} className="px-3 py-2 border rounded-lg" />
-                <select value={ccForm.unita_misura_id} onChange={(e) => setCCForm(f => ({ ...f, unita_misura_id: e.target.value }))} className="px-3 py-2 border rounded-lg">
-                  <option value="">UdM...</option>
-                  {unitaMisura.map(u => <option key={u.id} value={u.id}>{u.simbolo} - {u.nome}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input type="number" placeholder="Budget Qtà 2" value={ccForm.budget_quantita_secondaria} onChange={(e) => setCCForm(f => ({ ...f, budget_quantita_secondaria: e.target.value }))} className="px-3 py-2 border rounded-lg" />
-                <select value={ccForm.unita_misura_secondaria_id} onChange={(e) => setCCForm(f => ({ ...f, unita_misura_secondaria_id: e.target.value }))} className="px-3 py-2 border rounded-lg">
-                  <option value="">UdM 2...</option>
-                  {unitaMisura.map(u => <option key={u.id} value={u.id}>{u.simbolo} - {u.nome}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={resetCCForm} className="flex-1 py-2 bg-gray-200 rounded-lg">Annulla</button>
-                <button type="button" onClick={handleSaveCC} disabled={saving} className="flex-1 py-2 bg-blue-600 text-white rounded-lg flex items-center justify-center gap-2">{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}Salva</button>
-              </div>
+// Progetto Tab
+function ProgettoTab() {
+  const { progetto } = useAuth()
+  
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <h2 className="text-xl font-bold text-gray-800 mb-4">🏗️ Dettagli Progetto</h2>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Nome</label>
+          <input
+            type="text"
+            defaultValue={progetto?.nome}
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Codice</label>
+          <input
+            type="text"
+            defaultValue={progetto?.codice}
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Indirizzo</label>
+          <input
+            type="text"
+            defaultValue={progetto?.indirizzo}
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Data Inizio</label>
+            <input
+              type="date"
+              defaultValue={progetto?.data_inizio}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1">Data Fine (prevista)</label>
+            <input
+              type="date"
+              defaultValue={progetto?.data_fine_prevista}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl"
+            />
+          </div>
+        </div>
+        <button className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
+          Salva Modifiche
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Placeholder tabs
+function PersoneTab() {
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-gray-800">👥 Anagrafica Persone</h2>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
+          + Aggiungi
+        </button>
+      </div>
+      <p className="text-gray-500 text-center py-8">
+        Gestione anagrafica persone in arrivo...
+      </p>
+    </div>
+  )
+}
+
+function DitteTab() {
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-gray-800">🏢 Gestione Ditte</h2>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
+          + Aggiungi
+        </button>
+      </div>
+      <p className="text-gray-500 text-center py-8">
+        Gestione ditte subappaltatrici in arrivo...
+      </p>
+    </div>
+  )
+}
+
+function SquadreTab() {
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-gray-800">👷 Gestione Squadre</h2>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
+          + Aggiungi
+        </button>
+      </div>
+      <p className="text-gray-500 text-center py-8">
+        Gestione squadre in arrivo...
+      </p>
+    </div>
+  )
+}
+
+function CentriCostoTab() {
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-gray-800">💰 Centri di Costo</h2>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
+          + Aggiungi
+        </button>
+      </div>
+      <p className="text-gray-500 text-center py-8">
+        Gestione centri di costo in arrivo...
+      </p>
+    </div>
+  )
+}
+
+function OrariTab() {
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <h2 className="text-xl font-bold text-gray-800 mb-4">⏰ Orari di Lavoro</h2>
+      <div className="space-y-4">
+        <div className="p-4 bg-gray-50 rounded-xl">
+          <h3 className="font-medium text-gray-700 mb-2">Orario Standard</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-gray-500">Entrata</label>
+              <input type="time" defaultValue="08:00" className="w-full px-3 py-2 border rounded-lg" />
             </div>
-          )}
-          {centriCosto.map(cc => (
-            <div key={cc.id} className="bg-white rounded-xl border p-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-medium">{cc.codice}</h4>
-                  <p className="text-sm text-gray-600">{cc.nome}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Ore: {cc.budget_ore || '-'} | Qtà: {cc.budget_quantita || '-'} {cc.unita_misura?.simbolo || ''}
-                    {cc.budget_quantita_secondaria > 0 && ` | Qtà2: ${cc.budget_quantita_secondaria} ${cc.unita_misura_sec?.simbolo || ''}`}
-                  </p>
-                </div>
-                <div className="flex gap-1">
-                  <button type="button" onClick={() => handleEditCC(cc)} className="p-2 hover:bg-gray-100 rounded"><Edit2 size={16} /></button>
-                  <button type="button" onClick={() => handleDeleteCC(cc)} className="p-2 hover:bg-red-50 text-red-500 rounded"><Trash2 size={16} /></button>
-                </div>
-              </div>
+            <div>
+              <label className="text-sm text-gray-500">Uscita</label>
+              <input type="time" defaultValue="17:00" className="w-full px-3 py-2 border rounded-lg" />
             </div>
-          ))}
-          {centriCosto.length === 0 && !showCCForm && <p className="text-center text-gray-500 py-6">Nessun centro costo</p>}
+          </div>
         </div>
-      )}
+        <button className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
+          Salva
+        </button>
+      </div>
+    </div>
+  )
+}
 
-      {/* METEO */}
-      {activeTab === 'meteo' && impostazioni && (
-        <div className="bg-white rounded-xl border p-4 space-y-4">
-          <div><label className="block text-sm font-medium mb-1">Vento Warning (km/h)</label><input type="number" value={impostazioni.vento_warning_kmh || 30} onChange={(e) => setImpostazioni(i => ({ ...i, vento_warning_kmh: parseFloat(e.target.value) }))} className="w-full px-3 py-2 border rounded-lg" /></div>
-          <div><label className="block text-sm font-medium mb-1">Vento Stop (km/h)</label><input type="number" value={impostazioni.vento_stop_kmh || 50} onChange={(e) => setImpostazioni(i => ({ ...i, vento_stop_kmh: parseFloat(e.target.value) }))} className="w-full px-3 py-2 border rounded-lg" /></div>
-          <div><label className="block text-sm font-medium mb-1">Pioggia Warning (mm/h)</label><input type="number" value={impostazioni.pioggia_warning_mm || 2} onChange={(e) => setImpostazioni(i => ({ ...i, pioggia_warning_mm: parseFloat(e.target.value) }))} className="w-full px-3 py-2 border rounded-lg" /></div>
-          <div><label className="block text-sm font-medium mb-1">Temp. Minima (°C)</label><input type="number" value={impostazioni.temperatura_min_celsius || 0} onChange={(e) => setImpostazioni(i => ({ ...i, temperatura_min_celsius: parseFloat(e.target.value) }))} className="w-full px-3 py-2 border rounded-lg" /></div>
-          <button type="button" onClick={handleSaveImpostazioni} disabled={saving} className="w-full py-3 bg-blue-600 text-white rounded-lg flex items-center justify-center gap-2">{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}Salva</button>
-        </div>
-      )}
-
-      {/* GPS */}
-      {activeTab === 'gps' && impostazioni && (
-        <div className="bg-white rounded-xl border p-4 space-y-4">
-          <div><label className="block text-sm font-medium mb-1">Tolleranza GPS (metri)</label><input type="number" value={impostazioni.tolleranza_gps_metri || 50} onChange={(e) => setImpostazioni(i => ({ ...i, tolleranza_gps_metri: parseInt(e.target.value) }))} className="w-full px-3 py-2 border rounded-lg" /></div>
-          <button type="button" onClick={handleSaveImpostazioni} disabled={saving} className="w-full py-3 bg-blue-600 text-white rounded-lg flex items-center justify-center gap-2">{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}Salva</button>
-        </div>
-      )}
+function FestivitaTab() {
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-gray-800">📅 Festività</h2>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
+          + Aggiungi
+        </button>
+      </div>
+      <p className="text-gray-500 text-center py-8">
+        Gestione festività in arrivo...
+      </p>
     </div>
   )
 }
