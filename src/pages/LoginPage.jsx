@@ -1,14 +1,25 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { HardHat, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { HardHat, Eye, EyeOff, Loader2, UserCog } from 'lucide-react'
+
+// Ruoli disponibili per il testing
+const RUOLI_TEST = [
+  { value: 'admin', label: 'Admin', description: 'Accesso completo a tutto' },
+  { value: 'cm', label: 'Construction Manager', description: 'Gestione progetto e team' },
+  { value: 'supervisor', label: 'Supervisor', description: 'Supervisione squadre' },
+  { value: 'foreman', label: 'Foreman', description: 'Gestione squadra e rapportini' },
+  { value: 'helper', label: 'Helper', description: 'Solo check-in e visualizzazione' },
+  { value: 'office', label: 'Office', description: 'Amministrazione e documenti' },
+]
 
 export default function LoginPage() {
   const { signIn } = useAuth()
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState('giuseppe.pasquale@outlook.com')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [selectedRole, setSelectedRole] = useState('admin')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -16,6 +27,8 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
+      // Salva il ruolo selezionato per il testing
+      sessionStorage.setItem('test_role_override', selectedRole)
       await signIn(email, password)
     } catch (err) {
       console.error('Login error:', err)
@@ -31,6 +44,8 @@ export default function LoginPage() {
       setLoading(false)
     }
   }
+
+  const selectedRoleInfo = RUOLI_TEST.find(r => r.value === selectedRole)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center p-4">
@@ -57,6 +72,30 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Selector Ruolo per Testing */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <UserCog className="w-5 h-5 text-amber-600" />
+                <span className="text-sm font-medium text-amber-800">
+                  Modalità Test - Seleziona Ruolo
+                </span>
+              </div>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-white text-gray-800 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              >
+                {RUOLI_TEST.map((ruolo) => (
+                  <option key={ruolo.value} value={ruolo.value}>
+                    {ruolo.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-amber-600 mt-2">
+                {selectedRoleInfo?.description}
+              </p>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Email
@@ -107,7 +146,7 @@ export default function LoginPage() {
                   Accesso in corso...
                 </span>
               ) : (
-                'Accedi'
+                `Accedi come ${selectedRoleInfo?.label}`
               )}
             </button>
           </form>
@@ -117,6 +156,14 @@ export default function LoginPage() {
         <p className="text-center text-primary-200 text-sm mt-6">
           © 2024 Presenze Cantiere v2.0
         </p>
+
+        {/* Nota Test Mode */}
+        <div className="mt-4 text-center">
+          <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500/20 text-amber-200 text-xs rounded-full">
+            <UserCog className="w-3 h-3" />
+            Test Mode Attivo
+          </span>
+        </div>
       </div>
     </div>
   )
