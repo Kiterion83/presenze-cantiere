@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Home, MapPin, ClipboardList, Users, Settings, LogOut, Menu, X, BarChart3, ArrowLeftRight, UserCog, Calendar } from 'lucide-react'
+import { Home, MapPin, ClipboardList, Users, Settings, LogOut, Menu, X, BarChart3, ArrowLeftRight, UserCog } from 'lucide-react'
 import { useState } from 'react'
 
 export default function Layout() {
@@ -52,10 +52,6 @@ export default function Layout() {
                 <span>Gestione Personale</span>
               </button>
             )}
-            <button type="button" onClick={() => { setShowMenu(false); navigate('/ferie'); }} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 w-full text-left">
-              <Calendar size={20} />
-              <span>Ferie</span>
-            </button>
             {isAtLeast('cm') && (
               <button type="button" onClick={() => { setShowMenu(false); navigate('/impostazioni'); }} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 w-full text-left">
                 <Settings size={20} />
