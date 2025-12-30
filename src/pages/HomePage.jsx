@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 
 export default function HomePage() {
-  const { persona, assegnazione, progetto, ruolo, isAtLeast, isTestMode } = useAuth()
+  const { persona, assegnazione, progetto, ruolo, isAtLeast, testRoleOverride } = useAuth()
   const [presenzaOggi, setPresenzaOggi] = useState(null)
   const [stats, setStats] = useState({ presenti: 0, totale: 0 })
   const [meteo, setMeteo] = useState(null)
@@ -513,7 +513,7 @@ export default function HomePage() {
       </div>
 
       {/* Test Mode Banner */}
-      {isTestMode() && (
+      {testRoleOverride && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
           <AlertTriangle className="text-amber-600" size={18} />
           <span className="text-sm text-amber-700">
