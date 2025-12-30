@@ -30,7 +30,7 @@ function ProtectedRoute({ children }) {
   return children
 }
 
-// Public Route Component (redirect if logged in)
+// Public Route Component
 function PublicRoute({ children }) {
   const { user, loading } = useAuth()
 
@@ -50,24 +50,9 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Routes */}
-          <Route
-            path="/login"
-            element={
-              <PublicRoute>
-                <LoginPage />
-              </PublicRoute>
-            }
-          />
-
-          {/* Protected Routes */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
+          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          
+          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/" element={<HomePage />} />
             <Route path="/checkin" element={<CheckInPage />} />
             <Route path="/team" element={<TeamPage />} />
@@ -79,7 +64,6 @@ function App() {
             <Route path="/ferie" element={<FeriePage />} />
           </Route>
 
-          {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
