@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
-import LoadingScreen from './components/LoadingScreen'
 
 // Pages
 import LoginPage from './pages/LoginPage'
@@ -13,7 +12,15 @@ import StatistichePage from './pages/StatistichePage'
 import TrasferimentiPage from './pages/TrasferimentiPage'
 import PersonalePage from './pages/PersonalePage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
-import FeriePage from './pages/FeriePage'
+
+// Simple Loading Component
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
+  )
+}
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -61,7 +68,6 @@ function App() {
             <Route path="/trasferimenti" element={<TrasferimentiPage />} />
             <Route path="/personale" element={<PersonalePage />} />
             <Route path="/impostazioni" element={<ImpostazioniPage />} />
-            <Route path="/ferie" element={<FeriePage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
