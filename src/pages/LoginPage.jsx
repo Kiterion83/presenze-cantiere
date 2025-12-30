@@ -25,7 +25,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="text-5xl mb-3">🏗️</div>
           <h1 className="text-2xl font-bold text-gray-800">Presenze Cantiere</h1>
@@ -33,66 +32,42 @@ export default function LoginPage() {
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="email@esempio.com"
               required
             />
           </div>
           
-          {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="••••••••"
               required
             />
           </div>
 
-          {/* Error */}
           {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm flex items-center gap-2">
-              <span>⚠️</span>
-              {error}
-            </div>
+            <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm">⚠️ {error}</div>
           )}
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:bg-blue-300 transition-all shadow-lg shadow-blue-200"
+            className="w-full py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:bg-blue-300"
           >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Accesso in corso...
-              </span>
-            ) : 'Accedi'}
+            {loading ? 'Accesso in corso...' : 'Accedi'}
           </button>
         </form>
-
-        {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-6">
-          © 2025 Presenze Cantiere
-        </p>
       </div>
     </div>
   )
