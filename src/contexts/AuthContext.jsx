@@ -8,7 +8,8 @@ export const useAuth = () => useContext(AuthContext)
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [persona, setPersona] = useState(null)
-  const [assegnazione, setAssegnazione] = useState(null)
+  const [assegnazioni, setAssegnazioni] = useState([]) // TUTTE le assegnazioni
+  const [assegnazione, setAssegnazione] = useState(null) // Assegnazione corrente
   const [progetto, setProgetto] = useState(null)
   const [loading, setLoading] = useState(true)
   const [testRoleOverride, setTestRoleOverride] = useState(null)
@@ -35,6 +36,7 @@ export const AuthProvider = ({ children }) => {
       } else {
         setUser(null)
         setPersona(null)
+        setAssegnazioni([])
         setAssegnazione(null)
         setProgetto(null)
         setLoading(false)
@@ -59,22 +61,41 @@ export const AuthProvider = ({ children }) => {
 
       setPersona(p)
 
-      const { data: a, error: e2 } = await supabase
+      // Carica TUTTE le assegnazioni attive
+      const { data: allAssegnazioni, error: e2 } = await supabase
         .from('assegnazioni_progetto')
         .select('*, progetto:progetti(*), ditta:ditte(*)')
         .eq('persona_id', p.id)
         .eq('attivo', true)
-        .limit(1)
-        .single()
+        .order('created_at', { ascending: false })
 
-      if (!e2 && a) {
-        setAssegnazione(a)
-        setProgetto(a.progetto)
+      if (!e2 && allAssegnazioni && allAssegnazioni.length > 0) {
+        setAssegnazioni(allAssegnazioni)
+
+        // Recupera progetto salvato o usa il primo
+        const savedProgettoId = localStorage.getItem('selected_progetto_id')
+        const savedAssegnazione = savedProgettoId 
+          ? allAssegnazioni.find(a => a.progetto_id === savedProgettoId)
+          : null
+
+        const activeAssegnazione = savedAssegnazione || allAssegnazioni[0]
+        setAssegnazione(activeAssegnazione)
+        setProgetto(activeAssegnazione.progetto)
       }
     } catch (err) {
       console.error('Errore:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Funzione per cambiare progetto
+  const cambiaProgetto = (progettoId) => {
+    const nuovaAssegnazione = assegnazioni.find(a => a.progetto_id === progettoId)
+    if (nuovaAssegnazione) {
+      setAssegnazione(nuovaAssegnazione)
+      setProgetto(nuovaAssegnazione.progetto)
+      localStorage.setItem('selected_progetto_id', progettoId)
     }
   }
 
@@ -86,10 +107,12 @@ export const AuthProvider = ({ children }) => {
 
   const signOut = async () => {
     sessionStorage.removeItem('test_role_override')
+    localStorage.removeItem('selected_progetto_id')
     setTestRoleOverride(null)
     await supabase.auth.signOut()
     setUser(null)
     setPersona(null)
+    setAssegnazioni([])
     setAssegnazione(null)
     setProgetto(null)
   }
@@ -115,6 +138,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     persona,
+    assegnazioni, // Lista tutti i progetti
     assegnazione,
     progetto,
     loading,
@@ -123,6 +147,7 @@ export const AuthProvider = ({ children }) => {
     isAtLeast,
     setTestRole,
     testRoleOverride,
+    cambiaProgetto, // Funzione per cambiare progetto
     ruolo: effectiveRole,
     realRuolo: assegnazione?.ruolo || null,
     progettoId: assegnazione?.progetto_id || null,
