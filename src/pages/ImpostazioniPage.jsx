@@ -1,18 +1,22 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import FlussiTab from '../components/FlussiTab'  // NUOVO: Import FlussiTab
 
 export default function ImpostazioniPage() {
   const { progetto, isAtLeast } = useAuth()
   const [activeTab, setActiveTab] = useState('progetto')
 
+  // AGGIORNATO: Aggiunto tab Flussi
   const menuItems = [
-    { id: 'progetto', label: 'Progetto', emoji: '🏗️', minRole: 'cm' },
-    { id: 'persone', label: 'Persone', emoji: '👥', minRole: 'cm' },
+    { id: 'progetto', label: 'Progetto', emoji: '🏗️', minRole: 'admin' },
+    { id: 'persone', label: 'Persone', emoji: '👥', minRole: 'admin' },
     { id: 'ditte', label: 'Ditte', emoji: '🏢', minRole: 'admin' },
-    { id: 'squadre', label: 'Squadre', emoji: '👷', minRole: 'cm' },
-    { id: 'centriCosto', label: 'Centri Costo', emoji: '💰', minRole: 'cm' },
-    { id: 'qrCodes', label: 'QR Codes', emoji: '📱', minRole: 'cm' },
+    { id: 'squadre', label: 'Squadre', emoji: '👷', minRole: 'admin' },
+    { id: 'dipartimenti', label: 'Dipartimenti', emoji: '🏛️', minRole: 'admin' },  // NUOVO
+    { id: 'centriCosto', label: 'Centri Costo', emoji: '💰', minRole: 'admin' },
+    { id: 'flussi', label: 'Flussi Approvazione', emoji: '🔄', minRole: 'admin' },  // NUOVO
+    { id: 'qrCodes', label: 'QR Codes', emoji: '📱', minRole: 'admin' },
     { id: 'progetti', label: 'Tutti i Progetti', emoji: '📋', minRole: 'admin' },
   ].filter(item => isAtLeast(item.minRole))
 
@@ -54,7 +58,9 @@ export default function ImpostazioniPage() {
           {activeTab === 'persone' && <PersoneTab />}
           {activeTab === 'ditte' && <DitteTab />}
           {activeTab === 'squadre' && <SquadreTab />}
+          {activeTab === 'dipartimenti' && <DipartimentiTab />}
           {activeTab === 'centriCosto' && <CentriCostoTab />}
+          {activeTab === 'flussi' && <FlussiTab />}
           {activeTab === 'qrCodes' && <QRCodesTab />}
           {activeTab === 'progetti' && <TuttiProgettiTab />}
         </div>
@@ -423,32 +429,46 @@ function PersoneTab() {
   const [persone, setPersone] = useState([])
   const [ditte, setDitte] = useState([])
   const [squadre, setSquadre] = useState([])
+  const [dipartimenti, setDipartimenti] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingPersona, setEditingPersona] = useState(null)
-  const [formData, setFormData] = useState({ nome: '', cognome: '', email: '', telefono: '', codice_fiscale: '', ruolo: 'helper', ditta_id: '', squadra_id: '' })
+  const [formData, setFormData] = useState({ nome: '', cognome: '', email: '', telefono: '', codice_fiscale: '', ruolo: 'helper', ditta_id: '', squadra_id: '', dipartimento_id: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   const [filter, setFilter] = useState('')
-  const ruoli = [{ value: 'helper', label: 'Operaio' }, { value: 'office', label: 'Impiegato' }, { value: 'foreman', label: 'Caposquadra' }, { value: 'supervisor', label: 'Supervisore' }, { value: 'cm', label: 'CM' }, { value: 'admin', label: 'Admin' }]
+  
+  // AGGIORNATO: Lista ruoli con PM e Dept Manager
+  const ruoli = [
+    { value: 'helper', label: 'Operaio' },
+    { value: 'office', label: 'Impiegato' },
+    { value: 'foreman', label: 'Caposquadra' },
+    { value: 'dept_manager', label: 'Responsabile Dipartimento' },
+    { value: 'supervisor', label: 'Supervisore' },
+    { value: 'cm', label: 'Construction Manager' },
+    { value: 'pm', label: 'Project Manager' },
+    { value: 'admin', label: 'Admin' }
+  ]
 
   useEffect(() => { if (assegnazione?.progetto_id) loadData() }, [assegnazione?.progetto_id])
 
   const loadData = async () => {
     setLoading(true)
-    const { data: p } = await supabase.from('assegnazioni_progetto').select('*, persona:persone(*), ditta:ditte(id, nome), squadra:squadre(id, nome)').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('ruolo')
+    const { data: p } = await supabase.from('assegnazioni_progetto').select('*, persona:persone(*), ditta:ditte(id, nome), squadra:squadre(id, nome), dipartimento:dipartimenti(id, nome)').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('ruolo')
     setPersone(p || [])
     const { data: d } = await supabase.from('ditte').select('*').eq('attivo', true).order('nome')
     setDitte(d || [])
     const { data: s } = await supabase.from('squadre').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('nome')
     setSquadre(s || [])
+    const { data: dip } = await supabase.from('dipartimenti').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome')
+    setDipartimenti(dip || [])
     setLoading(false)
   }
 
-  const resetForm = () => { setFormData({ nome: '', cognome: '', email: '', telefono: '', codice_fiscale: '', ruolo: 'helper', ditta_id: '', squadra_id: '' }); setEditingPersona(null); setShowForm(false); setMessage(null) }
+  const resetForm = () => { setFormData({ nome: '', cognome: '', email: '', telefono: '', codice_fiscale: '', ruolo: 'helper', ditta_id: '', squadra_id: '', dipartimento_id: '' }); setEditingPersona(null); setShowForm(false); setMessage(null) }
 
   const handleEdit = (ass) => {
-    setFormData({ nome: ass.persona.nome || '', cognome: ass.persona.cognome || '', email: ass.persona.email || '', telefono: ass.persona.telefono || '', codice_fiscale: ass.persona.codice_fiscale || '', ruolo: ass.ruolo || 'helper', ditta_id: ass.ditta_id || '', squadra_id: ass.squadra_id || '' })
+    setFormData({ nome: ass.persona.nome || '', cognome: ass.persona.cognome || '', email: ass.persona.email || '', telefono: ass.persona.telefono || '', codice_fiscale: ass.persona.codice_fiscale || '', ruolo: ass.ruolo || 'helper', ditta_id: ass.ditta_id || '', squadra_id: ass.squadra_id || '', dipartimento_id: ass.dipartimento_id || '' })
     setEditingPersona(ass); setShowForm(true)
   }
 
@@ -458,11 +478,11 @@ function PersoneTab() {
     try {
       if (editingPersona) {
         await supabase.from('persone').update({ nome: formData.nome, cognome: formData.cognome, email: formData.email || null, telefono: formData.telefono || null, codice_fiscale: formData.codice_fiscale || null }).eq('id', editingPersona.persona.id)
-        await supabase.from('assegnazioni_progetto').update({ ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null }).eq('id', editingPersona.id)
+        await supabase.from('assegnazioni_progetto').update({ ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null, dipartimento_id: formData.dipartimento_id || null }).eq('id', editingPersona.id)
       } else {
         const { data: newP, error: e1 } = await supabase.from('persone').insert({ nome: formData.nome, cognome: formData.cognome, email: formData.email || null, telefono: formData.telefono || null, codice_fiscale: formData.codice_fiscale || null }).select().single()
         if (e1) throw e1
-        await supabase.from('assegnazioni_progetto').insert({ persona_id: newP.id, progetto_id: assegnazione.progetto_id, ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null, attivo: true })
+        await supabase.from('assegnazioni_progetto').insert({ persona_id: newP.id, progetto_id: assegnazione.progetto_id, ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null, dipartimento_id: formData.dipartimento_id || null, attivo: true })
       }
       setMessage({ type: 'success', text: editingPersona ? 'Aggiornato!' : 'Creato!' })
       loadData(); setTimeout(resetForm, 1000)
@@ -494,10 +514,11 @@ function PersoneTab() {
               <div><label className="block text-sm font-medium mb-1">Telefono</label><input type="tel" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               <div><label className="block text-sm font-medium mb-1">CF</label><input type="text" value={formData.codice_fiscale} onChange={(e) => setFormData({...formData, codice_fiscale: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" maxLength={16} /></div>
             </div>
-            <div className="grid lg:grid-cols-3 gap-4">
+            <div className="grid lg:grid-cols-4 gap-4">
               <div><label className="block text-sm font-medium mb-1">Ruolo</label><select value={formData.ruolo} onChange={(e) => setFormData({...formData, ruolo: e.target.value})} className="w-full px-4 py-3 border rounded-xl">{ruoli.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</select></div>
               <div><label className="block text-sm font-medium mb-1">Ditta</label><select value={formData.ditta_id} onChange={(e) => setFormData({...formData, ditta_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">Committente</option>{ditte.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></div>
               <div><label className="block text-sm font-medium mb-1">Squadra</label><select value={formData.squadra_id} onChange={(e) => setFormData({...formData, squadra_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">Nessuna</option>{squadre.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
+              <div><label className="block text-sm font-medium mb-1">Dipartimento</label><select value={formData.dipartimento_id} onChange={(e) => setFormData({...formData, dipartimento_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">Nessuno</option>{dipartimenti.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></div>
             </div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
             <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
@@ -512,7 +533,13 @@ function PersoneTab() {
           {filteredPersone.map(ass => (
             <div key={ass.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center font-semibold text-blue-600">{ass.persona.nome?.[0]}{ass.persona.cognome?.[0]}</div>
-              <div className="flex-1 min-w-0"><p className="font-medium truncate">{ass.persona.nome} {ass.persona.cognome}</p><p className="text-xs text-gray-500">{ruoli.find(r => r.value === ass.ruolo)?.label} • {ass.ditta?.nome || 'Committente'}</p></div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{ass.persona.nome} {ass.persona.cognome}</p>
+                <p className="text-xs text-gray-500">
+                  {ruoli.find(r => r.value === ass.ruolo)?.label} • {ass.ditta?.nome || 'Committente'}
+                  {ass.dipartimento?.nome && ` • ${ass.dipartimento.nome}`}
+                </p>
+              </div>
               <div className="flex gap-1"><button onClick={() => handleEdit(ass)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDisable(ass)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
             </div>
           ))}
@@ -651,6 +678,104 @@ function SquadreTab() {
               <div className="w-4 h-4 rounded-full" style={{ backgroundColor: sq.colore }} />
               <div className="flex-1"><p className="font-medium">{sq.nome}</p>{sq.descrizione && <p className="text-xs text-gray-500">{sq.descrizione}</p>}</div>
               <div className="flex gap-1"><button onClick={() => handleEdit(sq)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(sq.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ==================== DIPARTIMENTI TAB (NUOVO) ====================
+function DipartimentiTab() {
+  const { assegnazione } = useAuth()
+  const [dipartimenti, setDipartimenti] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingDip, setEditingDip] = useState(null)
+  const [formData, setFormData] = useState({ nome: '', codice: '', descrizione: '' })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => { if (assegnazione?.progetto_id) loadDipartimenti() }, [assegnazione?.progetto_id])
+
+  const loadDipartimenti = async () => { 
+    setLoading(true)
+    const { data } = await supabase.from('dipartimenti').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome')
+    setDipartimenti(data || [])
+    setLoading(false) 
+  }
+
+  const resetForm = () => { setFormData({ nome: '', codice: '', descrizione: '' }); setEditingDip(null); setShowForm(false); setMessage(null) }
+  
+  const handleEdit = (dip) => { 
+    setFormData({ nome: dip.nome || '', codice: dip.codice || '', descrizione: dip.descrizione || '' })
+    setEditingDip(dip)
+    setShowForm(true) 
+  }
+
+  const handleSave = async () => {
+    if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
+    setSaving(true); setMessage(null)
+    try {
+      const payload = { nome: formData.nome, codice: formData.codice || null, descrizione: formData.descrizione || null, progetto_id: assegnazione.progetto_id }
+      if (editingDip) { await supabase.from('dipartimenti').update(payload).eq('id', editingDip.id) }
+      else { await supabase.from('dipartimenti').insert(payload) }
+      setMessage({ type: 'success', text: 'Salvato!' }); loadDipartimenti(); setTimeout(resetForm, 1000)
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async (id) => { 
+    if (!confirm('Eliminare questo dipartimento?')) return
+    await supabase.from('dipartimenti').delete().eq('id', id)
+    loadDipartimenti() 
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">🏛️ Dipartimenti</h2>
+          <p className="text-sm text-gray-500">Organizza il personale ufficio per dipartimento</p>
+        </div>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Aggiungi</button>}
+      </div>
+
+      {showForm && (
+        <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200 mb-6">
+          <h3 className="font-semibold text-indigo-800 mb-4">{editingDip ? '✏️ Modifica' : '➕ Nuovo'} Dipartimento</h3>
+          <div className="grid gap-4">
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Engineering" /></div>
+              <div><label className="block text-sm font-medium mb-1">Codice</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" placeholder="ENG" /></div>
+            </div>
+            <div><label className="block text-sm font-medium mb-1">Descrizione</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
+            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-indigo-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : dipartimenti.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
+          <p className="text-4xl mb-2">🏛️</p>
+          <p>Nessun dipartimento</p>
+          <p className="text-sm">I dipartimenti predefiniti vengono creati automaticamente</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {dipartimenti.map(dip => (
+            <div key={dip.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">{dip.codice || '?'}</div>
+              <div className="flex-1">
+                <p className="font-medium">{dip.nome}</p>
+                {dip.descrizione && <p className="text-xs text-gray-500">{dip.descrizione}</p>}
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => handleEdit(dip)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
+                <button onClick={() => handleDelete(dip.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button>
+              </div>
             </div>
           ))}
         </div>
