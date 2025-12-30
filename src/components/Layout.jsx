@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useNotifications, NotificationPermissionBanner } from '../hooks/useNotifications'
+import { useNotifications, NotificationPermissionBanner } from '../hooks/useNotifications.jsx'
 
 export default function Layout({ children }) {
   const location = useLocation()
