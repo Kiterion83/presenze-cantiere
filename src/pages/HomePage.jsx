@@ -16,38 +16,52 @@ import {
 } from 'lucide-react'
 
 export default function HomePage() {
-  const { persona, assegnazione, progetto, isAtLeast } = useAuth()
+  const { persona, assegnazione, progetto, isAtLeast, user } = useAuth()
   const [presenzaOggi, setPresenzaOggi] = useState(null)
   const [stats, setStats] = useState({ presenti: 0, totale: 0 })
   const [meteo, setMeteo] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const oggi = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
-    if (persona && assegnazione) {
-      loadData()
-    } else {
-      setLoading(false)
-    }
+    console.log('HomePage mounted')
+    console.log('User:', user)
+    console.log('Persona:', persona)
+    console.log('Assegnazione:', assegnazione)
+    
+    // Aspetta che i dati siano caricati
+    const timer = setTimeout(() => {
+      if (persona && assegnazione) {
+        loadData()
+      } else {
+        setLoading(false)
+        if (!persona) {
+          setError('Persona non trovata nel database')
+        } else if (!assegnazione) {
+          setError('Nessuna assegnazione attiva trovata')
+        }
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
   }, [persona, assegnazione])
 
   const loadData = async () => {
-    if (!persona?.id || !assegnazione?.progetto_id) {
-      setLoading(false)
-      return
-    }
-
+    console.log('Loading data...')
+    
     try {
       // Carica presenza di oggi
-      const { data: presenza } = await supabase
+      const { data: presenza, error: errPresenza } = await supabase
         .from('presenze')
         .select('*')
         .eq('persona_id', persona.id)
         .eq('progetto_id', assegnazione.progetto_id)
         .eq('data', oggi)
-        .single()
+        .maybeSingle()
 
+      console.log('Presenza:', presenza, errPresenza)
       setPresenzaOggi(presenza)
 
       // Carica statistiche presenze oggi
@@ -74,8 +88,9 @@ export default function HomePage() {
         alert: null
       })
 
-    } catch (error) {
-      console.error('Error loading data:', error)
+    } catch (err) {
+      console.error('Error loading data:', err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -88,10 +103,61 @@ export default function HomePage() {
     return 'Buonasera'
   }
 
+  // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p className="text-gray-500 text-sm">Caricamento...</p>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="p-4">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <h2 className="text-red-800 font-bold mb-2">Errore</h2>
+          <p className="text-red-600 text-sm">{error}</p>
+          <p className="text-red-500 text-xs mt-2">
+            User ID: {user?.id || 'non disponibile'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // No persona state
+  if (!persona) {
+    return (
+      <div className="p-4">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <h2 className="text-yellow-800 font-bold mb-2">Configurazione incompleta</h2>
+          <p className="text-yellow-600 text-sm">
+            Il tuo account non è collegato a una persona nel sistema.
+          </p>
+          <p className="text-yellow-500 text-xs mt-2">
+            Contatta l'amministratore.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // No assegnazione state
+  if (!assegnazione) {
+    return (
+      <div className="p-4">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <h2 className="text-yellow-800 font-bold mb-2">Nessun progetto assegnato</h2>
+          <p className="text-yellow-600 text-sm">
+            Ciao {persona.nome}! Non hai ancora un progetto attivo assegnato.
+          </p>
+          <p className="text-yellow-500 text-xs mt-2">
+            Contatta l'amministratore per essere assegnato a un progetto.
+          </p>
+        </div>
       </div>
     )
   }
