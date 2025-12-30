@@ -1,9 +1,11 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useNotifications, NotificationPermissionBanner } from '../hooks/useNotifications'
 
 export default function Layout({ children }) {
   const location = useLocation()
-  const { persona, progetto, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast } = useAuth()
+  const { persona, progetto, assegnazione, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast } = useAuth()
+  const { unreadCount, requestPermission } = useNotifications(persona?.id, assegnazione?.progetto_id)
 
   const menuItems = [
     { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
@@ -16,6 +18,7 @@ export default function Layout({ children }) {
     { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'supervisor' },
     { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'cm' },
     { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
+    { path: '/dashboard', label: 'Dashboard', emoji: '📈', minRole: 'supervisor' },
     { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'cm' },
   ]
 
@@ -152,6 +155,9 @@ export default function Layout({ children }) {
           )}
         </div>
       </nav>
+
+      {/* Banner permesso notifiche */}
+      <NotificationPermissionBanner onEnable={requestPermission} />
     </div>
   )
 }
