@@ -20,40 +20,49 @@ export default function Layout({ children }) {
   const [showProgettiDropdown, setShowProgettiDropdown] = useState(false)
   const dropdownRef = useRef(null)
 
+  // AGGIORNATO: Menu items con permessi aggiornati
+  // Tutti i ruoli vedono tutto TRANNE Impostazioni (solo admin)
   const menuItems = [
     { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
     { path: '/checkin', label: 'Check-in', emoji: '📍', minRole: 'helper' },
     { path: '/calendario', label: 'Calendario', emoji: '📅', minRole: 'helper' },
     { path: '/ferie', label: 'Ferie', emoji: '🏖️', minRole: 'helper' },
-    { path: '/team', label: 'Team', emoji: '👥', minRole: 'foreman' },
-    { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'foreman' },
-    { path: '/documenti', label: 'Documenti', emoji: '📁', minRole: 'foreman' },
-    { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'supervisor' },
-    { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'cm' },
-    { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
+    { path: '/team', label: 'Team', emoji: '👥', minRole: 'helper' },           // MODIFICATO: tutti vedono
+    { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'helper' }, // MODIFICATO: tutti vedono
+    { path: '/documenti', label: 'Documenti', emoji: '📁', minRole: 'helper' },   // MODIFICATO: tutti vedono
+    { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'helper' },   // MODIFICATO: tutti vedono
+    { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'foreman' },
+    { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'foreman' }, // MODIFICATO
     { path: '/dashboard', label: 'Dashboard', emoji: '📈', minRole: 'supervisor' },
-    { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'cm' },
+    { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'admin' }, // SOLO ADMIN
   ]
 
   const visibleMenuItems = menuItems.filter(item => isAtLeast(item.minRole))
 
+  // AGGIORNATO: Lista ruoli con pm e dept_manager
   const roles = [
     { value: '', label: 'Ruolo reale' },
     { value: 'admin', label: 'Admin' },
+    { value: 'pm', label: 'PM' },              // NUOVO
     { value: 'cm', label: 'CM' },
     { value: 'supervisor', label: 'Supervisor' },
+    { value: 'dept_manager', label: 'Dept Manager' }, // NUOVO
     { value: 'foreman', label: 'Foreman' },
     { value: 'office', label: 'Office' },
     { value: 'helper', label: 'Helper' },
   ]
 
+  // AGGIORNATO: Colori badge con nuovi ruoli
   const getRoleBadgeColor = (role) => {
     const colors = {
       admin: 'bg-red-100 text-red-700 border-red-200',
+      pm: 'bg-pink-100 text-pink-700 border-pink-200',           // NUOVO
       cm: 'bg-purple-100 text-purple-700 border-purple-200',
       supervisor: 'bg-blue-100 text-blue-700 border-blue-200',
+      dept_manager: 'bg-indigo-100 text-indigo-700 border-indigo-200', // NUOVO
       foreman: 'bg-green-100 text-green-700 border-green-200',
       office: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+      helper: 'bg-gray-100 text-gray-700 border-gray-200',
     }
     return colors[role] || 'bg-gray-100 text-gray-700 border-gray-200'
   }
@@ -159,7 +168,7 @@ export default function Layout({ children }) {
                         <p className="text-xs text-gray-500">{ass.ruolo}</p>
                       </div>
                       {ass.progetto_id === progetto?.id && (
-                        <span className="text-blue-500">✓</span>
+                        <span className="text-blue-500">✔</span>
                       )}
                     </button>
                   ))}
@@ -297,7 +306,7 @@ export default function Layout({ children }) {
                   }`}
                 >
                   <span className="font-medium text-sm">{ass.progetto?.nome}</span>
-                  {ass.progetto_id === progetto?.id && <span className="ml-auto text-blue-500">✓</span>}
+                  {ass.progetto_id === progetto?.id && <span className="ml-auto text-blue-500">✔</span>}
                 </button>
               ))}
             </div>
