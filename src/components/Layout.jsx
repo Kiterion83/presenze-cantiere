@@ -12,6 +12,9 @@ export default function Layout({ children }) {
     { path: '/ferie', label: 'Ferie', emoji: '🏖️', minRole: 'helper' },
     { path: '/team', label: 'Team', emoji: '👥', minRole: 'foreman' },
     { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'foreman' },
+    { path: '/documenti', label: 'Documenti', emoji: '📁', minRole: 'foreman' },
+    { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'supervisor' },
+    { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'cm' },
     { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
     { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'cm' },
   ]
