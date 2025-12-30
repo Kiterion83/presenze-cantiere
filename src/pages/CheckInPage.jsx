@@ -1,232 +1,245 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { 
-  MapPin, 
-  Navigation, 
-  CheckCircle, 
-  XCircle,
-  Loader2,
-  Sun,
-  Cloud,
-  Wind,
-  Droplets,
-  AlertTriangle,
-  Clock
-} from 'lucide-react'
 
-export default function CheckInPage() {
-  const { persona, assegnazione } = useAuth()
+export default function CheckinPage() {
+  const { persona, assegnazione, progetto } = useAuth()
+  
   const [loading, setLoading] = useState(false)
-  const [checkingLocation, setCheckingLocation] = useState(false)
+  const [gpsLoading, setGpsLoading] = useState(false)
   const [location, setLocation] = useState(null)
   const [locationError, setLocationError] = useState(null)
-  const [presenzaOggi, setPresenzaOggi] = useState(null)
-  const [zone, setZone] = useState([])
-  const [selectedZona, setSelectedZona] = useState(null)
-  const [distanza, setDistanza] = useState(null)
-  const [meteo, setMeteo] = useState(null)
-  const [message, setMessage] = useState({ type: '', text: '' })
+  const [weather, setWeather] = useState(null)
+  const [todayPresenza, setTodayPresenza] = useState(null)
+  const [message, setMessage] = useState(null)
+  const [note, setNote] = useState('')
 
-  const oggi = new Date().toISOString().split('T')[0]
-
+  // Carica presenza di oggi
   useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    try {
-      // Carica presenza di oggi
-      const { data: presenza } = await supabase
-        .from('presenze')
-        .select('*')
-        .eq('persona_id', persona.id)
-        .eq('progetto_id', assegnazione.progetto_id)
-        .eq('data', oggi)
-        .single()
-
-      setPresenzaOggi(presenza)
-
-      // Carica zone GPS del progetto
-      const { data: zoneData } = await supabase
-        .from('zone_gps')
-        .select('*')
-        .eq('progetto_id', assegnazione.progetto_id)
-        .eq('attiva', true)
-
-      setZone(zoneData || [])
-
-    } catch (error) {
-      console.error('Error loading data:', error)
+    if (persona?.id) {
+      loadTodayPresenza()
     }
-  }
+  }, [persona?.id])
 
-  // Calcola distanza tra due punti GPS (formula Haversine)
-  const calcDistanza = (lat1, lon1, lat2, lon2) => {
-    const R = 6371000 // Raggio terra in metri
-    const dLat = (lat2 - lat1) * Math.PI / 180
-    const dLon = (lon2 - lon1) * Math.PI / 180
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-    return Math.round(R * c)
+  const loadTodayPresenza = async () => {
+    const today = new Date().toISOString().split('T')[0]
+    
+    const { data, error } = await supabase
+      .from('presenze')
+      .select('*')
+      .eq('persona_id', persona.id)
+      .eq('data', today)
+      .single()
+
+    if (!error && data) {
+      setTodayPresenza(data)
+    }
   }
 
   // Ottieni posizione GPS
   const getLocation = () => {
-    setCheckingLocation(true)
+    setGpsLoading(true)
     setLocationError(null)
-    setLocation(null)
 
     if (!navigator.geolocation) {
-      setLocationError('Geolocalizzazione non supportata dal browser')
-      setCheckingLocation(false)
+      setLocationError('Geolocalizzazione non supportata')
+      setGpsLoading(false)
       return
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords
-        setLocation({ latitude, longitude, accuracy })
-        setCheckingLocation(false)
-
-        // Trova zona più vicina
-        if (zone.length > 0) {
-          let minDist = Infinity
-          let closestZona = null
-
-          zone.forEach(z => {
-            const dist = calcDistanza(latitude, longitude, z.latitudine, z.longitudine)
-            if (dist < minDist) {
-              minDist = dist
-              closestZona = z
-            }
-          })
-
-          setSelectedZona(closestZona)
-          setDistanza(minDist)
+      async (position) => {
+        const coords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
         }
-
-        // Carica meteo (placeholder)
-        setMeteo({
-          temperatura: 8,
-          vento: 15,
-          pioggia: 0,
-          descrizione: 'Parzialmente nuvoloso',
-          alert: null
-        })
+        setLocation(coords)
+        setGpsLoading(false)
+        
+        // Carica meteo
+        await loadWeather(coords.lat, coords.lng)
       },
       (error) => {
-        console.error('GPS error:', error)
-        setCheckingLocation(false)
-        
-        switch(error.code) {
-          case error.PERMISSION_DENIED:
-            setLocationError('Permesso GPS negato. Abilita la geolocalizzazione.')
-            break
-          case error.POSITION_UNAVAILABLE:
-            setLocationError('Posizione non disponibile.')
-            break
-          case error.TIMEOUT:
-            setLocationError('Timeout GPS. Riprova.')
-            break
-          default:
-            setLocationError('Errore sconosciuto GPS.')
-        }
+        setLocationError(getGeoErrorMessage(error))
+        setGpsLoading(false)
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      }
+      { enableHighAccuracy: true, timeout: 10000 }
     )
   }
 
-  // Effettua check-in
-  const doCheckIn = async () => {
+  const getGeoErrorMessage = (error) => {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        return 'Permesso GPS negato. Attiva la geolocalizzazione.'
+      case error.POSITION_UNAVAILABLE:
+        return 'Posizione non disponibile.'
+      case error.TIMEOUT:
+        return 'Timeout richiesta GPS.'
+      default:
+        return 'Errore GPS sconosciuto.'
+    }
+  }
+
+  // Carica meteo da Open-Meteo (gratuito, no API key)
+  const loadWeather = async (lat, lng) => {
+    try {
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto`
+      )
+      const data = await response.json()
+      
+      if (data.current) {
+        setWeather({
+          temp: Math.round(data.current.temperature_2m),
+          code: data.current.weather_code,
+          wind: Math.round(data.current.wind_speed_10m)
+        })
+      }
+    } catch (err) {
+      console.error('Errore meteo:', err)
+    }
+  }
+
+  // Weather code to emoji/description
+  const getWeatherInfo = (code) => {
+    if (code === 0) return { emoji: '☀️', desc: 'Sereno' }
+    if (code <= 3) return { emoji: '⛅', desc: 'Parzialmente nuvoloso' }
+    if (code <= 49) return { emoji: '🌫️', desc: 'Nebbia' }
+    if (code <= 59) return { emoji: '🌧️', desc: 'Pioggia leggera' }
+    if (code <= 69) return { emoji: '🌧️', desc: 'Pioggia' }
+    if (code <= 79) return { emoji: '🌨️', desc: 'Neve' }
+    if (code <= 99) return { emoji: '⛈️', desc: 'Temporale' }
+    return { emoji: '🌡️', desc: 'N/A' }
+  }
+
+  // Effettua Check-in
+  const handleCheckin = async () => {
     if (!location) {
       setMessage({ type: 'error', text: 'Ottieni prima la posizione GPS' })
       return
     }
 
     setLoading(true)
-    setMessage({ type: '', text: '' })
+    setMessage(null)
 
     try {
+      const now = new Date()
+      const today = now.toISOString().split('T')[0]
+      const timeStr = now.toTimeString().slice(0, 5)
+
+      // Verifica distanza dal cantiere (se coordinate progetto disponibili)
+      let distanza = null
+      if (progetto?.latitudine && progetto?.longitudine) {
+        distanza = calculateDistance(
+          location.lat, location.lng,
+          progetto.latitudine, progetto.longitudine
+        )
+      }
+
+      const presenzaData = {
+        persona_id: persona.id,
+        progetto_id: assegnazione.progetto_id,
+        data: today,
+        ora_entrata: timeStr,
+        latitudine_entrata: location.lat,
+        longitudine_entrata: location.lng,
+        meteo_entrata: weather ? `${weather.temp}°C - ${getWeatherInfo(weather.code).desc}` : null,
+        note: note || null,
+        stato: 'presente'
+      }
+
       const { data, error } = await supabase
         .from('presenze')
-        .insert({
-          persona_id: persona.id,
-          progetto_id: assegnazione.progetto_id,
-          zona_id: selectedZona?.id,
-          data: oggi,
-          ora_checkin: new Date().toTimeString().slice(0, 8),
-          lat_checkin: location.latitude,
-          lng_checkin: location.longitude,
-          distanza_checkin_metri: distanza,
-          meteo_temperatura: meteo?.temperatura,
-          meteo_vento_kmh: meteo?.vento,
-          meteo_pioggia_mm: meteo?.pioggia,
-          meteo_descrizione: meteo?.descrizione,
-          meteo_alert: meteo?.alert || 'OK'
-        })
+        .insert(presenzaData)
         .select()
         .single()
 
       if (error) throw error
 
-      setPresenzaOggi(data)
-      setMessage({ type: 'success', text: 'Check-in effettuato con successo!' })
+      setTodayPresenza(data)
+      setMessage({ type: 'success', text: `Check-in effettuato alle ${timeStr}` })
+      setNote('')
 
-    } catch (error) {
-      console.error('Check-in error:', error)
-      setMessage({ type: 'error', text: error.message || 'Errore durante il check-in' })
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message })
     } finally {
       setLoading(false)
     }
   }
 
-  // Effettua check-out
-  const doCheckOut = async () => {
-    if (!presenzaOggi) return
+  // Effettua Check-out
+  const handleCheckout = async () => {
+    if (!todayPresenza) return
 
     setLoading(true)
-    setMessage({ type: '', text: '' })
+    setMessage(null)
 
     try {
-      const { error } = await supabase
+      const now = new Date()
+      const timeStr = now.toTimeString().slice(0, 5)
+
+      // Calcola ore lavorate
+      const entrata = todayPresenza.ora_entrata.split(':')
+      const entrataMinutes = parseInt(entrata[0]) * 60 + parseInt(entrata[1])
+      const uscita = timeStr.split(':')
+      const uscitaMinutes = parseInt(uscita[0]) * 60 + parseInt(uscita[1])
+      const oreLavorate = ((uscitaMinutes - entrataMinutes) / 60).toFixed(2)
+
+      const updateData = {
+        ora_uscita: timeStr,
+        latitudine_uscita: location?.lat || null,
+        longitudine_uscita: location?.lng || null,
+        meteo_uscita: weather ? `${weather.temp}°C - ${getWeatherInfo(weather.code).desc}` : null,
+        ore_ordinarie: Math.min(parseFloat(oreLavorate), 8),
+        ore_straordinarie: Math.max(parseFloat(oreLavorate) - 8, 0),
+        note: note || todayPresenza.note
+      }
+
+      const { data, error } = await supabase
         .from('presenze')
-        .update({
-          ora_checkout: new Date().toTimeString().slice(0, 8),
-          lat_checkout: location?.latitude,
-          lng_checkout: location?.longitude
-        })
-        .eq('id', presenzaOggi.id)
+        .update(updateData)
+        .eq('id', todayPresenza.id)
+        .select()
+        .single()
 
       if (error) throw error
 
-      setPresenzaOggi(prev => ({
-        ...prev,
-        ora_checkout: new Date().toTimeString().slice(0, 8)
-      }))
-      setMessage({ type: 'success', text: 'Check-out effettuato!' })
+      setTodayPresenza(data)
+      setMessage({ type: 'success', text: `Check-out effettuato alle ${timeStr} - ${oreLavorate}h lavorate` })
 
-    } catch (error) {
-      console.error('Check-out error:', error)
-      setMessage({ type: 'error', text: error.message || 'Errore durante il check-out' })
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message })
     } finally {
       setLoading(false)
     }
   }
 
+  // Calcola distanza in metri
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3
+    const φ1 = lat1 * Math.PI / 180
+    const φ2 = lat2 * Math.PI / 180
+    const Δφ = (lat2 - lat1) * Math.PI / 180
+    const Δλ = (lon2 - lon1) * Math.PI / 180
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+
+    return Math.round(R * c)
+  }
+
+  const isCheckedIn = todayPresenza && !todayPresenza.ora_uscita
+  const isCheckedOut = todayPresenza && todayPresenza.ora_uscita
+
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 lg:p-8 max-w-2xl mx-auto">
       {/* Header */}
-      <div className="text-center">
-        <h1 className="text-xl font-bold text-gray-800">Check-in GPS</h1>
-        <p className="text-sm text-gray-500">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">📍 Check-in / Check-out</h1>
+        <p className="text-gray-500">
           {new Date().toLocaleDateString('it-IT', { 
             weekday: 'long', 
             day: 'numeric', 
@@ -235,183 +248,171 @@ export default function CheckInPage() {
         </p>
       </div>
 
-      {/* Stato presenza */}
-      {presenzaOggi && (
-        <div className="card bg-success-50 border-success-200">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="text-success-600" size={24} />
-            <div>
-              <p className="font-medium text-success-800">Check-in effettuato</p>
-              <p className="text-sm text-success-600">
-                Ore {presenzaOggi.ora_checkin?.slice(0, 5)}
-                {presenzaOggi.ora_checkout && ` - ${presenzaOggi.ora_checkout.slice(0, 5)}`}
+      {/* Status Card */}
+      <div className={`rounded-2xl p-6 mb-6 ${
+        isCheckedOut ? 'bg-gray-100' :
+        isCheckedIn ? 'bg-green-50 border-2 border-green-200' :
+        'bg-blue-50 border-2 border-blue-200'
+      }`}>
+        <div className="text-center">
+          <span className="text-5xl block mb-3">
+            {isCheckedOut ? '🏠' : isCheckedIn ? '🏗️' : '👋'}
+          </span>
+          <h2 className="text-xl font-bold text-gray-800 mb-1">
+            {isCheckedOut ? 'Giornata completata' :
+             isCheckedIn ? 'Sei in cantiere' :
+             'Pronto per iniziare?'}
+          </h2>
+          {todayPresenza && (
+            <p className="text-gray-600">
+              {isCheckedIn && `Entrata: ${todayPresenza.ora_entrata}`}
+              {isCheckedOut && `${todayPresenza.ora_entrata} - ${todayPresenza.ora_uscita}`}
+            </p>
+          )}
+          {isCheckedOut && todayPresenza && (
+            <p className="text-green-600 font-medium mt-2">
+              ✅ {(parseFloat(todayPresenza.ore_ordinarie || 0) + parseFloat(todayPresenza.ore_straordinarie || 0)).toFixed(1)}h lavorate
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* GPS Section */}
+      {!isCheckedOut && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            🛰️ Posizione GPS
+          </h3>
+          
+          {location ? (
+            <div className="bg-green-50 rounded-lg p-3 mb-3">
+              <p className="text-green-700 font-medium">✅ Posizione acquisita</p>
+              <p className="text-sm text-green-600">
+                {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+              </p>
+              <p className="text-xs text-green-500">
+                Precisione: ±{Math.round(location.accuracy)}m
               </p>
             </div>
+          ) : locationError ? (
+            <div className="bg-red-50 rounded-lg p-3 mb-3">
+              <p className="text-red-700">❌ {locationError}</p>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-lg p-3 mb-3">
+              <p className="text-gray-500">Posizione non ancora acquisita</p>
+            </div>
+          )}
+
+          <button
+            onClick={getLocation}
+            disabled={gpsLoading}
+            className="w-full py-3 bg-blue-100 text-blue-700 rounded-xl font-medium hover:bg-blue-200 transition-colors disabled:opacity-50"
+          >
+            {gpsLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Acquisizione GPS...
+              </span>
+            ) : location ? '🔄 Aggiorna posizione' : '📍 Ottieni posizione'}
+          </button>
+        </div>
+      )}
+
+      {/* Weather */}
+      {weather && !isCheckedOut && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3">🌤️ Meteo attuale</h3>
+          <div className="flex items-center gap-4">
+            <span className="text-4xl">{getWeatherInfo(weather.code).emoji}</span>
+            <div>
+              <p className="text-2xl font-bold text-gray-800">{weather.temp}°C</p>
+              <p className="text-gray-500">{getWeatherInfo(weather.code).desc}</p>
+              <p className="text-sm text-gray-400">Vento: {weather.wind} km/h</p>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Note */}
+      {!isCheckedOut && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3">📝 Note (opzionale)</h3>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Es: Lavoro su impianto elettrico zona A..."
+            className="w-full p-3 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            rows={3}
+          />
         </div>
       )}
 
       {/* Message */}
-      {message.text && (
-        <div className={`card ${
-          message.type === 'success' ? 'bg-success-50 text-success-700' : 
-          message.type === 'error' ? 'bg-danger-50 text-danger-700' : ''
+      {message && (
+        <div className={`rounded-xl p-4 mb-4 ${
+          message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
         }`}>
-          {message.text}
-        </div>
-      )}
-
-      {/* GPS Card */}
-      <div className="card">
-        <h3 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
-          <Navigation size={18} />
-          Posizione GPS
-        </h3>
-
-        {locationError && (
-          <div className="bg-danger-50 text-danger-600 p-3 rounded-lg mb-3 flex items-center gap-2">
-            <XCircle size={18} />
-            <span className="text-sm">{locationError}</span>
-          </div>
-        )}
-
-        {location ? (
-          <div className="space-y-2 mb-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Latitudine</span>
-              <span className="font-mono">{location.latitude.toFixed(6)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Longitudine</span>
-              <span className="font-mono">{location.longitude.toFixed(6)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Precisione</span>
-              <span>±{Math.round(location.accuracy)}m</span>
-            </div>
-            {selectedZona && (
-              <>
-                <hr className="my-2" />
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Zona rilevata</span>
-                  <span className="font-medium">{selectedZona.nome}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Distanza dal centro</span>
-                  <span className={distanza <= selectedZona.raggio_metri ? 'text-success-600' : 'text-warning-600'}>
-                    {distanza}m {distanza <= selectedZona.raggio_metri ? '✓' : '⚠️'}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <p className="text-gray-500 text-sm mb-4">
-            Premi il pulsante per rilevare la posizione
-          </p>
-        )}
-
-        <button
-          onClick={getLocation}
-          disabled={checkingLocation}
-          className="btn-secondary w-full flex items-center justify-center gap-2"
-        >
-          {checkingLocation ? (
-            <>
-              <Loader2 className="animate-spin" size={18} />
-              Rilevamento...
-            </>
-          ) : (
-            <>
-              <MapPin size={18} />
-              {location ? 'Aggiorna posizione' : 'Rileva posizione'}
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Meteo Card */}
-      {meteo && location && (
-        <div className="card">
-          <h3 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
-            <Sun size={18} />
-            Meteo
-          </h3>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-2">
-              <Sun className="text-yellow-500" size={20} />
-              <span>{meteo.temperatura}°C</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Wind className="text-blue-500" size={20} />
-              <span>{meteo.vento} km/h</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Droplets className="text-blue-400" size={20} />
-              <span>{meteo.pioggia} mm</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Cloud className="text-gray-400" size={20} />
-              <span className="text-sm">{meteo.descrizione}</span>
-            </div>
-          </div>
-
-          {meteo.alert && (
-            <div className="mt-3 bg-warning-50 text-warning-700 p-2 rounded-lg flex items-center gap-2">
-              <AlertTriangle size={18} />
-              <span className="text-sm">{meteo.alert}</span>
-            </div>
-          )}
+          {message.type === 'success' ? '✅' : '❌'} {message.text}
         </div>
       )}
 
       {/* Action Buttons */}
-      <div className="space-y-3">
-        {!presenzaOggi ? (
-          <button
-            onClick={doCheckIn}
-            disabled={!location || loading}
-            className="btn-success w-full py-4 text-lg flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="animate-spin" size={22} />
-                Registrazione...
-              </>
-            ) : (
-              <>
-                <CheckCircle size={22} />
-                Effettua Check-in
-              </>
+      {!isCheckedOut && (
+        <div className="space-y-3">
+          {!isCheckedIn ? (
+            <button
+              onClick={handleCheckin}
+              disabled={loading || !location}
+              className="w-full py-4 bg-green-600 text-white rounded-xl font-semibold text-lg hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed shadow-lg"
+            >
+              {loading ? 'Registrazione...' : '✅ Registra ENTRATA'}
+            </button>
+          ) : (
+            <button
+              onClick={handleCheckout}
+              disabled={loading}
+              className="w-full py-4 bg-red-600 text-white rounded-xl font-semibold text-lg hover:bg-red-700 transition-colors disabled:bg-gray-300 shadow-lg"
+            >
+              {loading ? 'Registrazione...' : '🚪 Registra USCITA'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Today Summary */}
+      {todayPresenza && (
+        <div className="mt-6 bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <h3 className="font-semibold text-gray-700 mb-3">📋 Riepilogo oggi</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-gray-500">Entrata</p>
+              <p className="font-medium">{todayPresenza.ora_entrata || '-'}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Uscita</p>
+              <p className="font-medium">{todayPresenza.ora_uscita || '-'}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Ore ordinarie</p>
+              <p className="font-medium">{todayPresenza.ore_ordinarie || '-'}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Straordinario</p>
+              <p className="font-medium">{todayPresenza.ore_straordinarie || '-'}</p>
+            </div>
+            {todayPresenza.note && (
+              <div className="col-span-2">
+                <p className="text-gray-500">Note</p>
+                <p className="font-medium">{todayPresenza.note}</p>
+              </div>
             )}
-          </button>
-        ) : !presenzaOggi.ora_checkout ? (
-          <button
-            onClick={doCheckOut}
-            disabled={loading}
-            className="btn-warning w-full py-4 text-lg flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="animate-spin" size={22} />
-                Registrazione...
-              </>
-            ) : (
-              <>
-                <Clock size={22} />
-                Effettua Check-out
-              </>
-            )}
-          </button>
-        ) : (
-          <div className="card bg-gray-50 text-center">
-            <p className="text-gray-600">
-              Giornata completata ✓
-            </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
