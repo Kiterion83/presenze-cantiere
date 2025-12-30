@@ -1,93 +1,116 @@
 import { useAuth } from '../contexts/AuthContext'
 
 export default function HomePage() {
-  console.log('HomePage: render iniziato')
-  
-  const auth = useAuth()
-  
-  console.log('HomePage: auth =', {
-    loading: auth?.loading,
-    user: auth?.user?.email,
-    persona: auth?.persona?.nome,
-    ruolo: auth?.ruolo
-  })
+  const { user, persona, assegnazione, progetto, signOut, isAtLeast } = useAuth()
 
-  // Se ancora in caricamento
-  if (auth?.loading) {
-    console.log('HomePage: loading...')
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    )
+  const handleLogout = async () => {
+    await signOut()
   }
 
-  // Valori sicuri con fallback
-  const nome = auth?.persona?.nome || 'Utente'
-  const cognome = auth?.persona?.cognome || ''
-  const ruolo = auth?.ruolo || 'non assegnato'
-  const progettoNome = auth?.progetto?.nome || 'Nessun progetto'
-  
-  console.log('HomePage: rendering con', { nome, ruolo, progettoNome })
+  // Colore badge ruolo
+  const getRoleBadgeColor = () => {
+    switch (assegnazione?.ruolo) {
+      case 'admin': return 'bg-red-100 text-red-700'
+      case 'cm': return 'bg-purple-100 text-purple-700'
+      case 'supervisor': return 'bg-blue-100 text-blue-700'
+      case 'foreman': return 'bg-green-100 text-green-700'
+      case 'office': return 'bg-yellow-100 text-yellow-700'
+      default: return 'bg-gray-100 text-gray-700'
+    }
+  }
 
   return (
-    <div className="p-4 space-y-4">
-      {/* Debug Info */}
-      <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-4">
-        <h3 className="font-bold text-yellow-800 mb-2">🔍 Debug Info</h3>
-        <div className="text-sm text-yellow-700 space-y-1">
-          <p><strong>User email:</strong> {auth?.user?.email || 'NULL'}</p>
-          <p><strong>Persona ID:</strong> {auth?.persona?.id || 'NULL'}</p>
-          <p><strong>Persona nome:</strong> {auth?.persona?.nome || 'NULL'}</p>
-          <p><strong>Assegnazione ID:</strong> {auth?.assegnazione?.id || 'NULL'}</p>
-          <p><strong>Ruolo:</strong> {auth?.assegnazione?.ruolo || 'NULL'}</p>
-          <p><strong>Progetto ID:</strong> {auth?.assegnazione?.progetto_id || 'NULL'}</p>
-          <p><strong>Progetto nome:</strong> {auth?.progetto?.nome || 'NULL'}</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b px-4 py-3">
+        <div className="flex items-center justify-between max-w-2xl mx-auto">
+          <div>
+            <h1 className="text-lg font-bold text-gray-800">
+              {progetto?.nome || 'Presenze Cantiere'}
+            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-gray-500">
+                {persona?.nome} {persona?.cognome}
+              </span>
+              <span className={`px-2 py-0.5 rounded text-xs font-medium ${getRoleBadgeColor()}`}>
+                {assegnazione?.ruolo?.toUpperCase() || 'N/A'}
+              </span>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+          >
+            Esci
+          </button>
         </div>
-      </div>
+      </header>
 
-      {/* Greeting Card */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl p-4">
-        <h2 className="text-xl font-bold">
-          Ciao, {nome}!
-        </h2>
-        <p className="text-blue-100 text-sm mt-1">
-          Ruolo: {ruolo}
-        </p>
-        <p className="text-blue-100 text-sm mt-1">
-          Progetto: {progettoNome}
-        </p>
-      </div>
+      {/* Content */}
+      <main className="p-4 max-w-2xl mx-auto">
+        {/* Welcome Card */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl p-4 mb-4">
+          <h2 className="text-xl font-bold">
+            Ciao, {persona?.nome}! 👋
+          </h2>
+          <p className="text-blue-100 text-sm mt-1">
+            {new Date().toLocaleDateString('it-IT', { 
+              weekday: 'long', 
+              day: 'numeric', 
+              month: 'long' 
+            })}
+          </p>
+        </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <a 
-          href="/checkin" 
-          className="bg-white rounded-xl p-4 shadow-sm flex flex-col items-center py-6"
-        >
-          <div className="p-3 bg-blue-50 rounded-xl mb-2">
-            <span className="text-2xl">📍</span>
+        {/* Info Card */}
+        <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3">📋 Info Utente</h3>
+          <div className="space-y-2 text-sm">
+            <p><strong>Email:</strong> {user?.email}</p>
+            <p><strong>Ruolo:</strong> {assegnazione?.ruolo || 'N/A'}</p>
+            <p><strong>Progetto:</strong> {progetto?.nome || 'N/A'}</p>
+            <p><strong>Ditta:</strong> {assegnazione?.ditta?.nome || 'N/A'}</p>
           </div>
-          <span className="font-medium text-gray-800">Check-in</span>
-        </a>
+        </div>
 
-        <a 
-          href="/team" 
-          className="bg-white rounded-xl p-4 shadow-sm flex flex-col items-center py-6"
-        >
-          <div className="p-3 bg-purple-50 rounded-xl mb-2">
-            <span className="text-2xl">👥</span>
+        {/* Quick Actions */}
+        <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3">🚀 Azioni Rapide</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <ActionButton emoji="📍" label="Check-in" href="/checkin" />
+            <ActionButton emoji="👥" label="Team" href="/team" />
+            {isAtLeast('foreman') && (
+              <>
+                <ActionButton emoji="📝" label="Rapportino" href="/rapportino" />
+                <ActionButton emoji="📊" label="Statistiche" href="/statistiche" />
+              </>
+            )}
+            {isAtLeast('cm') && (
+              <ActionButton emoji="⚙️" label="Impostazioni" href="/impostazioni" />
+            )}
           </div>
-          <span className="font-medium text-gray-800">Team</span>
-        </a>
-      </div>
+        </div>
 
-      {/* Successo */}
-      <div className="bg-green-100 border border-green-400 rounded-lg p-4 text-center">
-        <p className="text-green-800 font-medium">
-          ✅ HomePage caricata con successo!
-        </p>
-      </div>
+        {/* Status */}
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+          <p className="text-green-700 font-medium">
+            ✅ App funzionante - Step 1 completato!
+          </p>
+        </div>
+      </main>
     </div>
+  )
+}
+
+// Componente bottone azione
+function ActionButton({ emoji, label, href }) {
+  return (
+    <a 
+      href={href}
+      className="flex flex-col items-center p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+    >
+      <span className="text-2xl mb-1">{emoji}</span>
+      <span className="text-sm font-medium text-gray-700">{label}</span>
+    </a>
   )
 }
