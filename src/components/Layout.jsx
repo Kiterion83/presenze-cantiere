@@ -3,13 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 
 export default function Layout({ children }) {
   const location = useLocation()
-  const { persona, progetto, ruolo, realRuolo, testRoleOverride, setTestRole, signOut, isAtLeast } = useAuth()
+  const { persona, progetto, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast } = useAuth()
 
-  const handleLogout = async () => {
-    await signOut()
-  }
-
-  // Menu items con controllo permessi
   const menuItems = [
     { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
     { path: '/checkin', label: 'Check-in', emoji: '📍', minRole: 'helper' },
@@ -32,31 +27,26 @@ export default function Layout({ children }) {
     { value: 'helper', label: 'Helper' },
   ]
 
-  // Colore badge ruolo
   const getRoleBadgeColor = (role) => {
-    switch (role) {
-      case 'admin': return 'bg-red-100 text-red-700 border-red-200'
-      case 'cm': return 'bg-purple-100 text-purple-700 border-purple-200'
-      case 'supervisor': return 'bg-blue-100 text-blue-700 border-blue-200'
-      case 'foreman': return 'bg-green-100 text-green-700 border-green-200'
-      case 'office': return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-      default: return 'bg-gray-100 text-gray-700 border-gray-200'
+    const colors = {
+      admin: 'bg-red-100 text-red-700 border-red-200',
+      cm: 'bg-purple-100 text-purple-700 border-purple-200',
+      supervisor: 'bg-blue-100 text-blue-700 border-blue-200',
+      foreman: 'bg-green-100 text-green-700 border-green-200',
+      office: 'bg-yellow-100 text-yellow-700 border-yellow-200',
     }
+    return colors[role] || 'bg-gray-100 text-gray-700 border-gray-200'
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r border-gray-200">
-        {/* Logo */}
         <div className="p-6 border-b border-gray-100">
-          <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            🏗️ Presenze Cantiere
-          </h1>
+          <h1 className="text-xl font-bold text-gray-800">🏗️ Presenze Cantiere</h1>
           <p className="text-sm text-gray-500 mt-1 truncate">{progetto?.nome}</p>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {visibleMenuItems.map(item => (
             <Link
@@ -74,13 +64,9 @@ export default function Layout({ children }) {
           ))}
         </nav>
 
-        {/* User Info & Test Role */}
         <div className="p-4 border-t border-gray-100">
-          {/* Test Role Selector */}
           <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
-            <label className="block text-xs font-medium text-amber-700 mb-1">
-              🧪 Test Ruolo
-            </label>
+            <label className="block text-xs font-medium text-amber-700 mb-1">🧪 Test Ruolo</label>
             <select
               value={testRoleOverride || ''}
               onChange={(e) => setTestRole(e.target.value || null)}
@@ -92,26 +78,19 @@ export default function Layout({ children }) {
             </select>
           </div>
 
-          {/* User */}
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
               {persona?.nome?.[0]}{persona?.cognome?.[0]}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-gray-800 truncate">
-                {persona?.nome} {persona?.cognome}
-              </p>
+              <p className="font-medium text-gray-800 truncate">{persona?.nome} {persona?.cognome}</p>
               <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium border ${getRoleBadgeColor(ruolo)}`}>
-                {ruolo?.toUpperCase()}
-                {testRoleOverride && <span className="ml-1">🧪</span>}
+                {ruolo?.toUpperCase()}{testRoleOverride && ' 🧪'}
               </span>
             </div>
           </div>
           
-          <button
-            onClick={handleLogout}
-            className="w-full py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
-          >
+          <button onClick={signOut} className="w-full py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
             Esci
           </button>
         </div>
@@ -121,21 +100,14 @@ export default function Layout({ children }) {
       <header className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-gray-800 truncate">
-              {progetto?.nome || 'Presenze Cantiere'}
-            </h1>
+            <h1 className="font-bold text-gray-800 truncate">{progetto?.nome || 'Presenze Cantiere'}</h1>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500 truncate">
-                {persona?.nome} {persona?.cognome}
-              </span>
+              <span className="text-sm text-gray-500 truncate">{persona?.nome} {persona?.cognome}</span>
               <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getRoleBadgeColor(ruolo)}`}>
-                {ruolo?.toUpperCase()}
-                {testRoleOverride && '🧪'}
+                {ruolo?.toUpperCase()}{testRoleOverride && '🧪'}
               </span>
             </div>
           </div>
-          
-          {/* Mobile Test Role */}
           <select
             value={testRoleOverride || ''}
             onChange={(e) => setTestRole(e.target.value || null)}
@@ -160,23 +132,16 @@ export default function Layout({ children }) {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center px-3 py-2 rounded-xl transition-all ${
-                location.pathname === item.path
-                  ? 'text-blue-600'
-                  : 'text-gray-500'
+              className={`flex flex-col items-center px-3 py-2 ${
+                location.pathname === item.path ? 'text-blue-600' : 'text-gray-500'
               }`}
             >
               <span className="text-xl">{item.emoji}</span>
               <span className="text-xs mt-0.5">{item.label}</span>
             </Link>
           ))}
-          
-          {/* More menu */}
           {visibleMenuItems.length > 5 && (
-            <Link
-              to="/menu"
-              className={`flex flex-col items-center px-3 py-2 rounded-xl text-gray-500`}
-            >
+            <Link to="/menu" className="flex flex-col items-center px-3 py-2 text-gray-500">
               <span className="text-xl">☰</span>
               <span className="text-xs mt-0.5">Altro</span>
             </Link>
