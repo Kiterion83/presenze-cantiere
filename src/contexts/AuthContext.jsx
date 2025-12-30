@@ -10,6 +10,7 @@ export const AuthProvider = ({ children }) => {
   const [persona, setPersona] = useState(null)
   const [assegnazione, setAssegnazione] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [testRoleOverride, setTestRoleOverride] = useState(null)
 
   useEffect(() => {
     // Controlla sessione esistente
@@ -28,12 +29,24 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
+    // Carica eventuale role override da sessionStorage
+    const savedRole = sessionStorage.getItem('test_role_override')
+    if (savedRole) {
+      setTestRoleOverride(savedRole)
+    }
+
     checkSession()
 
     // Ascolta cambiamenti auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth event:', event)
+        
+        // Ricarica role override ad ogni cambio auth
+        const roleOverride = sessionStorage.getItem('test_role_override')
+        if (roleOverride) {
+          setTestRoleOverride(roleOverride)
+        }
         
         if (session?.user) {
           setUser(session.user)
@@ -94,6 +107,12 @@ export const AuthProvider = ({ children }) => {
   const signIn = async (email, password) => {
     setLoading(true)
     
+    // Ricarica role override prima del login
+    const roleOverride = sessionStorage.getItem('test_role_override')
+    if (roleOverride) {
+      setTestRoleOverride(roleOverride)
+    }
+    
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
@@ -111,6 +130,10 @@ export const AuthProvider = ({ children }) => {
   const signOut = async () => {
     setLoading(true)
     
+    // Rimuovi role override al logout
+    sessionStorage.removeItem('test_role_override')
+    setTestRoleOverride(null)
+    
     const { error } = await supabase.auth.signOut()
     
     if (error) {
@@ -124,24 +147,39 @@ export const AuthProvider = ({ children }) => {
     setLoading(false)
   }
 
-  // Verifica ruolo
-  const hasRole = (roles) => {
-    if (!assegnazione) return false
-    if (typeof roles === 'string') {
-      return assegnazione.ruolo === roles
+  // Ruolo effettivo (con override per test)
+  const getEffectiveRole = () => {
+    if (testRoleOverride) {
+      return testRoleOverride
     }
-    return roles.includes(assegnazione.ruolo)
+    return assegnazione?.ruolo
+  }
+
+  // Verifica ruolo (usa ruolo effettivo)
+  const hasRole = (roles) => {
+    const effectiveRole = getEffectiveRole()
+    if (!effectiveRole) return false
+    if (typeof roles === 'string') {
+      return effectiveRole === roles
+    }
+    return roles.includes(effectiveRole)
   }
 
   // Verifica se è almeno un certo ruolo (gerarchia)
   const isAtLeast = (role) => {
-    if (!assegnazione) return false
+    const effectiveRole = getEffectiveRole()
+    if (!effectiveRole) return false
     
-    const hierarchy = ['helper', 'foreman', 'supervisor', 'cm', 'admin']
-    const userLevel = hierarchy.indexOf(assegnazione.ruolo)
+    const hierarchy = ['helper', 'office', 'foreman', 'supervisor', 'cm', 'admin']
+    const userLevel = hierarchy.indexOf(effectiveRole)
     const requiredLevel = hierarchy.indexOf(role)
     
     return userLevel >= requiredLevel
+  }
+
+  // Verifica se è in test mode
+  const isTestMode = () => {
+    return !!testRoleOverride
   }
 
   const value = {
@@ -153,11 +191,14 @@ export const AuthProvider = ({ children }) => {
     signOut,
     hasRole,
     isAtLeast,
-    // Shortcut per ruolo
-    ruolo: assegnazione?.ruolo,
+    isTestMode,
+    // Shortcut per ruolo (usa ruolo effettivo)
+    ruolo: getEffectiveRole(),
+    ruoloReale: assegnazione?.ruolo, // Ruolo reale dal DB
     progettoId: assegnazione?.progetto_id,
     progetto: assegnazione?.progetto,
-    ditta: assegnazione?.ditta
+    ditta: assegnazione?.ditta,
+    testRoleOverride
   }
 
   return (
