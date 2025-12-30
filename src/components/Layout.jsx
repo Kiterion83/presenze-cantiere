@@ -9,6 +9,7 @@ export default function Layout({ children }) {
     { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
     { path: '/checkin', label: 'Check-in', emoji: '📍', minRole: 'helper' },
     { path: '/calendario', label: 'Calendario', emoji: '📅', minRole: 'helper' },
+    { path: '/ferie', label: 'Ferie', emoji: '🏖️', minRole: 'helper' },
     { path: '/team', label: 'Team', emoji: '👥', minRole: 'foreman' },
     { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'foreman' },
     { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
