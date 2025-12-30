@@ -1,11 +1,24 @@
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications, NotificationPermissionBanner } from '../hooks/useNotifications.jsx'
 
 export default function Layout({ children }) {
   const location = useLocation()
-  const { persona, progetto, assegnazione, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast } = useAuth()
+  const { persona, progetto, assegnazioni, assegnazione, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast, cambiaProgetto } = useAuth()
   const { unreadCount, requestPermission } = useNotifications(persona?.id, assegnazione?.progetto_id)
+  
+  // Sidebar ridimensionabile
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebar_width')
+    return saved ? parseInt(saved) : 256
+  })
+  const [isResizing, setIsResizing] = useState(false)
+  const sidebarRef = useRef(null)
+
+  // Dropdown progetti
+  const [showProgettiDropdown, setShowProgettiDropdown] = useState(false)
+  const dropdownRef = useRef(null)
 
   const menuItems = [
     { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
@@ -45,16 +58,126 @@ export default function Layout({ children }) {
     return colors[role] || 'bg-gray-100 text-gray-700 border-gray-200'
   }
 
+  // Gestione resize sidebar
+  const startResizing = (e) => {
+    setIsResizing(true)
+    e.preventDefault()
+  }
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return
+      const newWidth = Math.min(Math.max(e.clientX, 200), 400)
+      setSidebarWidth(newWidth)
+      localStorage.setItem('sidebar_width', newWidth.toString())
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isResizing])
+
+  // Chiudi dropdown click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowProgettiDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Gestione cambio progetto
+  const handleCambiaProgetto = (progettoId) => {
+    cambiaProgetto(progettoId)
+    setShowProgettiDropdown(false)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r border-gray-200">
-        <div className="p-6 border-b border-gray-100">
-          <h1 className="text-xl font-bold text-gray-800">🏗️ Presenze Cantiere</h1>
-          <p className="text-sm text-gray-500 mt-1 truncate">{progetto?.nome}</p>
+      <aside 
+        ref={sidebarRef}
+        className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-gray-200"
+        style={{ width: `${sidebarWidth}px` }}
+      >
+        {/* Header con selettore progetti */}
+        <div className="p-4 border-b border-gray-100">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-2xl">🏗️</span>
+            <span className="font-bold text-gray-800 truncate" style={{ maxWidth: sidebarWidth - 60 }}>Presenze Cantiere</span>
+          </div>
+          
+          {/* Selettore Progetti */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowProgettiDropdown(!showProgettiDropdown)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 rounded-xl border border-blue-200 transition-all"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-lg">📁</span>
+                <span className="font-medium text-gray-800 truncate text-sm">
+                  {progetto?.nome || 'Seleziona progetto'}
+                </span>
+              </div>
+              <span className={`text-gray-400 transition-transform ${showProgettiDropdown ? 'rotate-180' : ''}`}>
+                ▼
+              </span>
+            </button>
+
+            {/* Dropdown Lista Progetti */}
+            {showProgettiDropdown && assegnazioni.length > 0 && (
+              <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <div className="p-2 border-b bg-gray-50">
+                  <p className="text-xs font-medium text-gray-500 uppercase">I tuoi progetti</p>
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {assegnazioni.map((ass) => (
+                    <button
+                      key={ass.id}
+                      onClick={() => handleCambiaProgetto(ass.progetto_id)}
+                      className={`w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-blue-50 transition-colors ${
+                        ass.progetto_id === progetto?.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                        {ass.progetto?.codice?.slice(0, 2) || '??'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-800 truncate text-sm">{ass.progetto?.nome}</p>
+                        <p className="text-xs text-gray-500">{ass.ruolo}</p>
+                      </div>
+                      {ass.progetto_id === progetto?.id && (
+                        <span className="text-blue-500">✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {assegnazioni.length > 1 && (
+                  <div className="p-2 border-t bg-gray-50">
+                    <p className="text-xs text-gray-400 text-center">
+                      {assegnazioni.length} progetti disponibili
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {/* Menu Navigation */}
+        <nav className="flex-1 overflow-y-auto p-3">
           {visibleMenuItems.map(item => (
             <Link
               key={item.path}
@@ -66,11 +189,17 @@ export default function Layout({ children }) {
               }`}
             >
               <span className="text-xl">{item.emoji}</span>
-              <span>{item.label}</span>
+              <span className="truncate">{item.label}</span>
+              {item.path === '/notifiche' && unreadCount > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                  {unreadCount}
+                </span>
+              )}
             </Link>
           ))}
         </nav>
 
+        {/* Footer con Test Ruolo e User */}
         <div className="p-4 border-t border-gray-100">
           <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
             <label className="block text-xs font-medium text-amber-700 mb-1">🧪 Test Ruolo</label>
@@ -101,40 +230,89 @@ export default function Layout({ children }) {
             Esci
           </button>
         </div>
+
+        {/* Resize Handle */}
+        <div
+          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-400 transition-colors group"
+          onMouseDown={startResizing}
+        >
+          <div className={`absolute top-1/2 right-0 transform -translate-y-1/2 w-4 h-8 bg-gray-300 rounded-l opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${isResizing ? 'opacity-100 bg-blue-400' : ''}`}>
+            <span className="text-gray-600 text-xs">⋮</span>
+          </div>
+        </div>
       </aside>
 
-      {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-gray-800 truncate">{progetto?.nome || 'Presenze Cantiere'}</h1>
+      {/* Main Content */}
+      <main 
+        className="lg:transition-all"
+        style={{ marginLeft: window.innerWidth >= 1024 ? `${sidebarWidth}px` : '0' }}
+      >
+        {/* Mobile Header */}
+        <header className="lg:hidden sticky top-0 z-40 bg-white border-b px-4 py-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500 truncate">{persona?.nome} {persona?.cognome}</span>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getRoleBadgeColor(ruolo)}`}>
-                {ruolo?.toUpperCase()}{testRoleOverride && '🧪'}
-              </span>
+              <span className="text-xl">🏗️</span>
+              <div>
+                <p className="font-bold text-gray-800 text-sm">Presenze Cantiere</p>
+                {/* Selettore progetti mobile */}
+                <button
+                  onClick={() => setShowProgettiDropdown(!showProgettiDropdown)}
+                  className="flex items-center gap-1 text-xs text-blue-600"
+                >
+                  <span className="truncate max-w-32">{progetto?.nome}</span>
+                  <span>▼</span>
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link 
+                to="/notifiche"
+                className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </Link>
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-sm">
+                {persona?.nome?.[0]}{persona?.cognome?.[0]}
+              </div>
             </div>
           </div>
-          <select
-            value={testRoleOverride || ''}
-            onChange={(e) => setTestRole(e.target.value || null)}
-            className="ml-2 px-2 py-1 text-xs border border-amber-300 rounded-lg bg-amber-50"
-          >
-            {roles.map(r => (
-              <option key={r.value} value={r.value}>{r.label || 'Reale'}</option>
-            ))}
-          </select>
-        </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="lg:ml-64 pt-16 lg:pt-0 pb-20 lg:pb-0 min-h-screen">
-        {children}
+          {/* Dropdown mobile */}
+          {showProgettiDropdown && (
+            <div className="absolute left-4 right-4 mt-2 bg-white rounded-xl shadow-lg border z-50">
+              <div className="p-2 border-b">
+                <p className="text-xs font-medium text-gray-500">Cambia progetto</p>
+              </div>
+              {assegnazioni.map((ass) => (
+                <button
+                  key={ass.id}
+                  onClick={() => handleCambiaProgetto(ass.progetto_id)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 text-left ${
+                    ass.progetto_id === progetto?.id ? 'bg-blue-50' : ''
+                  }`}
+                >
+                  <span className="font-medium text-sm">{ass.progetto?.nome}</span>
+                  {ass.progetto_id === progetto?.id && <span className="ml-auto text-blue-500">✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </header>
+
+        {/* Page Content */}
+        <div className="pb-20 lg:pb-0">
+          {children}
+        </div>
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
-        <div className="flex justify-around items-center py-2">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-40">
+        <div className="flex justify-around py-2">
           {visibleMenuItems.slice(0, 5).map(item => (
             <Link
               key={item.path}
@@ -158,6 +336,11 @@ export default function Layout({ children }) {
 
       {/* Banner permesso notifiche */}
       <NotificationPermissionBanner onEnable={requestPermission} />
+
+      {/* Overlay durante resize */}
+      {isResizing && (
+        <div className="fixed inset-0 z-50 cursor-col-resize" />
+      )}
     </div>
   )
 }
