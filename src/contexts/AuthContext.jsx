@@ -13,130 +13,85 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    console.log('AuthProvider: inizializzazione...')
-    
-    const checkSession = async () => {
-      try {
-        console.log('AuthProvider: controllo sessione...')
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('AuthProvider: errore getSession:', error)
-          setLoading(false)
-          return
-        }
-        
-        console.log('AuthProvider: sessione =', session ? 'presente' : 'nulla')
-        
-        if (session?.user) {
-          setUser(session.user)
-          console.log('AuthProvider: user impostato, carico persona...')
-          await loadPersona(session.user.id)
-        } else {
-          console.log('AuthProvider: nessuna sessione')
-        }
-      } catch (error) {
-        console.error('AuthProvider: eccezione in checkSession:', error)
-      } finally {
-        console.log('AuthProvider: loading = false')
+    // Check sessione iniziale
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user)
+        loadPersona(session.user.id)
+      } else {
         setLoading(false)
       }
-    }
+    })
 
-    checkSession()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('AuthProvider: auth event =', event)
-        
-        if (session?.user) {
-          setUser(session.user)
-          await loadPersona(session.user.id)
-        } else {
-          setUser(null)
-          setPersona(null)
-          setAssegnazione(null)
-          setProgetto(null)
-        }
-        
+    // Listener per cambi auth
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setUser(session.user)
+        loadPersona(session.user.id)
+      } else {
+        setUser(null)
+        setPersona(null)
+        setAssegnazione(null)
+        setProgetto(null)
         setLoading(false)
       }
-    )
+    })
 
     return () => subscription.unsubscribe()
   }, [])
 
   const loadPersona = async (authUserId) => {
     try {
-      console.log('loadPersona: inizio per', authUserId)
-      
       // Carica persona
-      const { data: personaData, error: personaError } = await supabase
+      const { data: p, error: e1 } = await supabase
         .from('persone')
         .select('*')
         .eq('auth_user_id', authUserId)
         .single()
 
-      if (personaError) {
-        console.error('loadPersona: errore caricamento persona:', personaError)
+      if (e1 || !p) {
+        console.error('Errore caricamento persona:', e1)
+        setLoading(false)
         return
       }
 
-      console.log('loadPersona: persona trovata =', personaData?.nome)
-      setPersona(personaData)
+      setPersona(p)
 
       // Carica assegnazione attiva
-      const { data: assegnazioneData, error: assegnazioneError } = await supabase
+      const { data: a, error: e2 } = await supabase
         .from('assegnazioni_progetto')
-        .select(`
-          *,
-          progetto:progetti(*),
-          ditta:ditte(*)
-        `)
-        .eq('persona_id', personaData.id)
+        .select('*, progetto:progetti(*), ditta:ditte(*)')
+        .eq('persona_id', p.id)
         .eq('attivo', true)
         .limit(1)
         .single()
 
-      if (assegnazioneError) {
-        console.error('loadPersona: errore caricamento assegnazione:', assegnazioneError)
-        return
+      if (!e2 && a) {
+        setAssegnazione(a)
+        setProgetto(a.progetto)
       }
-
-      console.log('loadPersona: assegnazione trovata, ruolo =', assegnazioneData?.ruolo)
-      setAssegnazione(assegnazioneData)
-      setProgetto(assegnazioneData?.progetto || null)
-
-    } catch (error) {
-      console.error('loadPersona: eccezione:', error)
+    } catch (err) {
+      console.error('Eccezione loadPersona:', err)
+    } finally {
+      setLoading(false)
     }
   }
 
   const signIn = async (email, password) => {
-    setLoading(true)
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setLoading(false)
-      throw error
-    }
+    if (error) throw error
     return data
   }
 
   const signOut = async () => {
-    setLoading(true)
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      setLoading(false)
-      throw error
-    }
+    await supabase.auth.signOut()
     setUser(null)
     setPersona(null)
     setAssegnazione(null)
     setProgetto(null)
-    setLoading(false)
   }
 
-  // Funzione isAtLeast sicura
+  // Helper: verifica gerarchia ruoli
   const isAtLeast = (role) => {
     const currentRole = assegnazione?.ruolo
     if (!currentRole) return false
@@ -157,13 +112,11 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     isAtLeast,
-    // Shortcut sicuri con fallback
+    // Shortcuts
     ruolo: assegnazione?.ruolo || null,
     progettoId: assegnazione?.progetto_id || null,
     ditta: assegnazione?.ditta || null
   }
-
-  console.log('AuthProvider render: loading=', loading, 'user=', user?.email, 'ruolo=', value.ruolo)
 
   return (
     <AuthContext.Provider value={value}>
