@@ -8,11 +8,11 @@ export default function ImpostazioniPage() {
 
   const menuItems = [
     { id: 'progetto', label: 'Progetto', emoji: '🏗️', minRole: 'cm' },
-    { id: 'aree', label: 'Aree Lavoro', emoji: '📍', minRole: 'cm' },
     { id: 'persone', label: 'Persone', emoji: '👥', minRole: 'cm' },
     { id: 'ditte', label: 'Ditte', emoji: '🏢', minRole: 'admin' },
     { id: 'squadre', label: 'Squadre', emoji: '👷', minRole: 'cm' },
     { id: 'centriCosto', label: 'Centri Costo', emoji: '💰', minRole: 'cm' },
+    { id: 'progetti', label: 'Tutti i Progetti', emoji: '📋', minRole: 'admin' },
   ].filter(item => isAtLeast(item.minRole))
 
   return (
@@ -50,23 +50,33 @@ export default function ImpostazioniPage() {
 
         <div className="lg:col-span-3">
           {activeTab === 'progetto' && <ProgettoTab />}
-          {activeTab === 'aree' && <AreeLavoroTab />}
           {activeTab === 'persone' && <PersoneTab />}
           {activeTab === 'ditte' && <DitteTab />}
           {activeTab === 'squadre' && <SquadreTab />}
           {activeTab === 'centriCosto' && <CentriCostoTab />}
+          {activeTab === 'progetti' && <TuttiProgettiTab />}
         </div>
       </div>
     </div>
   )
 }
 
-// ==================== PROGETTO TAB ====================
+// ==================== PROGETTO + AREE LAVORO TAB ====================
 function ProgettoTab() {
-  const { progetto } = useAuth()
+  const { progetto, assegnazione } = useAuth()
   const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
+  
+  // Aree Lavoro
+  const [aree, setAree] = useState([])
+  const [loadingAree, setLoadingAree] = useState(true)
+  const [showAreaForm, setShowAreaForm] = useState(false)
+  const [editingArea, setEditingArea] = useState(null)
+  const [areaForm, setAreaForm] = useState({ nome: '', descrizione: '', latitudine: '', longitudine: '', raggio_metri: 100, colore: '#3B82F6' })
+  const [savingArea, setSavingArea] = useState(false)
+  const [areaMessage, setAreaMessage] = useState(null)
+  const colori = ['#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16']
 
   useEffect(() => {
     if (progetto) {
@@ -76,7 +86,15 @@ function ProgettoTab() {
         latitudine: progetto.latitudine || '', longitudine: progetto.longitudine || ''
       })
     }
-  }, [progetto])
+    if (assegnazione?.progetto_id) loadAree()
+  }, [progetto, assegnazione?.progetto_id])
+
+  const loadAree = async () => {
+    setLoadingAree(true)
+    const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome')
+    setAree(data || [])
+    setLoadingAree(false)
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -101,136 +119,294 @@ function ProgettoTab() {
     )
   }
 
+  // Area functions
+  const resetAreaForm = () => { setAreaForm({ nome: '', descrizione: '', latitudine: '', longitudine: '', raggio_metri: 100, colore: '#3B82F6' }); setEditingArea(null); setShowAreaForm(false); setAreaMessage(null) }
+
+  const handleEditArea = (area) => {
+    setAreaForm({ nome: area.nome, descrizione: area.descrizione || '', latitudine: area.latitudine?.toString() || '', longitudine: area.longitudine?.toString() || '', raggio_metri: area.raggio_metri || 100, colore: area.colore || '#3B82F6' })
+    setEditingArea(area); setShowAreaForm(true)
+  }
+
+  const handleSaveArea = async () => {
+    if (!areaForm.nome || !areaForm.latitudine || !areaForm.longitudine) { setAreaMessage({ type: 'error', text: 'Compila nome e coordinate' }); return }
+    setSavingArea(true); setAreaMessage(null)
+    try {
+      const payload = { progetto_id: assegnazione.progetto_id, nome: areaForm.nome, descrizione: areaForm.descrizione || null, latitudine: parseFloat(areaForm.latitudine), longitudine: parseFloat(areaForm.longitudine), raggio_metri: parseInt(areaForm.raggio_metri), colore: areaForm.colore }
+      if (editingArea) { await supabase.from('aree_lavoro').update(payload).eq('id', editingArea.id) }
+      else { await supabase.from('aree_lavoro').insert(payload) }
+      setAreaMessage({ type: 'success', text: editingArea ? 'Area aggiornata!' : 'Area creata!' })
+      loadAree(); setTimeout(resetAreaForm, 1000)
+    } catch (err) { setAreaMessage({ type: 'error', text: err.message }) }
+    finally { setSavingArea(false) }
+  }
+
+  const handleDeleteArea = async (id) => { if (!confirm('Eliminare questa area?')) return; await supabase.from('aree_lavoro').delete().eq('id', id); loadAree() }
+
+  const getAreaLocation = () => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setAreaForm({...areaForm, latitudine: pos.coords.latitude.toFixed(8), longitudine: pos.coords.longitude.toFixed(8)}),
+      () => setAreaMessage({ type: 'error', text: 'Errore GPS' })
+    )
+  }
+
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm border">
-      <h2 className="text-xl font-bold text-gray-800 mb-6">🏗️ Dettagli Progetto</h2>
-      <div className="space-y-4">
-        <div className="grid lg:grid-cols-2 gap-4">
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-            <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Codice</label>
-            <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-        </div>
-        <div className="grid lg:grid-cols-2 gap-4">
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Indirizzo</label>
-            <input type="text" value={formData.indirizzo} onChange={(e) => setFormData({...formData, indirizzo: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Città</label>
-            <input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-        </div>
-        <div className="grid lg:grid-cols-2 gap-4">
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Data Inizio</label>
-            <input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Data Fine Prevista</label>
-            <input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-        </div>
-        <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-          <h3 className="font-semibold text-blue-800 mb-3">📍 Coordinate GPS Centro Cantiere</h3>
-          <div className="grid lg:grid-cols-3 gap-4">
-            <div><label className="block text-sm font-medium mb-1">Latitudine</label>
-              <input type="text" value={formData.latitudine} onChange={(e) => setFormData({...formData, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="44.80150000" /></div>
-            <div><label className="block text-sm font-medium mb-1">Longitudine</label>
-              <input type="text" value={formData.longitudine} onChange={(e) => setFormData({...formData, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="10.32790000" /></div>
-            <div className="flex items-end">
-              <button onClick={getCurrentLocation} className="w-full px-4 py-3 bg-blue-100 text-blue-700 rounded-xl font-medium hover:bg-blue-200">📍 Usa GPS</button>
+    <div className="space-y-6">
+      {/* Dettagli Progetto */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border">
+        <h2 className="text-xl font-bold text-gray-800 mb-6">🏗️ Dettagli Progetto</h2>
+        <div className="space-y-4">
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+              <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Codice</label>
+              <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Indirizzo</label>
+              <input type="text" value={formData.indirizzo} onChange={(e) => setFormData({...formData, indirizzo: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Città</label>
+              <input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Data Inizio</label>
+              <input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Data Fine Prevista</label>
+              <input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+          </div>
+          <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <h3 className="font-semibold text-blue-800 mb-3">📍 Coordinate GPS Centro Cantiere</h3>
+            <div className="grid lg:grid-cols-3 gap-4">
+              <div><label className="block text-sm font-medium mb-1">Latitudine</label>
+                <input type="text" value={formData.latitudine} onChange={(e) => setFormData({...formData, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="44.80150000" /></div>
+              <div><label className="block text-sm font-medium mb-1">Longitudine</label>
+                <input type="text" value={formData.longitudine} onChange={(e) => setFormData({...formData, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="10.32790000" /></div>
+              <div className="flex items-end">
+                <button onClick={getCurrentLocation} className="w-full px-4 py-3 bg-blue-100 text-blue-700 rounded-xl font-medium hover:bg-blue-200">📍 Usa GPS</button>
+              </div>
             </div>
           </div>
+          {message && <div className={`p-4 rounded-xl ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{message.text}</div>}
+          <button onClick={handleSave} disabled={saving} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:bg-blue-300">
+            {saving ? 'Salvataggio...' : '💾 Salva Progetto'}
+          </button>
         </div>
-        {message && <div className={`p-4 rounded-xl ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{message.text}</div>}
-        <button onClick={handleSave} disabled={saving} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:bg-blue-300">
-          {saving ? 'Salvataggio...' : '💾 Salva'}
-        </button>
+      </div>
+
+      {/* Aree di Lavoro */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">📍 Aree di Lavoro</h2>
+            <p className="text-sm text-gray-500">Zone del cantiere per validazione check-in GPS</p>
+          </div>
+          {!showAreaForm && (
+            <button onClick={() => setShowAreaForm(true)} className="px-4 py-2 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700">
+              + Nuova Area
+            </button>
+          )}
+        </div>
+
+        {showAreaForm && (
+          <div className="p-4 bg-green-50 rounded-xl border border-green-200 mb-6">
+            <h3 className="font-semibold text-green-800 mb-4">{editingArea ? '✏️ Modifica Area' : '➕ Nuova Area'}</h3>
+            <div className="grid gap-4">
+              <div className="grid lg:grid-cols-2 gap-4">
+                <div><label className="block text-sm font-medium mb-1">Nome Area *</label>
+                  <input type="text" value={areaForm.nome} onChange={(e) => setAreaForm({...areaForm, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Ingresso Cantiere" /></div>
+                <div><label className="block text-sm font-medium mb-1">Descrizione</label>
+                  <input type="text" value={areaForm.descrizione} onChange={(e) => setAreaForm({...areaForm, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              </div>
+              <div className="grid lg:grid-cols-4 gap-4">
+                <div><label className="block text-sm font-medium mb-1">Latitudine *</label>
+                  <input type="text" value={areaForm.latitudine} onChange={(e) => setAreaForm({...areaForm, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+                <div><label className="block text-sm font-medium mb-1">Longitudine *</label>
+                  <input type="text" value={areaForm.longitudine} onChange={(e) => setAreaForm({...areaForm, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+                <div><label className="block text-sm font-medium mb-1">Raggio (m)</label>
+                  <input type="number" value={areaForm.raggio_metri} onChange={(e) => setAreaForm({...areaForm, raggio_metri: e.target.value})} className="w-full px-4 py-3 border rounded-xl" min="10" max="500" /></div>
+                <div className="flex items-end">
+                  <button onClick={getAreaLocation} className="w-full px-4 py-3 bg-green-100 text-green-700 rounded-xl font-medium hover:bg-green-200">📍 GPS</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Colore</label>
+                <div className="flex gap-2">
+                  {colori.map(c => (
+                    <button key={c} onClick={() => setAreaForm({...areaForm, colore: c})}
+                      className={`w-8 h-8 rounded-full border-2 ${areaForm.colore === c ? 'border-gray-800 scale-110' : 'border-transparent'}`}
+                      style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+              </div>
+              {areaMessage && <div className={`p-3 rounded-xl ${areaMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{areaMessage.text}</div>}
+              <div className="flex gap-2">
+                <button onClick={resetAreaForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button>
+                <button onClick={handleSaveArea} disabled={savingArea} className="px-4 py-2 bg-green-600 text-white rounded-xl">{savingArea ? 'Salvataggio...' : 'Salva Area'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {loadingAree ? (
+          <div className="text-center py-8 text-gray-500">Caricamento...</div>
+        ) : aree.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
+            <p className="text-4xl mb-2">📍</p>
+            <p>Nessuna area definita</p>
+            <p className="text-sm">Crea aree per validare i check-in GPS</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {aree.map(area => (
+              <div key={area.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
+                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: area.colore }} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-800">{area.nome}</p>
+                  <p className="text-sm text-gray-500">{area.latitudine?.toFixed(6)}, {area.longitudine?.toFixed(6)} • Raggio: {area.raggio_metri}m</p>
+                  {area.descrizione && <p className="text-xs text-gray-400">{area.descrizione}</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleEditArea(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
+                  <button onClick={() => handleDeleteArea(area.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-// ==================== AREE LAVORO TAB ====================
-function AreeLavoroTab() {
-  const { assegnazione } = useAuth()
-  const [aree, setAree] = useState([])
+// ==================== TUTTI I PROGETTI TAB (Admin) ====================
+function TuttiProgettiTab() {
+  const [progetti, setProgetti] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [editingArea, setEditingArea] = useState(null)
-  const [formData, setFormData] = useState({ nome: '', descrizione: '', latitudine: '', longitudine: '', raggio_metri: 100, colore: '#3B82F6' })
+  const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
-  const colori = ['#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16']
 
-  useEffect(() => { if (assegnazione?.progetto_id) loadAree() }, [assegnazione?.progetto_id])
+  useEffect(() => { loadProgetti() }, [])
 
-  const loadAree = async () => {
+  const loadProgetti = async () => {
     setLoading(true)
-    const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome')
-    setAree(data || [])
+    const { data } = await supabase.from('progetti').select('*').order('created_at', { ascending: false })
+    setProgetti(data || [])
     setLoading(false)
   }
 
-  const resetForm = () => { setFormData({ nome: '', descrizione: '', latitudine: '', longitudine: '', raggio_metri: 100, colore: '#3B82F6' }); setEditingArea(null); setShowForm(false); setMessage(null) }
-
-  const handleEdit = (area) => {
-    setFormData({ nome: area.nome, descrizione: area.descrizione || '', latitudine: area.latitudine?.toString() || '', longitudine: area.longitudine?.toString() || '', raggio_metri: area.raggio_metri || 100, colore: area.colore || '#3B82F6' })
-    setEditingArea(area); setShowForm(true)
+  const resetForm = () => {
+    setFormData({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '' })
+    setShowForm(false)
+    setMessage(null)
   }
 
-  const handleSave = async () => {
-    if (!formData.nome || !formData.latitudine || !formData.longitudine) { setMessage({ type: 'error', text: 'Compila nome e coordinate' }); return }
-    setSaving(true); setMessage(null)
+  const handleCreate = async () => {
+    if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
+    setSaving(true)
+    setMessage(null)
     try {
-      const payload = { progetto_id: assegnazione.progetto_id, nome: formData.nome, descrizione: formData.descrizione || null, latitudine: parseFloat(formData.latitudine), longitudine: parseFloat(formData.longitudine), raggio_metri: parseInt(formData.raggio_metri), colore: formData.colore }
-      if (editingArea) { await supabase.from('aree_lavoro').update(payload).eq('id', editingArea.id) }
-      else { await supabase.from('aree_lavoro').insert(payload) }
-      setMessage({ type: 'success', text: editingArea ? 'Area aggiornata!' : 'Area creata!' })
-      loadAree(); setTimeout(resetForm, 1000)
-    } catch (err) { setMessage({ type: 'error', text: err.message }) }
-    finally { setSaving(false) }
+      const { error } = await supabase.from('progetti').insert({
+        nome: formData.nome,
+        codice: formData.codice || null,
+        indirizzo: formData.indirizzo || null,
+        citta: formData.citta || null,
+        data_inizio: formData.data_inizio || null,
+        data_fine_prevista: formData.data_fine_prevista || null,
+        stato: 'attivo'
+      })
+      if (error) throw error
+      setMessage({ type: 'success', text: 'Progetto creato!' })
+      loadProgetti()
+      setTimeout(resetForm, 1500)
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDelete = async (id) => { if (!confirm('Eliminare?')) return; await supabase.from('aree_lavoro').delete().eq('id', id); loadAree() }
-
-  const getCurrentLocation = () => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setFormData({...formData, latitudine: pos.coords.latitude.toFixed(8), longitudine: pos.coords.longitude.toFixed(8)}),
-      () => setMessage({ type: 'error', text: 'Errore GPS' })
-    )
+  const handleToggleStato = async (prog) => {
+    const nuovoStato = prog.stato === 'attivo' ? 'completato' : 'attivo'
+    await supabase.from('progetti').update({ stato: nuovoStato }).eq('id', prog.id)
+    loadProgetti()
   }
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
-      <div className="flex items-center justify-between mb-4">
-        <div><h2 className="text-xl font-bold text-gray-800">📍 Aree di Lavoro</h2><p className="text-sm text-gray-500">Zone del cantiere per check-in GPS</p></div>
-        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Nuova Area</button>}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">📋 Tutti i Progetti</h2>
+          <p className="text-sm text-gray-500">{progetti.length} progetti totali</p>
+        </div>
+        {!showForm && (
+          <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
+            + Nuovo Progetto
+          </button>
+        )}
       </div>
 
       {showForm && (
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-4">{editingArea ? '✏️ Modifica' : '➕ Nuova Area'}</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">➕ Nuovo Progetto</h3>
           <div className="grid gap-4">
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Ingresso Cantiere" /></div>
-              <div><label className="block text-sm font-medium mb-1">Descrizione</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">Nome *</label>
+                <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Centrale Gas Milano" /></div>
+              <div><label className="block text-sm font-medium mb-1">Codice</label>
+                <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="PRJ-MILANO-001" /></div>
             </div>
-            <div className="grid lg:grid-cols-4 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Latitudine *</label><input type="text" value={formData.latitudine} onChange={(e) => setFormData({...formData, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Longitudine *</label><input type="text" value={formData.longitudine} onChange={(e) => setFormData({...formData, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Raggio (m)</label><input type="number" value={formData.raggio_metri} onChange={(e) => setFormData({...formData, raggio_metri: e.target.value})} className="w-full px-4 py-3 border rounded-xl" min="10" max="500" /></div>
-              <div className="flex items-end"><button onClick={getCurrentLocation} className="w-full px-4 py-3 bg-green-100 text-green-700 rounded-xl font-medium hover:bg-green-200">📍 GPS</button></div>
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">Indirizzo</label>
+                <input type="text" value={formData.indirizzo} onChange={(e) => setFormData({...formData, indirizzo: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">Città</label>
+                <input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
-            <div><label className="block text-sm font-medium mb-2">Colore</label><div className="flex gap-2">{colori.map(c => (<button key={c} onClick={() => setFormData({...formData, colore: c})} className={`w-8 h-8 rounded-full border-2 ${formData.colore === c ? 'border-gray-800 scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />))}</div></div>
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">Data Inizio</label>
+                <input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">Data Fine Prevista</label>
+                <input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            </div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? 'Salvataggio...' : 'Salva'}</button></div>
+            <div className="flex gap-2">
+              <button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button>
+              <button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? 'Creazione...' : 'Crea Progetto'}</button>
+            </div>
           </div>
         </div>
       )}
 
-      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : aree.length === 0 ? (
-        <div className="text-center py-8 text-gray-400"><p className="text-4xl mb-2">📍</p><p>Nessuna area definita</p></div>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Caricamento...</div>
       ) : (
         <div className="space-y-3">
-          {aree.map(area => (
-            <div key={area.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: area.colore }} />
-              <div className="flex-1"><p className="font-medium">{area.nome}</p><p className="text-sm text-gray-500">{area.latitudine?.toFixed(6)}, {area.longitudine?.toFixed(6)} • Raggio: {area.raggio_metri}m</p></div>
-              <div className="flex gap-2"><button onClick={() => handleEdit(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(area.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
+          {progetti.map(prog => (
+            <div key={prog.id} className={`p-4 rounded-xl border ${prog.stato === 'attivo' ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${prog.stato === 'attivo' ? 'bg-green-100' : 'bg-gray-200'}`}>
+                  🏗️
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-gray-800">{prog.nome}</p>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${prog.stato === 'attivo' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                      {prog.stato === 'attivo' ? '✅ Attivo' : '📦 Completato'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-500">{prog.codice || 'Nessun codice'} • {prog.citta || 'Località non specificata'}</p>
+                  {prog.data_inizio && (
+                    <p className="text-xs text-gray-400">
+                      📅 {new Date(prog.data_inizio).toLocaleDateString('it-IT')}
+                      {prog.data_fine_prevista && <> → {new Date(prog.data_fine_prevista).toLocaleDateString('it-IT')}</>}
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => handleToggleStato(prog)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium ${prog.stato === 'attivo' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
+                  {prog.stato === 'attivo' ? 'Completa' : 'Riattiva'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
