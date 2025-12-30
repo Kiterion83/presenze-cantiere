@@ -8,7 +8,8 @@ export const useAuth = () => useContext(AuthContext)
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [persona, setPersona] = useState(null)
-  const [assegnazioni, setAssegnazioni] = useState([]) // TUTTE le assegnazioni
+  const [assegnazioni, setAssegnazioni] = useState([]) // Assegnazioni reali dell'utente
+  const [tuttiProgetti, setTuttiProgetti] = useState([]) // TUTTI i progetti (per admin)
   const [assegnazione, setAssegnazione] = useState(null) // Assegnazione corrente
   const [progetto, setProgetto] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -37,6 +38,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null)
         setPersona(null)
         setAssegnazioni([])
+        setTuttiProgetti([])
         setAssegnazione(null)
         setProgetto(null)
         setLoading(false)
@@ -61,7 +63,7 @@ export const AuthProvider = ({ children }) => {
 
       setPersona(p)
 
-      // Carica TUTTE le assegnazioni attive (incluso dipartimento)
+      // Carica le assegnazioni dell'utente
       const { data: allAssegnazioni, error: e2 } = await supabase
         .from('assegnazioni_progetto')
         .select('*, progetto:progetti(*), ditta:ditte(*), dipartimento:dipartimenti(*)')
@@ -69,16 +71,53 @@ export const AuthProvider = ({ children }) => {
         .eq('attivo', true)
         .order('created_at', { ascending: false })
 
-      if (!e2 && allAssegnazioni && allAssegnazioni.length > 0) {
-        setAssegnazioni(allAssegnazioni)
+      // Verifica se l'utente è admin in almeno un progetto
+      const isAdminSomewhere = allAssegnazioni?.some(a => a.ruolo === 'admin')
 
+      // Se è admin, carica TUTTI i progetti
+      let progettiDisponibili = []
+      if (isAdminSomewhere) {
+        const { data: allProjects } = await supabase
+          .from('progetti')
+          .select('*')
+          .eq('stato', 'attivo')
+          .order('nome')
+        
+        setTuttiProgetti(allProjects || [])
+        
+        // Per admin, crea assegnazioni "virtuali" per progetti non assegnati
+        progettiDisponibili = (allProjects || []).map(proj => {
+          const realAssegnazione = allAssegnazioni?.find(a => a.progetto_id === proj.id)
+          if (realAssegnazione) {
+            return realAssegnazione
+          }
+          // Assegnazione virtuale per admin
+          return {
+            id: `virtual-${proj.id}`,
+            persona_id: p.id,
+            progetto_id: proj.id,
+            progetto: proj,
+            ruolo: 'admin', // Admin su tutti i progetti
+            attivo: true,
+            ditta: null,
+            dipartimento: null,
+            isVirtual: true // Flag per identificare assegnazioni virtuali
+          }
+        })
+      } else {
+        progettiDisponibili = allAssegnazioni || []
+      }
+
+      setAssegnazioni(progettiDisponibili)
+
+      if (progettiDisponibili.length > 0) {
         // Recupera progetto salvato o usa il primo
         const savedProgettoId = localStorage.getItem('selected_progetto_id')
         const savedAssegnazione = savedProgettoId 
-          ? allAssegnazioni.find(a => a.progetto_id === savedProgettoId)
+          ? progettiDisponibili.find(a => a.progetto_id === savedProgettoId)
           : null
 
-        const activeAssegnazione = savedAssegnazione || allAssegnazioni[0]
+        const activeAssegnazione = savedAssegnazione || progettiDisponibili[0]
         setAssegnazione(activeAssegnazione)
         setProgetto(activeAssegnazione.progetto)
       }
@@ -113,6 +152,7 @@ export const AuthProvider = ({ children }) => {
     setUser(null)
     setPersona(null)
     setAssegnazioni([])
+    setTuttiProgetti([])
     setAssegnazione(null)
     setProgetto(null)
   }
@@ -129,25 +169,21 @@ export const AuthProvider = ({ children }) => {
 
   const effectiveRole = testRoleOverride || assegnazione?.ruolo || null
 
-  // AGGIORNATO: Nuova gerarchia con pm e dept_manager
-  // Gerarchia unificata: helper < office < foreman < dept_manager < supervisor < cm < pm < admin
+  // Gerarchia ruoli
   const isAtLeast = (role) => {
     if (!effectiveRole) return false
     const hierarchy = ['helper', 'office', 'foreman', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
     return hierarchy.indexOf(effectiveRole) >= hierarchy.indexOf(role)
   }
 
-  // NUOVO: Funzione per verificare se è esattamente un ruolo
   const isRole = (role) => {
     return effectiveRole === role
   }
 
-  // NUOVO: Funzione per verificare se è un ruolo office (percorso ufficio)
   const isOfficePath = () => {
     return effectiveRole === 'office' || effectiveRole === 'dept_manager'
   }
 
-  // NUOVO: Funzione per determinare il percorso (site o office)
   const getPercorso = () => {
     if (effectiveRole === 'office' || effectiveRole === 'dept_manager') {
       return 'office'
@@ -155,33 +191,39 @@ export const AuthProvider = ({ children }) => {
     return 'site'
   }
 
-  // NUOVO: Può approvare trasferimenti direttamente (CM senza workflow)
   const canApproveDirectly = () => {
     return effectiveRole === 'cm' || effectiveRole === 'pm' || effectiveRole === 'admin'
+  }
+
+  // NUOVO: Verifica se l'utente è admin globale (admin in almeno un progetto)
+  const isGlobalAdmin = () => {
+    return assegnazioni.some(a => a.ruolo === 'admin' && !a.isVirtual)
   }
 
   const value = {
     user,
     persona,
-    assegnazioni, // Lista tutti i progetti
+    assegnazioni,
+    tuttiProgetti, // NUOVO: tutti i progetti per admin
     assegnazione,
     progetto,
     loading,
     signIn,
     signOut,
     isAtLeast,
-    isRole,           // NUOVO: verifica ruolo esatto
-    isOfficePath,     // NUOVO: verifica se percorso office
-    getPercorso,      // NUOVO: ottiene percorso (site/office)
-    canApproveDirectly, // NUOVO: può approvare direttamente
+    isRole,
+    isOfficePath,
+    getPercorso,
+    canApproveDirectly,
+    isGlobalAdmin, // NUOVO
     setTestRole,
     testRoleOverride,
-    cambiaProgetto, // Funzione per cambiare progetto
+    cambiaProgetto,
     ruolo: effectiveRole,
     realRuolo: assegnazione?.ruolo || null,
     progettoId: assegnazione?.progetto_id || null,
     ditta: assegnazione?.ditta || null,
-    dipartimento: assegnazione?.dipartimento || null  // NUOVO: dipartimento assegnato
+    dipartimento: assegnazione?.dipartimento || null
   }
 
   return (
