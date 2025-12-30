@@ -14,13 +14,11 @@ export const AuthProvider = ({ children }) => {
   const [testRoleOverride, setTestRoleOverride] = useState(null)
 
   useEffect(() => {
-    // Check test role override da sessionStorage
     const savedTestRole = sessionStorage.getItem('test_role_override')
     if (savedTestRole) {
       setTestRoleOverride(savedTestRole)
     }
 
-    // Check sessione iniziale
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user)
@@ -30,7 +28,6 @@ export const AuthProvider = ({ children }) => {
       }
     })
 
-    // Listener per cambi auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser(session.user)
@@ -49,7 +46,6 @@ export const AuthProvider = ({ children }) => {
 
   const loadPersona = async (authUserId) => {
     try {
-      // Carica persona
       const { data: p, error: e1 } = await supabase
         .from('persone')
         .select('*')
@@ -57,14 +53,12 @@ export const AuthProvider = ({ children }) => {
         .single()
 
       if (e1 || !p) {
-        console.error('Errore caricamento persona:', e1)
         setLoading(false)
         return
       }
 
       setPersona(p)
 
-      // Carica assegnazione attiva
       const { data: a, error: e2 } = await supabase
         .from('assegnazioni_progetto')
         .select('*, progetto:progetti(*), ditta:ditte(*)')
@@ -78,7 +72,7 @@ export const AuthProvider = ({ children }) => {
         setProgetto(a.progetto)
       }
     } catch (err) {
-      console.error('Eccezione loadPersona:', err)
+      console.error('Errore:', err)
     } finally {
       setLoading(false)
     }
@@ -87,13 +81,6 @@ export const AuthProvider = ({ children }) => {
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
-    
-    // Ricarica test role override dopo login
-    const savedTestRole = sessionStorage.getItem('test_role_override')
-    if (savedTestRole) {
-      setTestRoleOverride(savedTestRole)
-    }
-    
     return data
   }
 
@@ -107,7 +94,6 @@ export const AuthProvider = ({ children }) => {
     setProgetto(null)
   }
 
-  // Cambia ruolo test al volo
   const setTestRole = (role) => {
     if (role) {
       sessionStorage.setItem('test_role_override', role)
@@ -118,18 +104,12 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Ruolo effettivo (test override o reale)
   const effectiveRole = testRoleOverride || assegnazione?.ruolo || null
 
-  // Helper: verifica gerarchia ruoli
   const isAtLeast = (role) => {
     if (!effectiveRole) return false
-    
     const hierarchy = ['helper', 'office', 'foreman', 'supervisor', 'cm', 'admin']
-    const userLevel = hierarchy.indexOf(effectiveRole)
-    const requiredLevel = hierarchy.indexOf(role)
-    
-    return userLevel >= requiredLevel
+    return hierarchy.indexOf(effectiveRole) >= hierarchy.indexOf(role)
   }
 
   const value = {
@@ -143,7 +123,6 @@ export const AuthProvider = ({ children }) => {
     isAtLeast,
     setTestRole,
     testRoleOverride,
-    // Shortcuts
     ruolo: effectiveRole,
     realRuolo: assegnazione?.ruolo || null,
     progettoId: assegnazione?.progetto_id || null,
