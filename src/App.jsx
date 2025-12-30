@@ -14,6 +14,7 @@ import TrasferimentiPage from './pages/TrasferimentiPage'
 import NotifichePage from './pages/NotifichePage'
 import PWAInstallPrompt from './components/PWAInstallPrompt'
 import DocumentiPage from './pages/DocumentiPage'
+import DashboardPage from './pages/DashboardPage'
 
 function MenuPage() {
   const { signOut, isAtLeast } = useAuth()
@@ -29,6 +30,7 @@ function MenuPage() {
     { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', show: isAtLeast('cm') },
     { path: '/notifiche', label: 'Notifiche', emoji: '🔔', show: isAtLeast('supervisor') },
     { path: '/statistiche', label: 'Statistiche', emoji: '📊', show: isAtLeast('supervisor') },
+    { path: '/dashboard', label: 'Dashboard', emoji: '📈', show: isAtLeast('supervisor') },
     { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', show: isAtLeast('cm') },
   ].filter(item => item.show)
 
@@ -102,6 +104,7 @@ function App() {
           <Route path="/team" element={<ProtectedRoute minRole="foreman"><TeamPage /></ProtectedRoute>} />
           <Route path="/rapportino" element={<ProtectedRoute minRole="foreman"><RapportinoPage /></ProtectedRoute>} />
           <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute minRole="supervisor"><DashboardPage /></ProtectedRoute>} />
           <Route path="/documenti" element={<ProtectedRoute minRole="foreman"><DocumentiPage /></ProtectedRoute>} />
           <Route path="/notifiche" element={<ProtectedRoute minRole="supervisor"><NotifichePage /></ProtectedRoute>} />
           <Route path="/trasferimenti" element={<ProtectedRoute minRole="cm"><TrasferimentiPage /></ProtectedRoute>} />
