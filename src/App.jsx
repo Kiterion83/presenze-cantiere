@@ -1,28 +1,111 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import Layout from './components/Layout'
-
-// Pages
 import LoginPage from './pages/LoginPage'
-import HomePage from './pages/HomePage'
-import CheckInPage from './pages/CheckInPage'
-import TeamPage from './pages/TeamPage'
-import RapportinoPage from './pages/RapportinoPage'
-import StatistichePage from './pages/StatistichePage'
-import TrasferimentiPage from './pages/TrasferimentiPage'
-import PersonalePage from './pages/PersonalePage'
-import ImpostazioniPage from './pages/ImpostazioniPage'
 
-// Simple Loading Component
-function LoadingScreen() {
+// Componente Home inline ultra-semplice
+function SimpleHome() {
+  const auth = useAuth()
+  
+  if (auth?.loading) {
+    return (
+      <div style={{ padding: '20px', textAlign: 'center' }}>
+        <p>Caricamento...</p>
+      </div>
+    )
+  }
+
+  const handleLogout = async () => {
+    try {
+      await auth?.signOut()
+      window.location.href = '/login'
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
+      <h1 style={{ color: '#2563eb' }}>🏗️ Presenze Cantiere</h1>
+      
+      <div style={{ 
+        background: '#fef3c7', 
+        border: '1px solid #f59e0b', 
+        borderRadius: '8px', 
+        padding: '16px',
+        marginBottom: '16px'
+      }}>
+        <h3 style={{ margin: '0 0 8px 0' }}>🔍 Debug Info</h3>
+        <p><strong>User:</strong> {auth?.user?.email || 'NULL'}</p>
+        <p><strong>Persona:</strong> {auth?.persona?.nome || 'NULL'} {auth?.persona?.cognome || ''}</p>
+        <p><strong>Ruolo:</strong> {auth?.assegnazione?.ruolo || 'NULL'}</p>
+        <p><strong>Progetto:</strong> {auth?.progetto?.nome || 'NULL'}</p>
+      </div>
+
+      <div style={{ 
+        background: '#d1fae5', 
+        border: '1px solid #10b981', 
+        borderRadius: '8px', 
+        padding: '16px',
+        marginBottom: '16px',
+        textAlign: 'center'
+      }}>
+        <p style={{ margin: 0, fontWeight: 'bold', color: '#059669' }}>
+          ✅ App funzionante!
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <a href="/checkin" style={{ 
+          padding: '12px 24px', 
+          background: '#3b82f6', 
+          color: 'white', 
+          borderRadius: '8px',
+          textDecoration: 'none'
+        }}>
+          📍 Check-in
+        </a>
+        <a href="/team" style={{ 
+          padding: '12px 24px', 
+          background: '#8b5cf6', 
+          color: 'white', 
+          borderRadius: '8px',
+          textDecoration: 'none'
+        }}>
+          👥 Team
+        </a>
+        <button 
+          onClick={handleLogout}
+          style={{ 
+            padding: '12px 24px', 
+            background: '#ef4444', 
+            color: 'white', 
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          🚪 Logout
+        </button>
+      </div>
     </div>
   )
 }
 
-// Protected Route Component
+// Loading semplice
+function LoadingScreen() {
+  return (
+    <div style={{ 
+      minHeight: '100vh', 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center' 
+    }}>
+      <p>Caricamento...</p>
+    </div>
+  )
+}
+
+// Protected Route
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
 
@@ -37,7 +120,7 @@ function ProtectedRoute({ children }) {
   return children
 }
 
-// Public Route Component
+// Public Route
 function PublicRoute({ children }) {
   const { user, loading } = useAuth()
 
@@ -58,18 +141,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-          
-          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/checkin" element={<CheckInPage />} />
-            <Route path="/team" element={<TeamPage />} />
-            <Route path="/rapportino" element={<RapportinoPage />} />
-            <Route path="/statistiche" element={<StatistichePage />} />
-            <Route path="/trasferimenti" element={<TrasferimentiPage />} />
-            <Route path="/personale" element={<PersonalePage />} />
-            <Route path="/impostazioni" element={<ImpostazioniPage />} />
-          </Route>
-
+          <Route path="/" element={<ProtectedRoute><SimpleHome /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
