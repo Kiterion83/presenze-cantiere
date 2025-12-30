@@ -21,7 +21,7 @@ import {
 import { useState } from 'react'
 
 export default function Layout() {
-  const { persona, assegnazione, progetto, signOut, isAtLeast, isTestMode, ruolo, ruoloReale } = useAuth()
+  const { persona, assegnazione, progetto, signOut, isAtLeast, ruolo, ruoloReale, testRoleOverride } = useAuth()
   const navigate = useNavigate()
   const [showMenu, setShowMenu] = useState(false)
 
@@ -68,7 +68,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Test Mode Banner */}
-      {isTestMode && isTestMode() && (
+      {testRoleOverride && (
         <div className="bg-amber-500 text-white px-4 py-1.5 text-center text-sm font-medium flex items-center justify-center gap-2">
           <AlertTriangle size={16} />
           <span>Test Mode: visualizzazione come <strong>{ruolo?.toUpperCase()}</strong></span>
