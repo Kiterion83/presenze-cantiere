@@ -1,10 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-
-// Layout
 import Layout from './components/Layout'
-
-// Pages
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import CheckinPage from './pages/CheckinPage'
@@ -14,7 +10,6 @@ import RapportinoPage from './pages/RapportinoPage'
 import StatistichePage from './pages/StatistichePage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
 
-// Menu Page per mobile (lista completa)
 function MenuPage() {
   const { signOut, isAtLeast } = useAuth()
   
@@ -36,7 +31,7 @@ function MenuPage() {
           <a
             key={item.path}
             href={item.path}
-            className="flex items-center gap-4 p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-4 p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:bg-gray-50"
           >
             <span className="text-2xl">{item.emoji}</span>
             <span className="font-medium text-gray-700">{item.label}</span>
@@ -44,7 +39,7 @@ function MenuPage() {
         ))}
         <button
           onClick={signOut}
-          className="w-full flex items-center gap-4 p-4 bg-red-50 rounded-xl border border-red-100 hover:bg-red-100 transition-colors mt-4"
+          className="w-full flex items-center gap-4 p-4 bg-red-50 rounded-xl border border-red-100 hover:bg-red-100 mt-4"
         >
           <span className="text-2xl">🚪</span>
           <span className="font-medium text-red-600">Esci</span>
@@ -54,7 +49,6 @@ function MenuPage() {
   )
 }
 
-// Loading Screen
 function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -66,7 +60,6 @@ function LoadingScreen() {
   )
 }
 
-// Protected Route con Layout
 function ProtectedRoute({ children, minRole }) {
   const { user, loading, isAtLeast } = useAuth()
   
@@ -77,7 +70,6 @@ function ProtectedRoute({ children, minRole }) {
   return <Layout>{children}</Layout>
 }
 
-// Public Route
 function PublicRoute({ children }) {
   const { user, loading } = useAuth()
   
@@ -87,32 +79,20 @@ function PublicRoute({ children }) {
   return children
 }
 
-// App
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public */}
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-          
-          {/* Protected - Everyone */}
           <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/checkin" element={<ProtectedRoute><CheckinPage /></ProtectedRoute>} />
           <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
           <Route path="/menu" element={<ProtectedRoute><MenuPage /></ProtectedRoute>} />
-          
-          {/* Protected - Foreman+ */}
           <Route path="/team" element={<ProtectedRoute minRole="foreman"><TeamPage /></ProtectedRoute>} />
           <Route path="/rapportino" element={<ProtectedRoute minRole="foreman"><RapportinoPage /></ProtectedRoute>} />
-          
-          {/* Protected - Supervisor+ */}
           <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
-          
-          {/* Protected - CM+ */}
           <Route path="/impostazioni" element={<ProtectedRoute minRole="cm"><ImpostazioniPage /></ProtectedRoute>} />
-          
-          {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
