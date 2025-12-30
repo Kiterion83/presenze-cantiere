@@ -10,6 +10,10 @@ import RapportinoPage from './pages/RapportinoPage'
 import StatistichePage from './pages/StatistichePage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
 import FeriePage from './pages/FeriePage'
+import TrasferimentiPage from './pages/TrasferimentiPage'
+import NotifichePage from './pages/NotifichePage'
+import PWAInstallPrompt from './components/PWAInstallPrompt'
+import DocumentiPage from './pages/DocumentiPage'
 
 function MenuPage() {
   const { signOut, isAtLeast } = useAuth()
@@ -18,8 +22,12 @@ function MenuPage() {
     { path: '/', label: 'Home', emoji: '🏠', show: true },
     { path: '/checkin', label: 'Check-in', emoji: '📍', show: true },
     { path: '/calendario', label: 'Calendario', emoji: '📅', show: true },
+    { path: '/ferie', label: 'Ferie', emoji: '🏖️', show: true },
     { path: '/team', label: 'Team', emoji: '👥', show: isAtLeast('foreman') },
     { path: '/rapportino', label: 'Rapportino', emoji: '📝', show: isAtLeast('foreman') },
+    { path: '/documenti', label: 'Documenti', emoji: '📁', show: isAtLeast('foreman') },
+    { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', show: isAtLeast('cm') },
+    { path: '/notifiche', label: 'Notifiche', emoji: '🔔', show: isAtLeast('supervisor') },
     { path: '/statistiche', label: 'Statistiche', emoji: '📊', show: isAtLeast('supervisor') },
     { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', show: isAtLeast('cm') },
   ].filter(item => item.show)
@@ -94,9 +102,13 @@ function App() {
           <Route path="/team" element={<ProtectedRoute minRole="foreman"><TeamPage /></ProtectedRoute>} />
           <Route path="/rapportino" element={<ProtectedRoute minRole="foreman"><RapportinoPage /></ProtectedRoute>} />
           <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
+          <Route path="/documenti" element={<ProtectedRoute minRole="foreman"><DocumentiPage /></ProtectedRoute>} />
+          <Route path="/notifiche" element={<ProtectedRoute minRole="supervisor"><NotifichePage /></ProtectedRoute>} />
+          <Route path="/trasferimenti" element={<ProtectedRoute minRole="cm"><TrasferimentiPage /></ProtectedRoute>} />
           <Route path="/impostazioni" element={<ProtectedRoute minRole="cm"><ImpostazioniPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <PWAInstallPrompt />
       </BrowserRouter>
     </AuthProvider>
   )
