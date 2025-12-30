@@ -61,10 +61,10 @@ export const AuthProvider = ({ children }) => {
 
       setPersona(p)
 
-      // Carica TUTTE le assegnazioni attive
+      // Carica TUTTE le assegnazioni attive (incluso dipartimento)
       const { data: allAssegnazioni, error: e2 } = await supabase
         .from('assegnazioni_progetto')
-        .select('*, progetto:progetti(*), ditta:ditte(*)')
+        .select('*, progetto:progetti(*), ditta:ditte(*), dipartimento:dipartimenti(*)')
         .eq('persona_id', p.id)
         .eq('attivo', true)
         .order('created_at', { ascending: false })
@@ -129,10 +129,35 @@ export const AuthProvider = ({ children }) => {
 
   const effectiveRole = testRoleOverride || assegnazione?.ruolo || null
 
+  // AGGIORNATO: Nuova gerarchia con pm e dept_manager
+  // Gerarchia unificata: helper < office < foreman < dept_manager < supervisor < cm < pm < admin
   const isAtLeast = (role) => {
     if (!effectiveRole) return false
-    const hierarchy = ['helper', 'office', 'foreman', 'supervisor', 'cm', 'admin']
+    const hierarchy = ['helper', 'office', 'foreman', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
     return hierarchy.indexOf(effectiveRole) >= hierarchy.indexOf(role)
+  }
+
+  // NUOVO: Funzione per verificare se è esattamente un ruolo
+  const isRole = (role) => {
+    return effectiveRole === role
+  }
+
+  // NUOVO: Funzione per verificare se è un ruolo office (percorso ufficio)
+  const isOfficePath = () => {
+    return effectiveRole === 'office' || effectiveRole === 'dept_manager'
+  }
+
+  // NUOVO: Funzione per determinare il percorso (site o office)
+  const getPercorso = () => {
+    if (effectiveRole === 'office' || effectiveRole === 'dept_manager') {
+      return 'office'
+    }
+    return 'site'
+  }
+
+  // NUOVO: Può approvare trasferimenti direttamente (CM senza workflow)
+  const canApproveDirectly = () => {
+    return effectiveRole === 'cm' || effectiveRole === 'pm' || effectiveRole === 'admin'
   }
 
   const value = {
@@ -145,13 +170,18 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     isAtLeast,
+    isRole,           // NUOVO: verifica ruolo esatto
+    isOfficePath,     // NUOVO: verifica se percorso office
+    getPercorso,      // NUOVO: ottiene percorso (site/office)
+    canApproveDirectly, // NUOVO: può approvare direttamente
     setTestRole,
     testRoleOverride,
     cambiaProgetto, // Funzione per cambiare progetto
     ruolo: effectiveRole,
     realRuolo: assegnazione?.ruolo || null,
     progettoId: assegnazione?.progetto_id || null,
-    ditta: assegnazione?.ditta || null
+    ditta: assegnazione?.ditta || null,
+    dipartimento: assegnazione?.dipartimento || null  // NUOVO: dipartimento assegnato
   }
 
   return (
