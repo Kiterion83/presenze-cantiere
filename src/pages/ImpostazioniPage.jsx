@@ -12,6 +12,7 @@ export default function ImpostazioniPage() {
     { id: 'ditte', label: 'Ditte', emoji: '🏢', minRole: 'admin' },
     { id: 'squadre', label: 'Squadre', emoji: '👷', minRole: 'cm' },
     { id: 'centriCosto', label: 'Centri Costo', emoji: '💰', minRole: 'cm' },
+    { id: 'qrCodes', label: 'QR Codes', emoji: '📱', minRole: 'cm' },
     { id: 'progetti', label: 'Tutti i Progetti', emoji: '📋', minRole: 'admin' },
   ].filter(item => isAtLeast(item.minRole))
 
@@ -54,6 +55,7 @@ export default function ImpostazioniPage() {
           {activeTab === 'ditte' && <DitteTab />}
           {activeTab === 'squadre' && <SquadreTab />}
           {activeTab === 'centriCosto' && <CentriCostoTab />}
+          {activeTab === 'qrCodes' && <QRCodesTab />}
           {activeTab === 'progetti' && <TuttiProgettiTab />}
         </div>
       </div>
@@ -724,6 +726,150 @@ function CentriCostoTab() {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ==================== QR CODES TAB ====================
+function QRCodesTab() {
+  const { assegnazione, progetto } = useAuth()
+  const [qrCodes, setQrCodes] = useState([])
+  const [aree, setAree] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingQR, setEditingQR] = useState(null)
+  const [formData, setFormData] = useState({ nome: '', descrizione: '', area_lavoro_id: '', scadenza: '' })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => { if (assegnazione?.progetto_id) { loadQRCodes(); loadAree() } }, [assegnazione?.progetto_id])
+
+  const loadQRCodes = async () => {
+    setLoading(true)
+    const { data } = await supabase.from('qr_codes').select('*, area:aree_lavoro(nome)').eq('progetto_id', assegnazione.progetto_id).order('created_at', { ascending: false })
+    setQrCodes(data || [])
+    setLoading(false)
+  }
+
+  const loadAree = async () => {
+    const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true)
+    setAree(data || [])
+  }
+
+  const generateCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    let code = 'QR-'
+    for (let i = 0; i < 8; i++) code += chars.charAt(Math.floor(Math.random() * chars.length))
+    return code
+  }
+
+  const resetForm = () => { setFormData({ nome: '', descrizione: '', area_lavoro_id: '', scadenza: '' }); setEditingQR(null); setShowForm(false); setMessage(null) }
+
+  const handleEdit = (qr) => {
+    setFormData({ nome: qr.nome || '', descrizione: qr.descrizione || '', area_lavoro_id: qr.area_lavoro_id || '', scadenza: qr.scadenza || '' })
+    setEditingQR(qr); setShowForm(true)
+  }
+
+  const handleSave = async () => {
+    if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
+    setSaving(true); setMessage(null)
+    try {
+      if (editingQR) {
+        await supabase.from('qr_codes').update({ nome: formData.nome, descrizione: formData.descrizione || null, area_lavoro_id: formData.area_lavoro_id || null, scadenza: formData.scadenza || null }).eq('id', editingQR.id)
+      } else {
+        await supabase.from('qr_codes').insert({ progetto_id: assegnazione.progetto_id, codice: generateCode(), nome: formData.nome, descrizione: formData.descrizione || null, area_lavoro_id: formData.area_lavoro_id || null, scadenza: formData.scadenza || null, attivo: true })
+      }
+      setMessage({ type: 'success', text: editingQR ? 'Aggiornato!' : 'Creato!' })
+      loadQRCodes(); setTimeout(resetForm, 1000)
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+    finally { setSaving(false) }
+  }
+
+  const handleToggle = async (qr) => {
+    await supabase.from('qr_codes').update({ attivo: !qr.attivo }).eq('id', qr.id)
+    loadQRCodes()
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Eliminare questo QR Code?')) return
+    await supabase.from('qr_codes').delete().eq('id', id)
+    loadQRCodes()
+  }
+
+  const printQR = (qr) => {
+    const html = `<!DOCTYPE html><html><head><title>QR Code - ${qr.nome}</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>body{font-family:Arial,sans-serif;text-align:center;padding:40px}.qr-container{display:inline-block;padding:30px;border:3px solid #333;border-radius:20px;margin:20px}.title{font-size:24px;font-weight:bold;margin-bottom:10px}.code{font-family:monospace;font-size:20px;background:#f0f0f0;padding:10px;border-radius:8px;margin-top:15px}.project{color:#666;margin-top:10px}</style></head>
+    <body><div class="qr-container"><div class="title">📍 ${qr.nome}</div><canvas id="qr"></canvas><div class="code">${qr.codice}</div><div class="project">${progetto?.nome}</div></div>
+    <script>QRCode.toCanvas(document.getElementById('qr'),JSON.stringify({code:'${qr.codice}',project:'${assegnazione.progetto_id}'}),{width:200,margin:2})</script></body></html>`
+    const win = window.open('', '_blank')
+    win.document.write(html)
+    win.document.close()
+    setTimeout(() => win.print(), 500)
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border">
+      <div className="flex items-center justify-between mb-4">
+        <div><h2 className="text-xl font-bold text-gray-800">📱 QR Codes Check-in</h2><p className="text-sm text-gray-500">Punti di timbratura con QR code</p></div>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-purple-600 text-white rounded-xl">+ Nuovo QR</button>}
+      </div>
+
+      {showForm && (
+        <div className="p-4 bg-purple-50 rounded-xl border border-purple-200 mb-6">
+          <h3 className="font-semibold text-purple-800 mb-4">{editingQR ? '✏️ Modifica' : '➕ Nuovo'} QR Code</h3>
+          <div className="grid gap-4">
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Ingresso Cantiere" /></div>
+              <div><label className="block text-sm font-medium mb-1">Area di Lavoro</label><select value={formData.area_lavoro_id} onChange={(e) => setFormData({...formData, area_lavoro_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">Nessuna</option>{aree.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select></div>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">Descrizione</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">Scadenza</label><input type="date" value={formData.scadenza} onChange={(e) => setFormData({...formData, scadenza: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            </div>
+            {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
+            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-purple-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : qrCodes.length === 0 ? (
+        <div className="text-center py-8 text-gray-400"><p className="text-4xl mb-2">📱</p><p>Nessun QR Code creato</p><p className="text-sm">Crea QR codes per permettere il check-in tramite scansione</p></div>
+      ) : (
+        <div className="space-y-3">
+          {qrCodes.map(qr => (
+            <div key={qr.id} className={`p-4 rounded-xl border ${qr.attivo ? 'bg-white' : 'bg-gray-100 opacity-60'}`}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-purple-100 rounded-xl flex items-center justify-center text-2xl">📱</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-gray-800">{qr.nome}</p>
+                    <span className={`px-2 py-0.5 text-xs rounded-full ${qr.attivo ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{qr.attivo ? 'Attivo' : 'Disattivo'}</span>
+                  </div>
+                  <p className="font-mono text-sm text-purple-600 bg-purple-50 px-2 py-0.5 rounded inline-block mt-1">{qr.codice}</p>
+                  {qr.area?.nome && <p className="text-xs text-gray-500 mt-1">📍 {qr.area.nome}</p>}
+                  {qr.scadenza && <p className="text-xs text-gray-400">Scade: {new Date(qr.scadenza).toLocaleDateString('it-IT')}</p>}
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => printQR(qr)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg" title="Stampa">🖨️</button>
+                  <button onClick={() => handleEdit(qr)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
+                  <button onClick={() => handleToggle(qr)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg">{qr.attivo ? '⏸️' : '▶️'}</button>
+                  <button onClick={() => handleDelete(qr.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-6 p-4 bg-blue-50 rounded-xl">
+        <h4 className="font-semibold text-blue-800 mb-2">💡 Come funziona</h4>
+        <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+          <li>Crea un QR Code per ogni punto di timbratura</li>
+          <li>Stampa il QR Code e posizionalo nel punto desiderato</li>
+          <li>I lavoratori scansionano il QR per fare check-in/out</li>
+        </ol>
+      </div>
     </div>
   )
 }
