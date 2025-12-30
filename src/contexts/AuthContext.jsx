@@ -11,8 +11,15 @@ export const AuthProvider = ({ children }) => {
   const [assegnazione, setAssegnazione] = useState(null)
   const [progetto, setProgetto] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [testRoleOverride, setTestRoleOverride] = useState(null)
 
   useEffect(() => {
+    // Check test role override da sessionStorage
+    const savedTestRole = sessionStorage.getItem('test_role_override')
+    if (savedTestRole) {
+      setTestRoleOverride(savedTestRole)
+    }
+
     // Check sessione iniziale
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -80,10 +87,19 @@ export const AuthProvider = ({ children }) => {
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
+    
+    // Ricarica test role override dopo login
+    const savedTestRole = sessionStorage.getItem('test_role_override')
+    if (savedTestRole) {
+      setTestRoleOverride(savedTestRole)
+    }
+    
     return data
   }
 
   const signOut = async () => {
+    sessionStorage.removeItem('test_role_override')
+    setTestRoleOverride(null)
     await supabase.auth.signOut()
     setUser(null)
     setPersona(null)
@@ -91,13 +107,26 @@ export const AuthProvider = ({ children }) => {
     setProgetto(null)
   }
 
+  // Cambia ruolo test al volo
+  const setTestRole = (role) => {
+    if (role) {
+      sessionStorage.setItem('test_role_override', role)
+      setTestRoleOverride(role)
+    } else {
+      sessionStorage.removeItem('test_role_override')
+      setTestRoleOverride(null)
+    }
+  }
+
+  // Ruolo effettivo (test override o reale)
+  const effectiveRole = testRoleOverride || assegnazione?.ruolo || null
+
   // Helper: verifica gerarchia ruoli
   const isAtLeast = (role) => {
-    const currentRole = assegnazione?.ruolo
-    if (!currentRole) return false
+    if (!effectiveRole) return false
     
     const hierarchy = ['helper', 'office', 'foreman', 'supervisor', 'cm', 'admin']
-    const userLevel = hierarchy.indexOf(currentRole)
+    const userLevel = hierarchy.indexOf(effectiveRole)
     const requiredLevel = hierarchy.indexOf(role)
     
     return userLevel >= requiredLevel
@@ -112,8 +141,11 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     isAtLeast,
+    setTestRole,
+    testRoleOverride,
     // Shortcuts
-    ruolo: assegnazione?.ruolo || null,
+    ruolo: effectiveRole,
+    realRuolo: assegnazione?.ruolo || null,
     progettoId: assegnazione?.progetto_id || null,
     ditta: assegnazione?.ditta || null
   }
