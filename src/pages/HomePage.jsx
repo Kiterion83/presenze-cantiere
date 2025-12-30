@@ -8,6 +8,7 @@ import {
   Users, 
   Clock,
   Sun,
+  Cloud,
   Wind,
   Droplets,
   AlertTriangle,
@@ -23,6 +24,10 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
 
   const oggi = new Date().toISOString().split('T')[0]
+  const oraCorrente = new Date().toLocaleTimeString('it-IT', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
 
   useEffect(() => {
     loadData()
@@ -30,35 +35,33 @@ export default function HomePage() {
 
   const loadData = async () => {
     try {
-      if (persona?.id && assegnazione?.progetto_id) {
-        // Carica presenza di oggi
-        const { data: presenza } = await supabase
-          .from('presenze')
-          .select('*')
-          .eq('persona_id', persona.id)
-          .eq('progetto_id', assegnazione.progetto_id)
-          .eq('data', oggi)
-          .single()
+      // Carica presenza di oggi
+      const { data: presenza } = await supabase
+        .from('presenze')
+        .select('*')
+        .eq('persona_id', persona.id)
+        .eq('progetto_id', assegnazione.progetto_id)
+        .eq('data', oggi)
+        .single()
 
-        setPresenzaOggi(presenza)
+      setPresenzaOggi(presenza)
 
-        // Carica statistiche presenze oggi
-        const { count: presenti } = await supabase
-          .from('presenze')
-          .select('*', { count: 'exact', head: true })
-          .eq('progetto_id', assegnazione.progetto_id)
-          .eq('data', oggi)
+      // Carica statistiche presenze oggi
+      const { count: presenti } = await supabase
+        .from('presenze')
+        .select('*', { count: 'exact', head: true })
+        .eq('progetto_id', assegnazione.progetto_id)
+        .eq('data', oggi)
 
-        const { count: totale } = await supabase
-          .from('assegnazioni_progetto')
-          .select('*', { count: 'exact', head: true })
-          .eq('progetto_id', assegnazione.progetto_id)
-          .eq('attivo', true)
+      const { count: totale } = await supabase
+        .from('assegnazioni_progetto')
+        .select('*', { count: 'exact', head: true })
+        .eq('progetto_id', assegnazione.progetto_id)
+        .eq('attivo', true)
 
-        setStats({ presenti: presenti || 0, totale: totale || 0 })
-      }
+      setStats({ presenti: presenti || 0, totale: totale || 0 })
 
-      // Meteo placeholder
+      // Meteo placeholder (in produzione userai un'API vera)
       setMeteo({
         temperatura: 8,
         vento: 15,
@@ -81,22 +84,14 @@ export default function HomePage() {
     return 'Buonasera'
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    )
-  }
-
   return (
     <div className="p-4 space-y-4">
       {/* Greeting Card */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl p-4">
+      <div className="card bg-gradient-to-r from-primary-600 to-primary-700 text-white">
         <h2 className="text-xl font-bold">
           {getGreeting()}, {persona?.nome}!
         </h2>
-        <p className="text-blue-100 text-sm mt-1">
+        <p className="text-primary-100 text-sm mt-1">
           {new Date().toLocaleDateString('it-IT', { 
             weekday: 'long', 
             day: 'numeric', 
@@ -124,11 +119,15 @@ export default function HomePage() {
 
       {/* Meteo Card */}
       {meteo && (
-        <div className="bg-white rounded-xl p-4 shadow-sm">
+        <div className="card">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-yellow-50 rounded-lg">
-                <Sun className="text-yellow-500" size={24} />
+                {meteo.pioggia > 0 ? (
+                  <Droplets className="text-blue-500" size={24} />
+                ) : (
+                  <Sun className="text-yellow-500" size={24} />
+                )}
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-800">
@@ -151,7 +150,7 @@ export default function HomePage() {
           </div>
 
           {meteo.alert && (
-            <div className="mt-3 flex items-center gap-2 text-amber-600 bg-amber-50 p-2 rounded-lg">
+            <div className="mt-3 flex items-center gap-2 text-warning-600 bg-warning-50 p-2 rounded-lg">
               <AlertTriangle size={18} />
               <span className="text-sm font-medium">{meteo.alert}</span>
             </div>
@@ -160,7 +159,7 @@ export default function HomePage() {
       )}
 
       {/* Stats Card */}
-      <div className="bg-white rounded-xl p-4 shadow-sm">
+      <div className="card">
         <h3 className="text-sm font-medium text-gray-500 mb-3">Presenze oggi</h3>
         <div className="flex items-end gap-2">
           <span className="text-3xl font-bold text-gray-800">{stats.presenti}</span>
@@ -168,8 +167,8 @@ export default function HomePage() {
         </div>
         <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
           <div 
-            className="h-full bg-blue-500 rounded-full transition-all"
-            style={{ width: `${stats.totale > 0 ? (stats.presenti / stats.totale) * 100 : 0}%` }}
+            className="h-full bg-primary-500 rounded-full transition-all"
+            style={{ width: `${(stats.presenti / stats.totale) * 100}%` }}
           />
         </div>
       </div>
@@ -178,10 +177,10 @@ export default function HomePage() {
       <div className="grid grid-cols-2 gap-3">
         <Link 
           to="/checkin" 
-          className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col items-center py-6"
+          className="card hover:shadow-md transition-shadow flex flex-col items-center py-6"
         >
-          <div className="p-3 bg-blue-50 rounded-xl mb-2">
-            <MapPin className="text-blue-600" size={28} />
+          <div className="p-3 bg-primary-50 rounded-xl mb-2">
+            <MapPin className="text-primary-600" size={28} />
           </div>
           <span className="font-medium text-gray-800">Check-in</span>
           <span className="text-xs text-gray-500">GPS + Meteo</span>
@@ -190,10 +189,10 @@ export default function HomePage() {
         {isAtLeast('foreman') && (
           <Link 
             to="/rapportino" 
-            className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col items-center py-6"
+            className="card hover:shadow-md transition-shadow flex flex-col items-center py-6"
           >
-            <div className="p-3 bg-green-50 rounded-xl mb-2">
-              <ClipboardList className="text-green-600" size={28} />
+            <div className="p-3 bg-success-50 rounded-xl mb-2">
+              <ClipboardList className="text-success-600" size={28} />
             </div>
             <span className="font-medium text-gray-800">Rapportino</span>
             <span className="text-xs text-gray-500">Ore e attività</span>
@@ -202,7 +201,7 @@ export default function HomePage() {
 
         <Link 
           to="/team" 
-          className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col items-center py-6"
+          className="card hover:shadow-md transition-shadow flex flex-col items-center py-6"
         >
           <div className="p-3 bg-purple-50 rounded-xl mb-2">
             <Users className="text-purple-600" size={28} />
@@ -214,7 +213,7 @@ export default function HomePage() {
         {isAtLeast('foreman') && (
           <Link 
             to="/trasferimenti" 
-            className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col items-center py-6"
+            className="card hover:shadow-md transition-shadow flex flex-col items-center py-6"
           >
             <div className="p-3 bg-orange-50 rounded-xl mb-2">
               <ArrowLeftRight className="text-orange-600" size={28} />
@@ -226,7 +225,7 @@ export default function HomePage() {
       </div>
 
       {/* Info progetto */}
-      <div className="bg-gray-50 rounded-xl p-4">
+      <div className="card bg-gray-50 border-0">
         <p className="text-xs text-gray-500 text-center">
           {progetto?.indirizzo}, {progetto?.citta}
         </p>
