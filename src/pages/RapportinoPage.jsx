@@ -16,7 +16,10 @@ export default function RapportinoPage() {
   const [showForm, setShowForm] = useState(false)
   const [showFirma, setShowFirma] = useState(false)
   const [tipoFirma, setTipoFirma] = useState(null) // 'caposquadra' o 'supervisore'
-  const [formData, setFormData] = useState({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', unita_misura: '', note: '' })
+  const [formData, setFormData] = useState({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', note: '' })
+  
+  // NUOVO: Centro costo selezionato per mostrare unità di misura
+  const [centroCostoSelezionato, setCentroCostoSelezionato] = useState(null)
 
   useEffect(() => {
     if (assegnazione?.progetto_id) loadData()
@@ -24,20 +27,33 @@ export default function RapportinoPage() {
 
   const loadData = async () => {
     setLoading(true)
-    const { data: cc } = await supabase.from('centri_costo').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('codice')
+    // AGGIORNATO: Carica anche unità di misura con il centro costo
+    const { data: cc } = await supabase
+      .from('centri_costo')
+      .select('*, unita_misura:unita_misura(id, codice, nome)')
+      .eq('progetto_id', assegnazione.progetto_id)
+      .order('codice')
     setCentriCosto(cc || [])
 
     const { data: rap } = await supabase.from('rapportini').select('*').eq('progetto_id', assegnazione.progetto_id).eq('data', selectedDate).single()
     setRapportino(rap || null)
 
     if (rap) {
-      const { data: att } = await supabase.from('attivita_rapportino').select('*, centro_costo:centri_costo(codice, descrizione)').eq('rapportino_id', rap.id).order('created_at')
+      const { data: att } = await supabase
+        .from('attivita_rapportino')
+        .select('*, centro_costo:centri_costo(codice, nome, descrizione, unita_misura:unita_misura(codice, nome), budget_ore, budget_quantita)')
+        .eq('rapportino_id', rap.id)
+        .order('created_at')
       setAttivita(att || [])
     } else {
       setAttivita([])
     }
 
-    const { data: pres } = await supabase.from('presenze').select('*, persona:persone(nome, cognome)').eq('progetto_id', assegnazione.progetto_id).eq('data', selectedDate).not('ora_uscita', 'is', null)
+    const { data: pres } = await supabase
+      .from('presenze')
+      .select('*, persona:persone(nome, cognome)')
+      .eq('progetto_id', assegnazione.progetto_id)
+      .eq('data', selectedDate)
     setPresenze(pres || [])
     setLoading(false)
   }
@@ -50,18 +66,59 @@ export default function RapportinoPage() {
     return data
   }
 
+  // NUOVO: Gestione selezione centro costo
+  const handleCentroCostoChange = (ccId) => {
+    setFormData({ ...formData, centro_costo_id: ccId })
+    const cc = centriCosto.find(c => c.id === ccId)
+    setCentroCostoSelezionato(cc)
+  }
+
+  // NUOVO: Calcolo resa
+  const calcolaResa = () => {
+    const ore = parseFloat(formData.ore) || 0
+    const qty = parseFloat(formData.quantita) || 0
+    if (ore > 0 && qty > 0) {
+      return (qty / ore).toFixed(2)
+    }
+    return null
+  }
+
   const handleAddAttivita = async () => {
-    if (!formData.descrizione || !formData.ore) { setMessage({ type: 'error', text: 'Descrizione e ore obbligatorie' }); return }
-    setSaving(true); setMessage(null)
+    // AGGIORNATO: Solo descrizione e ore sono obbligatorie, quantità è opzionale
+    if (!formData.descrizione || !formData.ore) { 
+      setMessage({ type: 'error', text: 'Descrizione e ore obbligatorie' })
+      return 
+    }
+    setSaving(true)
+    setMessage(null)
     try {
       const rap = await getOrCreateRapportino()
-      await supabase.from('attivita_rapportino').insert({ rapportino_id: rap.id, centro_costo_id: formData.centro_costo_id || null, descrizione: formData.descrizione, ore: parseFloat(formData.ore), quantita: formData.quantita ? parseFloat(formData.quantita) : null, unita_misura: formData.unita_misura || null, note: formData.note || null })
+      
+      // AGGIORNATO: unita_misura viene dal centro costo, non dal form
+      const unitaMisura = centroCostoSelezionato?.unita_misura?.codice || null
+      
+      await supabase.from('attivita_rapportino').insert({ 
+        rapportino_id: rap.id, 
+        centro_costo_id: formData.centro_costo_id || null, 
+        descrizione: formData.descrizione, 
+        ore: parseFloat(formData.ore), 
+        // AGGIORNATO: quantità può essere null per lavori in economia
+        quantita: formData.quantita ? parseFloat(formData.quantita) : null, 
+        // AGGIORNATO: unità di misura dal centro costo
+        unita_misura: unitaMisura, 
+        note: formData.note || null 
+      })
+      
       setMessage({ type: 'success', text: 'Attività aggiunta!' })
-      setFormData({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', unita_misura: '', note: '' })
+      setFormData({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', note: '' })
+      setCentroCostoSelezionato(null)
       setShowForm(false)
       loadData()
-    } catch (err) { setMessage({ type: 'error', text: err.message }) }
-    finally { setSaving(false) }
+    } catch (err) { 
+      setMessage({ type: 'error', text: err.message }) 
+    } finally { 
+      setSaving(false) 
+    }
   }
 
   const handleDeleteAttivita = async (id) => {
@@ -110,7 +167,21 @@ export default function RapportinoPage() {
   }
 
   const totaleOre = attivita.reduce((s, a) => s + (parseFloat(a.ore) || 0), 0)
-  const totaleOrePresenze = presenze.reduce((s, p) => s + (parseFloat(p.ore_ordinarie) || 0) + (parseFloat(p.ore_straordinarie) || 0), 0)
+  
+  // AGGIORNATO: Calcolo ore presenze più robusto
+  const calcolaOrePresenza = (p) => {
+    if (p.ore_ordinarie || p.ore_straordinarie) {
+      return (parseFloat(p.ore_ordinarie || 0) + parseFloat(p.ore_straordinarie || 0))
+    }
+    // Fallback: calcola da ora_checkin/ora_checkout
+    if (p.ora_checkin && p.ora_checkout) {
+      const checkin = new Date(`2000-01-01T${p.ora_checkin}`)
+      const checkout = new Date(`2000-01-01T${p.ora_checkout}`)
+      return (checkout - checkin) / (1000 * 60 * 60)
+    }
+    return 0
+  }
+  const totaleOrePresenze = presenze.reduce((s, p) => s + calcolaOrePresenza(p), 0)
 
   const statoColors = { bozza: 'bg-gray-100 text-gray-700', inviato: 'bg-blue-100 text-blue-700', approvato: 'bg-green-100 text-green-700', rifiutato: 'bg-red-100 text-red-700' }
 
@@ -143,38 +214,162 @@ export default function RapportinoPage() {
       ) : (
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* Form Attività */}
+            {/* Form Attività - AGGIORNATO */}
             {(!rapportino || rapportino.stato === 'bozza') && (
               showForm ? (
                 <div className="bg-white rounded-xl p-6 shadow-sm border">
                   <h3 className="font-semibold text-gray-700 mb-4">➕ Nuova Attività</h3>
                   <div className="grid gap-4">
-                    <div className="grid lg:grid-cols-2 gap-4">
-                      <select value={formData.centro_costo_id} onChange={(e) => setFormData({...formData, centro_costo_id: e.target.value})} className="px-4 py-3 border rounded-xl">
-                        <option value="">Centro di costo</option>
-                        {centriCosto.map(cc => <option key={cc.id} value={cc.id}>{cc.codice} - {cc.descrizione}</option>)}
+                    {/* Centro di costo */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Centro di Costo</label>
+                      <select 
+                        value={formData.centro_costo_id} 
+                        onChange={(e) => handleCentroCostoChange(e.target.value)} 
+                        className="w-full px-4 py-3 border rounded-xl"
+                      >
+                        <option value="">Seleziona centro di costo...</option>
+                        {centriCosto.map(cc => (
+                          <option key={cc.id} value={cc.id}>
+                            [{cc.codice}] {cc.nome || cc.descrizione} {cc.unita_misura ? `(${cc.unita_misura.codice})` : ''}
+                          </option>
+                        ))}
                       </select>
-                      <input type="number" value={formData.ore} onChange={(e) => setFormData({...formData, ore: e.target.value})} placeholder="Ore *" step="0.5" className="px-4 py-3 border rounded-xl" />
                     </div>
-                    <input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} placeholder="Descrizione attività *" className="px-4 py-3 border rounded-xl" />
+                    
+                    {/* NUOVO: Info centro costo selezionato con unità di misura */}
+                    {centroCostoSelezionato && (
+                      <div className="p-3 bg-blue-50 rounded-xl text-sm">
+                        <p className="text-blue-700">
+                          <span className="font-medium">Unità di misura:</span>{' '}
+                          {centroCostoSelezionato.unita_misura 
+                            ? `${centroCostoSelezionato.unita_misura.nome} (${centroCostoSelezionato.unita_misura.codice})`
+                            : 'Non definita'}
+                        </p>
+                        {centroCostoSelezionato.budget_quantita > 0 && centroCostoSelezionato.budget_ore > 0 && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            Budget: {centroCostoSelezionato.budget_quantita} {centroCostoSelezionato.unita_misura?.codice} 
+                            {' '}in {centroCostoSelezionato.budget_ore}h 
+                            {' '}(resa target: {(centroCostoSelezionato.budget_quantita / centroCostoSelezionato.budget_ore).toFixed(2)} {centroCostoSelezionato.unita_misura?.codice}/h)
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Descrizione */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descrizione *</label>
+                      <input 
+                        type="text" 
+                        value={formData.descrizione} 
+                        onChange={(e) => setFormData({...formData, descrizione: e.target.value})} 
+                        placeholder="Descrizione attività" 
+                        className="w-full px-4 py-3 border rounded-xl" 
+                      />
+                    </div>
+                    
+                    {/* Ore e Quantità */}
                     <div className="grid grid-cols-2 gap-4">
-                      <input type="number" value={formData.quantita} onChange={(e) => setFormData({...formData, quantita: e.target.value})} placeholder="Quantità" className="px-4 py-3 border rounded-xl" />
-                      <input type="text" value={formData.unita_misura} onChange={(e) => setFormData({...formData, unita_misura: e.target.value})} placeholder="Unità (m, kg...)" className="px-4 py-3 border rounded-xl" />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Ore *</label>
+                        <input 
+                          type="number" 
+                          value={formData.ore} 
+                          onChange={(e) => setFormData({...formData, ore: e.target.value})} 
+                          placeholder="Es: 8" 
+                          step="0.5" 
+                          className="w-full px-4 py-3 border rounded-xl" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Quantità 
+                          <span className="text-gray-400 font-normal text-xs ml-1">(opzionale)</span>
+                        </label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="number" 
+                            value={formData.quantita} 
+                            onChange={(e) => setFormData({...formData, quantita: e.target.value})} 
+                            placeholder="Es: 50" 
+                            step="0.001" 
+                            className="flex-1 px-4 py-3 border rounded-xl" 
+                          />
+                          {centroCostoSelezionato?.unita_misura && (
+                            <span className="px-3 py-3 bg-gray-100 rounded-xl text-gray-600 font-medium text-sm">
+                              {centroCostoSelezionato.unita_misura.codice}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button>
-                      <button onClick={handleAddAttivita} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl disabled:bg-blue-300">{saving ? '...' : 'Aggiungi'}</button>
+                    
+                    {/* NUOVO: Resa calcolata */}
+                    {calcolaResa() && (
+                      <div className="p-3 bg-green-50 rounded-xl">
+                        <p className="text-sm text-green-700">
+                          <span className="font-medium">📊 Resa:</span>{' '}
+                          {calcolaResa()} {centroCostoSelezionato?.unita_misura?.codice || ''}/h
+                          {centroCostoSelezionato?.budget_ore > 0 && centroCostoSelezionato?.budget_quantita > 0 && (
+                            <span className="ml-2 text-green-600">
+                              (target: {(centroCostoSelezionato.budget_quantita / centroCostoSelezionato.budget_ore).toFixed(2)})
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* NUOVO: Indicatore lavoro in economia */}
+                    {!formData.quantita && formData.ore && (
+                      <div className="p-3 bg-amber-50 rounded-xl">
+                        <p className="text-sm text-amber-700">
+                          <span className="font-medium">💰 Lavoro in economia:</span>{' '}
+                          Registrazione solo ore, senza quantità
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Note */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                      <textarea 
+                        value={formData.note} 
+                        onChange={(e) => setFormData({...formData, note: e.target.value})} 
+                        placeholder="Note aggiuntive..." 
+                        rows={2}
+                        className="w-full px-4 py-3 border rounded-xl resize-none" 
+                      />
+                    </div>
+                    
+                    {/* Azioni */}
+                    <div className="flex gap-2 pt-2">
+                      <button 
+                        onClick={() => { setShowForm(false); setCentroCostoSelezionato(null); setFormData({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', note: '' }) }} 
+                        className="px-4 py-2 bg-gray-200 rounded-xl hover:bg-gray-300"
+                      >
+                        Annulla
+                      </button>
+                      <button 
+                        onClick={handleAddAttivita} 
+                        disabled={saving} 
+                        className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {saving ? '⏳ Salvataggio...' : '💾 Aggiungi'}
+                      </button>
                     </div>
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setShowForm(true)} className="w-full p-4 bg-blue-50 text-blue-700 rounded-xl font-medium hover:bg-blue-100 border-2 border-dashed border-blue-200">
+                <button 
+                  onClick={() => setShowForm(true)} 
+                  className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                >
                   ➕ Aggiungi Attività
                 </button>
               )
             )}
 
-            {/* Lista Attività */}
+            {/* Lista Attività - AGGIORNATO */}
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
@@ -190,23 +385,54 @@ export default function RapportinoPage() {
               ) : (
                 <div className="divide-y">
                   {attivita.map(att => (
-                    <div key={att.id} className="p-4 hover:bg-gray-50 flex items-start justify-between">
-                      <div>
-                        <p className="font-medium">{att.descrizione}</p>
-                        <p className="text-sm text-gray-500">{att.centro_costo?.codice}</p>
-                      </div>
-                      <div className="text-right flex items-center gap-2">
-                        <div>
-                          <p className="font-semibold">{att.ore}h</p>
-                          {att.quantita && <p className="text-sm text-gray-500">{att.quantita} {att.unita_misura}</p>}
+                    <div key={att.id} className="p-4 hover:bg-gray-50">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-medium">{att.descrizione}</p>
+                            {att.centro_costo && (
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                                {att.centro_costo.codice}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-3 text-sm text-gray-600">
+                            <span>⏱️ {att.ore}h</span>
+                            {att.quantita ? (
+                              <>
+                                <span>📦 {att.quantita} {att.unita_misura || ''}</span>
+                                <span className="text-green-600 font-medium">
+                                  📈 {(att.quantita / att.ore).toFixed(2)} {att.unita_misura || ''}/h
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-amber-600">💰 Economia</span>
+                            )}
+                          </div>
+                          {att.note && <p className="text-xs text-gray-500 mt-1">📝 {att.note}</p>}
                         </div>
-                        {(!rapportino || rapportino.stato === 'bozza') && <button onClick={() => handleDeleteAttivita(att.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">🗑️</button>}
+                        {(!rapportino || rapportino.stato === 'bozza') && (
+                          <button onClick={() => handleDeleteAttivita(att.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">🗑️</button>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-              {attivita.length > 0 && <div className="p-4 bg-gray-50 border-t flex justify-between font-semibold"><span>Totale</span><span>{totaleOre}h</span></div>}
+              {attivita.length > 0 && (
+                <div className="p-4 bg-gray-50 border-t">
+                  <div className="flex justify-between font-semibold">
+                    <span>Totale Ore</span>
+                    <span>{totaleOre}h</span>
+                  </div>
+                  {attivita.some(a => a.quantita) && (
+                    <div className="flex justify-between text-sm text-gray-600 mt-1">
+                      <span>Attività con quantità</span>
+                      <span>{attivita.filter(a => a.quantita).length} / {attivita.length}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Sezione Firme */}
@@ -278,16 +504,18 @@ export default function RapportinoPage() {
                 <p className="text-sm text-gray-500">{presenze.length} persone • {totaleOrePresenze.toFixed(1)}h</p>
               </div>
               {presenze.length === 0 ? (
-                <div className="p-4 text-center text-gray-400">Nessuna presenza</div>
+                <div className="p-4 text-center text-gray-400">Nessuna presenza registrata</div>
               ) : (
                 <div className="divide-y max-h-96 overflow-y-auto">
                   {presenze.map(p => (
                     <div key={p.id} className="p-3 flex items-center justify-between">
                       <div>
                         <p className="font-medium">{p.persona?.nome} {p.persona?.cognome}</p>
-                        <p className="text-xs text-gray-500">{p.ora_entrata} - {p.ora_uscita}</p>
+                        <p className="text-xs text-gray-500">
+                          {p.ora_checkin?.substring(0,5) || p.ora_entrata} - {p.ora_checkout?.substring(0,5) || p.ora_uscita || 'In corso'}
+                        </p>
                       </div>
-                      <p className="font-semibold">{(parseFloat(p.ore_ordinarie || 0) + parseFloat(p.ore_straordinarie || 0)).toFixed(1)}h</p>
+                      <p className="font-semibold">{calcolaOrePresenza(p).toFixed(1)}h</p>
                     </div>
                   ))}
                 </div>
@@ -314,6 +542,14 @@ export default function RapportinoPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-500">Ore presenze</span>
                     <span className="font-medium">{totaleOrePresenze.toFixed(1)}h</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Con quantità</span>
+                    <span className="font-medium">{attivita.filter(a => a.quantita).length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">In economia</span>
+                    <span className="font-medium text-amber-600">{attivita.filter(a => !a.quantita).length}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t">
                     <span className="text-gray-500">Firma CS</span>
