@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { getCurrentPosition, calculateDistance } from '../lib/gps'
+import { getPosizione, calcolaDistanza } from '../lib/gps'
 
 export default function CheckinPage() {
   const { persona, progetto, assegnazione } = useAuth()
@@ -78,15 +78,15 @@ export default function CheckinPage() {
   const ottieniPosizione = async () => {
     setPosizioneError(null)
     try {
-      const pos = await getCurrentPosition()
+      const pos = await getPosizione()
       setPosizione({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        accuracy: pos.coords.accuracy
+        lat: pos.lat,
+        lng: pos.lng,
+        accuracy: pos.accuracy
       })
       
       // Carica meteo
-      await caricaMeteo(pos.coords.latitude, pos.coords.longitude)
+      await caricaMeteo(pos.lat, pos.lng)
     } catch (error) {
       setPosizioneError(error.message || 'Impossibile ottenere la posizione')
     }
@@ -119,7 +119,7 @@ export default function CheckinPage() {
   const verificaDistanza = () => {
     if (!posizione || !areaLavoro) return null
     
-    const distanza = calculateDistance(
+    const distanza = calcolaDistanza(
       posizione.lat,
       posizione.lng,
       areaLavoro.latitudine,
