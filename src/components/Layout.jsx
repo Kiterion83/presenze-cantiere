@@ -16,39 +16,75 @@ export default function Layout({ children }) {
   const [isResizing, setIsResizing] = useState(false)
   const sidebarRef = useRef(null)
 
+  // Sezioni collassabili
+  const [sectionsOpen, setSectionsOpen] = useState(() => {
+    const saved = localStorage.getItem('menu_sections')
+    return saved ? JSON.parse(saved) : { core: true, construction: true, admin: true }
+  })
+
   // Dropdown progetti
   const [showProgettiDropdown, setShowProgettiDropdown] = useState(false)
   const dropdownRef = useRef(null)
 
-  // Menu items con permessi per ruolo - AGGIORNATO con Activities e Warehouse
-  const menuItems = [
-    { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
-    { path: '/checkin', label: 'Check-in', emoji: '📍', minRole: 'helper' },
-    { path: '/calendario', label: 'Calendario', emoji: '📅', minRole: 'helper' },
-    { path: '/ferie', label: 'Ferie', emoji: '🏖️', minRole: 'helper' },
-    { path: '/team', label: 'Team', emoji: '👥', minRole: 'foreman' },
-    { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'foreman' },
-    { path: '/documenti', label: 'Documenti', emoji: '📁', minRole: 'foreman' },
-    { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'foreman' },
-    { path: '/activities', label: 'Activities', emoji: '📋', minRole: 'foreman', specialAccess: 'activities' },  // NUOVO
-    { path: '/warehouse', label: 'Warehouse', emoji: '📦', minRole: 'warehouse', specialAccess: 'warehouse' },  // NUOVO
-    { path: '/componenti', label: 'Componenti', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },  // NUOVO
-    { path: '/pianificazione', label: 'Pianificazione', emoji: '📅', minRole: 'foreman', specialAccess: 'pianificazione' },  // NUOVO
-    { path: '/foreman', label: 'Campo', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },  // NUOVO
-    { path: '/ore-componenti', label: 'Ore Lavoro', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },  // NUOVO
-    { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'foreman' },
-    { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
-    { path: '/dashboard', label: 'Dashboard', emoji: '📈', minRole: 'supervisor' },
-    { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'admin' },
+  // Menu items organizzati per sezione
+  const menuSections = [
+    {
+      id: 'core',
+      label: 'Generale',
+      emoji: '📱',
+      items: [
+        { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
+        { path: '/checkin', label: 'Check-in', emoji: '📍', minRole: 'helper' },
+        { path: '/calendario', label: 'Calendario', emoji: '📅', minRole: 'helper' },
+        { path: '/ferie', label: 'Ferie', emoji: '🏖️', minRole: 'helper' },
+        { path: '/team', label: 'Team', emoji: '👥', minRole: 'foreman' },
+        { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'foreman' },
+        { path: '/documenti', label: 'Documenti', emoji: '📁', minRole: 'foreman' },
+        { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'foreman' },
+      ]
+    },
+    {
+      id: 'construction',
+      label: 'Construction',
+      emoji: '🏗️',
+      items: [
+        { path: '/componenti', label: 'Componenti', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
+        { path: '/pianificazione', label: 'Pianificazione', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
+        { path: '/foreman', label: 'Campo', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
+        { path: '/ore-componenti', label: 'Ore Lavoro', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
+        { path: '/activities', label: 'Activities', emoji: '📋', minRole: 'foreman', specialAccess: 'activities' },
+        { path: '/warehouse', label: 'Warehouse', emoji: '📦', minRole: 'warehouse', specialAccess: 'warehouse' },
+      ]
+    },
+    {
+      id: 'admin',
+      label: 'Gestione',
+      emoji: '⚙️',
+      items: [
+        { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'foreman' },
+        { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
+        { path: '/dashboard', label: 'Dashboard', emoji: '📈', minRole: 'supervisor' },
+        { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'admin' },
+      ]
+    }
   ]
 
-  // AGGIORNATO: Filtra menu items con supporto specialAccess
-  const visibleMenuItems = menuItems.filter(item => {
-    if (item.specialAccess) {
-      return canAccess ? canAccess(item.specialAccess) : isAtLeast(item.minRole)
-    }
-    return isAtLeast(item.minRole)
-  })
+  // Filtra items visibili per ogni sezione
+  const getVisibleItems = (items) => {
+    return items.filter(item => {
+      if (item.specialAccess) {
+        return canAccess ? canAccess(item.specialAccess) : isAtLeast(item.minRole)
+      }
+      return isAtLeast(item.minRole)
+    })
+  }
+
+  // Toggle sezione
+  const toggleSection = (sectionId) => {
+    const newSections = { ...sectionsOpen, [sectionId]: !sectionsOpen[sectionId] }
+    setSectionsOpen(newSections)
+    localStorage.setItem('menu_sections', JSON.stringify(newSections))
+  }
 
   // Lista ruoli con pm, dept_manager, warehouse e engineer
   const roles = [
@@ -58,14 +94,14 @@ export default function Layout({ children }) {
     { value: 'cm', label: 'CM' },
     { value: 'supervisor', label: 'Supervisor' },
     { value: 'dept_manager', label: 'Dept Manager' },
-    { value: 'engineer', label: 'Engineer' },      // NUOVO
+    { value: 'engineer', label: 'Engineer' },
     { value: 'foreman', label: 'Foreman' },
-    { value: 'warehouse', label: 'Warehouse' },    // NUOVO
+    { value: 'warehouse', label: 'Warehouse' },
     { value: 'office', label: 'Office' },
     { value: 'helper', label: 'Helper' },
   ]
 
-  // Colori badge ruoli - AGGIORNATO con warehouse e engineer
+  // Colori badge ruoli
   const getRoleBadgeColor = (role) => {
     const colors = {
       admin: 'bg-red-100 text-red-700 border-red-200',
@@ -73,9 +109,9 @@ export default function Layout({ children }) {
       cm: 'bg-purple-100 text-purple-700 border-purple-200',
       supervisor: 'bg-blue-100 text-blue-700 border-blue-200',
       dept_manager: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-      engineer: 'bg-cyan-100 text-cyan-700 border-cyan-200',      // NUOVO
+      engineer: 'bg-cyan-100 text-cyan-700 border-cyan-200',
       foreman: 'bg-green-100 text-green-700 border-green-200',
-      warehouse: 'bg-amber-100 text-amber-700 border-amber-200',  // NUOVO
+      warehouse: 'bg-amber-100 text-amber-700 border-amber-200',
       office: 'bg-yellow-100 text-yellow-700 border-yellow-200',
       helper: 'bg-gray-100 text-gray-700 border-gray-200',
     }
@@ -111,10 +147,10 @@ export default function Layout({ children }) {
     }
   }, [isResizing])
 
-  // Chiudi dropdown click outside
+  // Chiudi dropdown quando clicchi fuori
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowProgettiDropdown(false)
       }
     }
@@ -123,28 +159,35 @@ export default function Layout({ children }) {
   }, [])
 
   // Gestione cambio progetto
-  const handleCambiaProgetto = (progettoId) => {
-    cambiaProgetto(progettoId)
+  const handleCambiaProgetto = async (progettoId) => {
+    if (cambiaProgetto) {
+      await cambiaProgetto(progettoId)
+    }
     setShowProgettiDropdown(false)
   }
 
+  // Se non autenticato, mostra solo children
+  if (!persona) {
+    return <>{children}</>
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Desktop Sidebar */}
+    <div className="flex min-h-screen bg-gray-50">
+      {/* Sidebar */}
       <aside 
         ref={sidebarRef}
-        className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-gray-200"
-        style={{ width: `${sidebarWidth}px` }}
+        style={{ width: sidebarWidth }}
+        className="bg-white border-r border-gray-200 flex flex-col relative flex-shrink-0"
       >
-        {/* Header con logo PTS e selettore progetti */}
+        {/* Header Logo e Progetto */}
         <div className="p-4 border-b border-gray-100">
-          <div className="flex items-center gap-3 mb-3">
-            {/* Logo PTS */}
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-900 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-amber-400 font-bold text-sm">PTS</span>
+          {/* Logo */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg">
+              PTS
             </div>
-            <div className="min-w-0" style={{ maxWidth: sidebarWidth - 80 }}>
-              <span className="font-bold text-blue-900 text-lg">PTS</span>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-bold text-gray-800">PTS</h1>
               <p className="text-xs text-gray-500 truncate">Project Tracking System</p>
             </div>
           </div>
@@ -215,27 +258,58 @@ export default function Layout({ children }) {
           </div>
         </div>
 
-        {/* Menu Navigation */}
+        {/* Menu Navigation con Sezioni Collassabili */}
         <nav className="flex-1 overflow-y-auto p-3">
-          {visibleMenuItems.map(item => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                location.pathname === item.path
-                  ? 'bg-blue-50 text-blue-700 font-medium'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <span className="text-xl">{item.emoji}</span>
-              <span className="truncate">{item.label}</span>
-              {item.path === '/notifiche' && unreadCount > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                  {unreadCount}
-                </span>
-              )}
-            </Link>
-          ))}
+          {menuSections.map(section => {
+            const visibleItems = getVisibleItems(section.items)
+            if (visibleItems.length === 0) return null
+            
+            const isOpen = sectionsOpen[section.id] !== false
+            
+            return (
+              <div key={section.id} className="mb-2">
+                {/* Header sezione cliccabile */}
+                <button
+                  onClick={() => toggleSection(section.id)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <span>{section.emoji}</span>
+                    <span>{section.label}</span>
+                    <span className="text-gray-300 font-normal">({visibleItems.length})</span>
+                  </span>
+                  <span className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}>
+                    ▼
+                  </span>
+                </button>
+                
+                {/* Items della sezione con animazione */}
+                <div className={`overflow-hidden transition-all duration-200 ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="mt-1 space-y-1">
+                    {visibleItems.map(item => (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
+                          location.pathname === item.path
+                            ? 'bg-blue-50 text-blue-700 font-medium'
+                            : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="text-lg">{item.emoji}</span>
+                        <span className="truncate text-sm">{item.label}</span>
+                        {item.path === '/notifiche' && unreadCount > 0 && (
+                          <span className="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            {unreadCount}
+                          </span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </nav>
 
         {/* Footer con Test Ruolo e User */}
@@ -253,136 +327,46 @@ export default function Layout({ children }) {
             </select>
           </div>
 
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
+          {/* User Info */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold">
               {persona?.nome?.[0]}{persona?.cognome?.[0]}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-gray-800 truncate">{persona?.nome} {persona?.cognome}</p>
-              <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium border ${getRoleBadgeColor(ruolo)}`}>
-                {ruolo?.toUpperCase()}{testRoleOverride && ' 🧪'}
+              <p className="font-medium text-gray-800 text-sm truncate">
+                {persona?.nome} {persona?.cognome}
+              </p>
+              <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full border uppercase ${getRoleBadgeColor(ruolo)}`}>
+                {ruolo}
               </span>
             </div>
           </div>
           
-          <button onClick={signOut} className="w-full py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
+          <button
+            onClick={signOut}
+            className="mt-3 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+          >
             Esci
           </button>
         </div>
 
         {/* Resize Handle */}
         <div
-          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-400 transition-colors group"
           onMouseDown={startResizing}
-        >
-          <div className={`absolute top-1/2 right-0 transform -translate-y-1/2 w-4 h-8 bg-gray-300 rounded-l opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${isResizing ? 'opacity-100 bg-blue-400' : ''}`}>
-            <span className="text-gray-600 text-xs">⋮</span>
-          </div>
-        </div>
+          className={`absolute right-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-400 transition-colors ${
+            isResizing ? 'bg-blue-500' : ''
+          }`}
+        />
       </aside>
 
       {/* Main Content */}
-      <main 
-        className="lg:transition-all"
-        style={{ marginLeft: window.innerWidth >= 1024 ? `${sidebarWidth}px` : '0' }}
-      >
-        {/* Mobile Header */}
-        <header className="lg:hidden sticky top-0 z-40 bg-white border-b px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {/* Logo PTS Mobile */}
-              <div className="w-9 h-9 bg-gradient-to-br from-blue-900 to-blue-700 rounded-xl flex items-center justify-center shadow">
-                <span className="text-amber-400 font-bold text-xs">PTS</span>
-              </div>
-              <div>
-                <p className="font-bold text-blue-900 text-sm">PTS</p>
-                {/* Selettore progetti mobile */}
-                <button
-                  onClick={() => setShowProgettiDropdown(!showProgettiDropdown)}
-                  className="flex items-center gap-1 text-xs text-blue-600"
-                >
-                  <span className="truncate max-w-32">{progetto?.nome}</span>
-                  <span>▼</span>
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link 
-                to="/notifiche"
-                className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                🔔
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
-              </Link>
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-sm">
-                {persona?.nome?.[0]}{persona?.cognome?.[0]}
-              </div>
-            </div>
-          </div>
-
-          {/* Dropdown mobile */}
-          {showProgettiDropdown && (
-            <div className="absolute left-4 right-4 mt-2 bg-white rounded-xl shadow-lg border z-50">
-              <div className="p-2 border-b">
-                <p className="text-xs font-medium text-gray-500">Cambia progetto</p>
-              </div>
-              {assegnazioni.map((ass) => (
-                <button
-                  key={ass.id}
-                  onClick={() => handleCambiaProgetto(ass.progetto_id)}
-                  className={`w-full flex items-center gap-3 px-3 py-3 text-left ${
-                    ass.progetto_id === progetto?.id ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  <span className="font-medium text-sm">{ass.progetto?.nome}</span>
-                  {ass.progetto_id === progetto?.id && <span className="ml-auto text-blue-500">✔</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </header>
-
-        {/* Page Content */}
-        <div className="pb-20 lg:pb-0">
-          {children}
-        </div>
+      <main className="flex-1 overflow-auto">
+        <NotificationPermissionBanner 
+          persona={persona} 
+          requestPermission={requestPermission} 
+        />
+        {children}
       </main>
-
-      {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-40">
-        <div className="flex justify-around py-2">
-          {visibleMenuItems.slice(0, 5).map(item => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex flex-col items-center px-3 py-2 ${
-                location.pathname === item.path ? 'text-blue-600' : 'text-gray-500'
-              }`}
-            >
-              <span className="text-xl">{item.emoji}</span>
-              <span className="text-xs mt-0.5">{item.label}</span>
-            </Link>
-          ))}
-          {visibleMenuItems.length > 5 && (
-            <Link to="/menu" className="flex flex-col items-center px-3 py-2 text-gray-500">
-              <span className="text-xl">☰</span>
-              <span className="text-xs mt-0.5">Altro</span>
-            </Link>
-          )}
-        </div>
-      </nav>
-
-      {/* Banner permesso notifiche */}
-      <NotificationPermissionBanner onEnable={requestPermission} />
-
-      {/* Overlay durante resize */}
-      {isResizing && (
-        <div className="fixed inset-0 z-50 cursor-col-resize" />
-      )}
     </div>
   )
 }
