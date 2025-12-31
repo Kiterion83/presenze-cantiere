@@ -35,6 +35,7 @@ export default function Layout({ children }) {
     { path: '/componenti', label: 'Componenti', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },  // NUOVO
     { path: '/pianificazione', label: 'Pianificazione', emoji: '📅', minRole: 'foreman', specialAccess: 'pianificazione' },  // NUOVO
     { path: '/foreman', label: 'Campo', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },  // NUOVO
+    { path: '/ore-componenti', label: 'Ore Lavoro', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },  // NUOVO
     { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'foreman' },
     { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
     { path: '/dashboard', label: 'Dashboard', emoji: '📈', minRole: 'supervisor' },
