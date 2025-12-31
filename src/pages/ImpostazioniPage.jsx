@@ -18,6 +18,7 @@ export default function ImpostazioniPage() {
     { id: 'flussi', label: 'Flussi Approvazione', emoji: '🔄', minRole: 'admin' },  // NUOVO
     { id: 'qrCodes', label: 'QR Codes', emoji: '📱', minRole: 'admin' },
     { id: 'progetti', label: 'Tutti i Progetti', emoji: '📋', minRole: 'admin' },
+    { id: 'datiTest', label: 'Dati Test', emoji: '🧪', minRole: 'admin' },
   ].filter(item => isAtLeast(item.minRole))
 
   return (
@@ -63,6 +64,7 @@ export default function ImpostazioniPage() {
           {activeTab === 'flussi' && <FlussiTab />}
           {activeTab === 'qrCodes' && <QRCodesTab />}
           {activeTab === 'progetti' && <TuttiProgettiTab />}
+          {activeTab === 'datiTest' && <DatiTestTab />}
         </div>
       </div>
     </div>
@@ -345,7 +347,8 @@ function TuttiProgettiTab() {
         { nome: 'Procurement', codice: 'PROC', progetto_id: newProject.id },
         { nome: 'Construction', codice: 'CONST', progetto_id: newProject.id },
         { nome: 'HSE', codice: 'HSE', progetto_id: newProject.id },
-        { nome: 'Administration', codice: 'ADM', progetto_id: newProject.id }
+        { nome: 'Administration', codice: 'ADM', progetto_id: newProject.id },
+        { nome: 'Quality', codice: 'QA', progetto_id: newProject.id }
       ]
       await supabase.from('dipartimenti').insert(dipartimentiDefault)
 
@@ -705,31 +708,90 @@ function PersoneTab() {
 // ==================== DITTE TAB ====================
 function DitteTab() {
   const [ditte, setDitte] = useState([])
+  const [suggerimenti, setSuggerimenti] = useState([]) // Ditte esistenti per suggerimenti
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingDitta, setEditingDitta] = useState(null)
-  const [formData, setFormData] = useState({ nome: '', ragione_sociale: '', partita_iva: '', indirizzo: '', telefono: '', email: '' })
+  const [formData, setFormData] = useState({ codice: '', ragione_sociale: '', partita_iva: '', indirizzo: '', telefono: '', email: '', tipo: 'subappaltatore' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
   useEffect(() => { loadDitte() }, [])
 
-  const loadDitte = async () => { setLoading(true); const { data } = await supabase.from('ditte').select('*').eq('attivo', true).order('nome'); setDitte(data || []); setLoading(false) }
-  const resetForm = () => { setFormData({ nome: '', ragione_sociale: '', partita_iva: '', indirizzo: '', telefono: '', email: '' }); setEditingDitta(null); setShowForm(false); setMessage(null) }
-  const handleEdit = (d) => { setFormData({ nome: d.nome || '', ragione_sociale: d.ragione_sociale || '', partita_iva: d.partita_iva || '', indirizzo: d.indirizzo || '', telefono: d.telefono || '', email: d.email || '' }); setEditingDitta(d); setShowForm(true) }
+  const loadDitte = async () => { 
+    setLoading(true)
+    const { data } = await supabase.from('ditte').select('*').eq('attiva', true).order('ragione_sociale')
+    setDitte(data || [])
+    
+    // Suggerimenti: tutte le ditte per auto-completamento
+    const nomiUnici = [...new Set(data?.map(d => d.ragione_sociale).filter(Boolean))]
+    setSuggerimenti(nomiUnici)
+    setLoading(false) 
+  }
+  
+  const resetForm = () => { setFormData({ codice: '', ragione_sociale: '', partita_iva: '', indirizzo: '', telefono: '', email: '', tipo: 'subappaltatore' }); setEditingDitta(null); setShowForm(false); setMessage(null) }
+  
+  const handleEdit = (d) => { 
+    setFormData({ 
+      codice: d.codice || '', 
+      ragione_sociale: d.ragione_sociale || '', 
+      partita_iva: d.partita_iva || '', 
+      indirizzo: d.indirizzo || '', 
+      telefono: d.telefono || '', 
+      email: d.email || '',
+      tipo: d.tipo || 'subappaltatore'
+    })
+    setEditingDitta(d)
+    setShowForm(true) 
+  }
+  
+  // Quando clicchi su un suggerimento, cerca se quella ditta esiste già
+  const handleSuggerimentoClick = (ragSociale) => {
+    const dittaEsistente = ditte.find(d => d.ragione_sociale === ragSociale)
+    if (dittaEsistente) {
+      setFormData({
+        codice: dittaEsistente.codice || '',
+        ragione_sociale: dittaEsistente.ragione_sociale || '',
+        partita_iva: dittaEsistente.partita_iva || '',
+        indirizzo: dittaEsistente.indirizzo || '',
+        telefono: dittaEsistente.telefono || '',
+        email: dittaEsistente.email || '',
+        tipo: dittaEsistente.tipo || 'subappaltatore'
+      })
+    } else {
+      setFormData({...formData, ragione_sociale: ragSociale})
+    }
+  }
 
   const handleSave = async () => {
-    if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
+    if (!formData.ragione_sociale) { setMessage({ type: 'error', text: 'Ragione sociale obbligatoria' }); return }
     setSaving(true); setMessage(null)
     try {
-      if (editingDitta) { await supabase.from('ditte').update(formData).eq('id', editingDitta.id) }
-      else { await supabase.from('ditte').insert({ ...formData, attivo: true }) }
+      const payload = {
+        codice: formData.codice || null,
+        ragione_sociale: formData.ragione_sociale,
+        partita_iva: formData.partita_iva || null,
+        indirizzo: formData.indirizzo || null,
+        telefono: formData.telefono || null,
+        email: formData.email || null,
+        tipo: formData.tipo || 'subappaltatore'
+      }
+      if (editingDitta) { 
+        await supabase.from('ditte').update(payload).eq('id', editingDitta.id) 
+      } else { 
+        await supabase.from('ditte').insert({ ...payload, attiva: true }) 
+      }
       setMessage({ type: 'success', text: 'Salvato!' }); loadDitte(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
 
-  const handleDelete = async (id) => { if (!confirm('Disattivare?')) return; await supabase.from('ditte').update({ attivo: false }).eq('id', id); loadDitte() }
+  const handleDelete = async (id) => { if (!confirm('Disattivare?')) return; await supabase.from('ditte').update({ attiva: false }).eq('id', id); loadDitte() }
+
+  // Suggerimenti filtrati (non già nel form)
+  const suggerimentiDisponibili = suggerimenti.filter(s => 
+    s.toLowerCase() !== formData.ragione_sociale?.toLowerCase()
+  ).slice(0, 6)
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
@@ -743,13 +805,46 @@ function DitteTab() {
           <h3 className="font-semibold text-blue-800 mb-4">{editingDitta ? '✏️ Modifica' : '➕ Nuova'}</h3>
           <div className="grid gap-4">
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Ragione Sociale</label><input type="text" value={formData.ragione_sociale} onChange={(e) => setFormData({...formData, ragione_sociale: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">Codice</label>
+                <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: ROSSI" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Ragione Sociale *</label>
+                <input type="text" value={formData.ragione_sociale} onChange={(e) => setFormData({...formData, ragione_sociale: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Rossi Costruzioni S.r.l." />
+                
+                {/* Suggerimenti */}
+                {!editingDitta && suggerimentiDisponibili.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs text-gray-500 mb-1">💡 Ditte esistenti:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {suggerimentiDisponibili.map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => handleSuggerimentoClick(s)}
+                          className="px-2 py-1 text-xs bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 truncate max-w-[200px]"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="grid lg:grid-cols-3 gap-4">
               <div><label className="block text-sm font-medium mb-1">P.IVA</label><input type="text" value={formData.partita_iva} onChange={(e) => setFormData({...formData, partita_iva: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               <div><label className="block text-sm font-medium mb-1">Telefono</label><input type="tel" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               <div><label className="block text-sm font-medium mb-1">Email</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Tipo</label>
+              <select value={formData.tipo} onChange={(e) => setFormData({...formData, tipo: e.target.value})} className="w-full px-4 py-3 border rounded-xl">
+                <option value="subappaltatore">Subappaltatore</option>
+                <option value="cliente">Cliente</option>
+                <option value="fornitore">Fornitore</option>
+                <option value="consorzio">Consorzio</option>
+              </select>
             </div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
             <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
@@ -761,8 +856,12 @@ function DitteTab() {
         <div className="space-y-2">
           {ditte.map(d => (
             <div key={d.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-bold">{d.nome?.[0]}</div>
-              <div className="flex-1"><p className="font-medium">{d.nome}</p><p className="text-xs text-gray-500">{d.partita_iva || 'P.IVA non inserita'}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-bold">{d.ragione_sociale?.[0] || '?'}</div>
+              <div className="flex-1">
+                <p className="font-medium">{d.ragione_sociale}</p>
+                <p className="text-xs text-gray-500">{d.codice && `[${d.codice}] `}{d.partita_iva || 'P.IVA non inserita'}</p>
+              </div>
+              <span className="px-2 py-1 text-xs bg-gray-200 rounded-full">{d.tipo || 'N/D'}</span>
               <div className="flex gap-1"><button onClick={() => handleEdit(d)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(d.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
             </div>
           ))}
@@ -1035,65 +1134,241 @@ function DipartimentiTab() {
 function CentriCostoTab() {
   const { assegnazione } = useAuth()
   const [centri, setCentri] = useState([])
+  const [suggerimenti, setSuggerimenti] = useState([]) // Da altri progetti
+  const [unitaMisura, setUnitaMisura] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingCentro, setEditingCentro] = useState(null)
-  const [formData, setFormData] = useState({ codice: '', descrizione: '', budget_ore: '', budget_euro: '' })
+  const [formData, setFormData] = useState({ codice: '', nome: '', descrizione: '', budget_ore: '', budget_quantita: '', unita_misura_id: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
-  useEffect(() => { if (assegnazione?.progetto_id) loadCentri() }, [assegnazione?.progetto_id])
+  useEffect(() => { 
+    if (assegnazione?.progetto_id) { 
+      loadCentri()
+      loadSuggerimenti()
+      loadUnitaMisura()
+    } 
+  }, [assegnazione?.progetto_id])
 
-  const loadCentri = async () => { setLoading(true); const { data } = await supabase.from('centri_costo').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('codice'); setCentri(data || []); setLoading(false) }
-  const resetForm = () => { setFormData({ codice: '', descrizione: '', budget_ore: '', budget_euro: '' }); setEditingCentro(null); setShowForm(false); setMessage(null) }
-  const handleEdit = (cc) => { setFormData({ codice: cc.codice || '', descrizione: cc.descrizione || '', budget_ore: cc.budget_ore?.toString() || '', budget_euro: cc.budget_euro?.toString() || '' }); setEditingCentro(cc); setShowForm(true) }
+  const loadCentri = async () => { 
+    setLoading(true)
+    const { data } = await supabase
+      .from('centri_costo')
+      .select('*, unita:unita_misura(codice, nome)')
+      .eq('progetto_id', assegnazione.progetto_id)
+      .order('codice')
+    setCentri(data || [])
+    setLoading(false) 
+  }
+  
+  const loadSuggerimenti = async () => {
+    const { data } = await supabase
+      .from('centri_costo')
+      .select('codice, nome, descrizione')
+      .neq('progetto_id', assegnazione.progetto_id)
+    
+    // Raggruppa per nome univoco
+    const nomiMap = {}
+    data?.forEach(cc => { 
+      if (!nomiMap[cc.nome]) {
+        nomiMap[cc.nome] = { codice: cc.codice, descrizione: cc.descrizione }
+      }
+    })
+    setSuggerimenti(Object.entries(nomiMap).map(([nome, rest]) => ({ nome, ...rest })))
+  }
+  
+  const loadUnitaMisura = async () => {
+    const { data } = await supabase.from('unita_misura').select('*').order('codice')
+    setUnitaMisura(data || [])
+  }
+
+  const resetForm = () => { 
+    setFormData({ codice: '', nome: '', descrizione: '', budget_ore: '', budget_quantita: '', unita_misura_id: '' })
+    setEditingCentro(null)
+    setShowForm(false)
+    setMessage(null) 
+  }
+  
+  const handleEdit = (cc) => { 
+    setFormData({ 
+      codice: cc.codice || '', 
+      nome: cc.nome || '',
+      descrizione: cc.descrizione || '', 
+      budget_ore: cc.budget_ore?.toString() || '', 
+      budget_quantita: cc.budget_quantita?.toString() || '',
+      unita_misura_id: cc.unita_misura_id || ''
+    })
+    setEditingCentro(cc)
+    setShowForm(true) 
+  }
+  
+  const handleSuggerimentoClick = (sugg) => {
+    setFormData({
+      ...formData,
+      codice: sugg.codice || '',
+      nome: sugg.nome || '',
+      descrizione: sugg.descrizione || ''
+    })
+  }
 
   const handleSave = async () => {
-    if (!formData.codice || !formData.descrizione) { setMessage({ type: 'error', text: 'Codice e descrizione obbligatori' }); return }
+    if (!formData.codice || !formData.nome) { setMessage({ type: 'error', text: 'Codice e nome obbligatori' }); return }
     setSaving(true); setMessage(null)
     try {
-      const payload = { codice: formData.codice, descrizione: formData.descrizione, budget_ore: formData.budget_ore ? parseFloat(formData.budget_ore) : null, budget_euro: formData.budget_euro ? parseFloat(formData.budget_euro) : null, progetto_id: assegnazione.progetto_id }
-      if (editingCentro) { await supabase.from('centri_costo').update(payload).eq('id', editingCentro.id) }
-      else { await supabase.from('centri_costo').insert({ ...payload, attivo: true }) }
+      const payload = { 
+        codice: formData.codice, 
+        nome: formData.nome,
+        descrizione: formData.descrizione || null, 
+        budget_ore: formData.budget_ore ? parseFloat(formData.budget_ore) : null, 
+        budget_quantita: formData.budget_quantita ? parseFloat(formData.budget_quantita) : null,
+        unita_misura_id: formData.unita_misura_id || null,
+        progetto_id: assegnazione.progetto_id,
+        stato: 'attivo'
+      }
+      if (editingCentro) { 
+        await supabase.from('centri_costo').update(payload).eq('id', editingCentro.id) 
+      } else { 
+        await supabase.from('centri_costo').insert(payload) 
+      }
       setMessage({ type: 'success', text: 'Salvato!' }); loadCentri(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
 
-  const handleDelete = async (id) => { if (!confirm('Disattivare?')) return; await supabase.from('centri_costo').update({ attivo: false }).eq('id', id); loadCentri() }
+  const handleDelete = async (id) => { 
+    if (!confirm('Disattivare?')) return
+    await supabase.from('centri_costo').update({ stato: 'disattivo' }).eq('id', id)
+    loadCentri() 
+  }
+  
+  // Resa target calcolata
+  const calcolaResaTarget = (cc) => {
+    if (cc.budget_ore > 0 && cc.budget_quantita > 0) {
+      return (cc.budget_quantita / cc.budget_ore).toFixed(2)
+    }
+    return '-'
+  }
+
+  // Suggerimenti filtrati (non già usati in questo progetto)
+  const codiciEsistenti = centri.map(c => c.codice.toLowerCase())
+  const suggerimentiDisponibili = suggerimenti.filter(s => 
+    !codiciEsistenti.includes(s.codice?.toLowerCase())
+  ).slice(0, 6)
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">💰 Centri di Costo</h2>
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">💰 Centri di Costo</h2>
+          <p className="text-sm text-gray-500">Gestisci budget ore e quantità per centro di costo</p>
+        </div>
         {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Aggiungi</button>}
       </div>
 
       {showForm && (
-        <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-4">{editingCentro ? '✏️ Modifica' : '➕ Nuovo'}</h3>
+        <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 mb-6">
+          <h3 className="font-semibold text-amber-800 mb-4">{editingCentro ? '✏️ Modifica' : '➕ Nuovo'} Centro di Costo</h3>
           <div className="grid gap-4">
-            <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Codice *</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Descrizione *</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            <div className="grid lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Codice *</label>
+                <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" placeholder="PIP-001" />
+              </div>
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-medium mb-1">Nome *</label>
+                <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Piping - Installazione" />
+              </div>
             </div>
-            <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Budget Ore</label><input type="number" value={formData.budget_ore} onChange={(e) => setFormData({...formData, budget_ore: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Budget €</label><input type="number" value={formData.budget_euro} onChange={(e) => setFormData({...formData, budget_euro: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            
+            {/* Suggerimenti da altri progetti */}
+            {!editingCentro && suggerimentiDisponibili.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">💡 Usati in altri progetti:</p>
+                <div className="flex flex-wrap gap-1">
+                  {suggerimentiDisponibili.map(s => (
+                    <button
+                      key={s.codice}
+                      type="button"
+                      onClick={() => handleSuggerimentoClick(s)}
+                      className="px-2 py-1 text-xs bg-white border border-amber-200 text-amber-700 rounded-lg hover:bg-amber-50"
+                    >
+                      [{s.codice}] {s.nome}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div>
+              <label className="block text-sm font-medium mb-1">Descrizione</label>
+              <input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Descrizione attività" />
             </div>
+            
+            <div className="grid lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Budget Ore</label>
+                <input type="number" value={formData.budget_ore} onChange={(e) => setFormData({...formData, budget_ore: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Budget Quantità</label>
+                <input type="number" step="0.001" value={formData.budget_quantita} onChange={(e) => setFormData({...formData, budget_quantita: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="1000" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Unità di Misura</label>
+                <select value={formData.unita_misura_id} onChange={(e) => setFormData({...formData, unita_misura_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl">
+                  <option value="">Seleziona...</option>
+                  {unitaMisura.map(um => (
+                    <option key={um.id} value={um.id}>{um.codice} - {um.nome}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            {/* Resa target preview */}
+            {formData.budget_ore && formData.budget_quantita && (
+              <div className="p-3 bg-green-50 rounded-xl text-sm">
+                <span className="font-medium text-green-700">📊 Resa Target: </span>
+                <span className="text-green-800">
+                  {(parseFloat(formData.budget_quantita) / parseFloat(formData.budget_ore)).toFixed(2)} 
+                  {unitaMisura.find(u => u.id === formData.unita_misura_id)?.codice || ''}/hr
+                </span>
+              </div>
+            )}
+            
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+            <div className="flex gap-2">
+              <button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button>
+              <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-amber-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button>
+            </div>
           </div>
         </div>
       )}
 
-      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : (
+      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : centri.length === 0 ? (
+        <div className="text-center py-8 text-gray-400">
+          <p className="text-4xl mb-2">💰</p>
+          <p>Nessun centro di costo creato</p>
+        </div>
+      ) : (
         <div className="space-y-2">
           {centri.map(cc => (
             <div key={cc.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
-              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 font-mono font-bold text-sm">{cc.codice}</div>
-              <div className="flex-1"><p className="font-medium">{cc.descrizione}</p><p className="text-xs text-gray-500">{cc.budget_ore && `${cc.budget_ore}h`}{cc.budget_ore && cc.budget_euro && ' • '}{cc.budget_euro && `€${cc.budget_euro.toLocaleString()}`}</p></div>
-              <div className="flex gap-1"><button onClick={() => handleEdit(cc)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(cc.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
+              <div className="w-14 h-14 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 font-mono font-bold text-xs text-center leading-tight">{cc.codice}</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{cc.nome}</p>
+                <div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1">
+                  {cc.budget_ore > 0 && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">⏱️ {cc.budget_ore}h</span>}
+                  {cc.budget_quantita > 0 && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded">📦 {cc.budget_quantita} {cc.unita?.codice || ''}</span>}
+                  {cc.budget_ore > 0 && cc.budget_quantita > 0 && (
+                    <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded">📈 {calcolaResaTarget(cc)} {cc.unita?.codice || ''}/hr</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => handleEdit(cc)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
+                <button onClick={() => handleDelete(cc.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button>
+              </div>
             </div>
           ))}
         </div>
@@ -1241,6 +1516,252 @@ function QRCodesTab() {
           <li>Stampa il QR Code e posizionalo nel punto desiderato</li>
           <li>I lavoratori scansionano il QR per fare check-in/out</li>
         </ol>
+      </div>
+    </div>
+  )
+}
+
+// ==================== DATI TEST TAB ====================
+function DatiTestTab() {
+  const { assegnazione, persona } = useAuth()
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => { loadStats() }, [])
+
+  const loadStats = async () => {
+    setLoading(true)
+    try {
+      // Conta dati test (email @test.it)
+      const { count: personeTest } = await supabase.from('persone').select('*', { count: 'exact', head: true }).like('email', '%@test.it')
+      const { count: presenzeTest } = await supabase.from('presenze').select('*', { count: 'exact', head: true })
+        .in('persona_id', (await supabase.from('persone').select('id').like('email', '%@test.it')).data?.map(p => p.id) || [])
+      const { count: regQuantitaTest } = await supabase.from('registrazioni_quantita').select('*', { count: 'exact', head: true })
+      
+      setStats({
+        persone: personeTest || 0,
+        presenze: presenzeTest || 0,
+        registrazioni: regQuantitaTest || 0
+      })
+    } catch (err) {
+      console.error(err)
+    }
+    setLoading(false)
+  }
+
+  const generateTestData = async () => {
+    setGenerating(true)
+    setMessage(null)
+    try {
+      // 1. Genera presenze test per le ultime 2 settimane
+      const personeTestRes = await supabase.from('persone').select('id').like('email', '%@test.it')
+      const personeTestIds = personeTestRes.data?.map(p => p.id) || []
+      
+      if (personeTestIds.length === 0) {
+        setMessage({ type: 'error', text: 'Nessuna persona test trovata. Esegui prima lo script SQL.' })
+        setGenerating(false)
+        return
+      }
+
+      // Ottieni assegnazioni per queste persone in questo progetto
+      const { data: assegnazioni } = await supabase
+        .from('assegnazioni_progetto')
+        .select('id, persona_id')
+        .eq('progetto_id', assegnazione.progetto_id)
+        .in('persona_id', personeTestIds)
+        .eq('attivo', true)
+
+      if (!assegnazioni || assegnazioni.length === 0) {
+        setMessage({ type: 'error', text: 'Nessuna assegnazione trovata per persone test in questo progetto.' })
+        setGenerating(false)
+        return
+      }
+
+      // Genera presenze
+      const oggi = new Date()
+      const presenze = []
+      
+      for (let i = 1; i <= 10; i++) { // Ultimi 10 giorni lavorativi
+        const data = new Date(oggi)
+        data.setDate(data.getDate() - i)
+        
+        // Salta weekend
+        if (data.getDay() === 0 || data.getDay() === 6) continue
+        
+        for (const ass of assegnazioni) {
+          presenze.push({
+            persona_id: ass.persona_id,
+            progetto_id: assegnazione.progetto_id,
+            data: data.toISOString().split('T')[0],
+            ora_checkin: '07:30:00',
+            ora_checkout: `${16 + Math.floor(Math.random() * 2)}:${Math.floor(Math.random() * 60).toString().padStart(2, '0')}:00`,
+            note: Math.random() > 0.8 ? 'Lavoro extra' : null
+          })
+        }
+      }
+
+      // Inserisci presenze (ignora duplicati)
+      const { error: errPres } = await supabase.from('presenze').upsert(presenze, { 
+        onConflict: 'persona_id,progetto_id,data',
+        ignoreDuplicates: true 
+      })
+      if (errPres) console.warn('Errore presenze:', errPres)
+
+      // 2. Genera registrazioni quantità
+      const { data: centriCosto } = await supabase
+        .from('centri_costo')
+        .select('id')
+        .eq('progetto_id', assegnazione.progetto_id)
+        .limit(5)
+
+      const { data: foremen } = await supabase
+        .from('assegnazioni_progetto')
+        .select('persona_id')
+        .eq('progetto_id', assegnazione.progetto_id)
+        .eq('ruolo', 'foreman')
+        .eq('attivo', true)
+
+      if (centriCosto && foremen && foremen.length > 0) {
+        const registrazioni = []
+        for (let i = 1; i <= 7; i++) {
+          const data = new Date(oggi)
+          data.setDate(data.getDate() - i)
+          if (data.getDay() === 0 || data.getDay() === 6) continue
+
+          for (const cc of centriCosto) {
+            const foreman = foremen[Math.floor(Math.random() * foremen.length)]
+            registrazioni.push({
+              centro_costo_id: cc.id,
+              progetto_id: assegnazione.progetto_id,
+              foreman_persona_id: foreman.persona_id,
+              data: data.toISOString().split('T')[0],
+              numero_persone: 3 + Math.floor(Math.random() * 5),
+              ore_lavorate: 20 + Math.floor(Math.random() * 30),
+              quantita_prodotta: 10 + Math.floor(Math.random() * 40),
+              stato: 'approvato'
+            })
+          }
+        }
+
+        await supabase.from('registrazioni_quantita').upsert(registrazioni, {
+          onConflict: 'centro_costo_id,data,foreman_persona_id',
+          ignoreDuplicates: true
+        })
+      }
+
+      setMessage({ type: 'success', text: `Generati dati test: ${presenze.length} presenze` })
+      loadStats()
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message })
+    }
+    setGenerating(false)
+  }
+
+  const deleteTestData = async () => {
+    if (!confirm('Sei sicuro? Questa azione cancellerà TUTTE le presenze e registrazioni delle persone test (@test.it)')) return
+    
+    setDeleting(true)
+    setMessage(null)
+    try {
+      // Ottieni ID persone test
+      const { data: personeTest } = await supabase.from('persone').select('id').like('email', '%@test.it')
+      const ids = personeTest?.map(p => p.id) || []
+
+      if (ids.length > 0) {
+        // Cancella presenze
+        await supabase.from('presenze').delete().in('persona_id', ids)
+        
+        // Cancella registrazioni quantità
+        await supabase.from('registrazioni_quantita').delete().in('foreman_persona_id', ids)
+      }
+
+      setMessage({ type: 'success', text: 'Dati test cancellati!' })
+      loadStats()
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message })
+    }
+    setDeleting(false)
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border">
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-gray-800">🧪 Gestione Dati Test</h2>
+        <p className="text-sm text-gray-500">Genera e cancella dati fittizi per testare le funzionalità</p>
+      </div>
+
+      {/* Statistiche attuali */}
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Caricamento...</div>
+      ) : (
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="p-4 bg-blue-50 rounded-xl text-center">
+            <p className="text-3xl font-bold text-blue-600">{stats?.persone || 0}</p>
+            <p className="text-sm text-blue-700">Persone Test</p>
+          </div>
+          <div className="p-4 bg-green-50 rounded-xl text-center">
+            <p className="text-3xl font-bold text-green-600">{stats?.presenze || 0}</p>
+            <p className="text-sm text-green-700">Presenze</p>
+          </div>
+          <div className="p-4 bg-purple-50 rounded-xl text-center">
+            <p className="text-3xl font-bold text-purple-600">{stats?.registrazioni || 0}</p>
+            <p className="text-sm text-purple-700">Registrazioni Qtà</p>
+          </div>
+        </div>
+      )}
+
+      {/* Azioni */}
+      <div className="space-y-4">
+        <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+          <h3 className="font-semibold text-green-800 mb-2">➕ Genera Dati Test</h3>
+          <p className="text-sm text-green-700 mb-3">
+            Crea presenze e registrazioni quantità fittizie per le ultime 2 settimane.
+            Le persone test sono quelle con email @test.it (create dallo script SQL).
+          </p>
+          <button 
+            onClick={generateTestData} 
+            disabled={generating}
+            className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50"
+          >
+            {generating ? '⏳ Generando...' : '🚀 Genera Dati Test'}
+          </button>
+        </div>
+
+        <div className="p-4 bg-red-50 rounded-xl border border-red-200">
+          <h3 className="font-semibold text-red-800 mb-2">🗑️ Cancella Dati Test</h3>
+          <p className="text-sm text-red-700 mb-3">
+            Rimuove TUTTE le presenze e registrazioni associate a persone con email @test.it.
+            Le persone stesse NON vengono cancellate.
+          </p>
+          <button 
+            onClick={deleteTestData} 
+            disabled={deleting}
+            className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50"
+          >
+            {deleting ? '⏳ Cancellando...' : '🗑️ Cancella Dati Test'}
+          </button>
+        </div>
+      </div>
+
+      {message && (
+        <div className={`mt-4 p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          {message.text}
+        </div>
+      )}
+
+      {/* Info */}
+      <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+        <h4 className="font-semibold text-gray-700 mb-2">💡 Come funziona</h4>
+        <ul className="text-sm text-gray-600 space-y-1">
+          <li>• Le persone test hanno email che finisce con <code className="bg-gray-200 px-1 rounded">@test.it</code></li>
+          <li>• Esegui prima lo script SQL per creare le persone test</li>
+          <li>• "Genera" crea presenze e quantità per le ultime 2 settimane</li>
+          <li>• "Cancella" rimuove solo i dati (presenze, quantità), non le persone</li>
+          <li>• I dati reali (persone senza @test.it) non vengono mai toccati</li>
+        </ul>
       </div>
     </div>
   )
