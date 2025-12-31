@@ -216,7 +216,9 @@ export const AuthProvider = ({ children }) => {
       // Pianificazione CW: engineer+ può pianificare, foreman può visualizzare
       'pianificazione': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
       // Foreman mobile view: foreman e superiori
-      'foreman': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
+      'foreman': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Ore componenti: foreman può registrare, engineer+ può vedere report completo
+      'ore-componenti': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
     }
 
     const allowedRoles = pagePermissions[page]
