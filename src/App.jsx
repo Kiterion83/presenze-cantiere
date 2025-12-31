@@ -22,6 +22,7 @@ import ActivitiesPage from './pages/ActivitiesPage'
 import WarehousePage from './pages/WarehousePage'
 import ComponentiPage from './pages/ComponentiPage'
 import PianificazionePage from './pages/PianificazionePage'
+import ForemanPage from './pages/ForemanPage'
 
 // Components
 import Layout from './components/Layout'
@@ -109,6 +110,7 @@ function AppRoutes() {
       <Route path="/warehouse" element={<ProtectedRoute requiredAccess="warehouse"><WarehousePage /></ProtectedRoute>} />
       <Route path="/componenti" element={<ProtectedRoute requiredAccess="componenti"><ComponentiPage /></ProtectedRoute>} />
       <Route path="/pianificazione" element={<ProtectedRoute requiredAccess="pianificazione"><PianificazionePage /></ProtectedRoute>} />
+      <Route path="/foreman" element={<ProtectedRoute requiredAccess="foreman"><ForemanPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Supervisor+ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
