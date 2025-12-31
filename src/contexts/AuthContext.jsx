@@ -210,7 +210,9 @@ export const AuthProvider = ({ children }) => {
       // Warehouse: solo warehouse e ruoli di gestione (cm, pm, admin)
       'warehouse': ['warehouse', 'cm', 'pm', 'admin'],
       // Construction settings: engineer e ruoli superiori di gestione
-      'construction': ['engineer', 'cm', 'pm', 'admin']
+      'construction': ['engineer', 'cm', 'pm', 'admin'],
+      // Componenti: engineer+ per gestione, foreman può solo visualizzare (gestito separatamente)
+      'componenti': ['engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
     }
 
     const allowedRoles = pagePermissions[page]
