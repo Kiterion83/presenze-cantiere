@@ -1,120 +1,118 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import Layout from './components/Layout'
+
+// Pages
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import CheckinPage from './pages/CheckinPage'
 import CalendarioPage from './pages/CalendarioPage'
+import FeriePage from './pages/FeriePage'
 import TeamPage from './pages/TeamPage'
 import RapportinoPage from './pages/RapportinoPage'
-import StatistichePage from './pages/StatistichePage'
-import ImpostazioniPage from './pages/ImpostazioniPage'
-import FeriePage from './pages/FeriePage'
-import TrasferimentiPage from './pages/TrasferimentiPage'
-import NotifichePage from './pages/NotifichePage'
-import PWAInstallPrompt from './components/PWAInstallPrompt'
 import DocumentiPage from './pages/DocumentiPage'
+import NotifichePage from './pages/NotifichePage'
+import TrasferimentiPage from './pages/TrasferimentiPage'
+import StatistichePage from './pages/StatistichePage'
 import DashboardPage from './pages/DashboardPage'
+import ImpostazioniPage from './pages/ImpostazioniPage'
+import MenuPage from './pages/MenuPage'
 
-function MenuPage() {
-  const { signOut, isAtLeast } = useAuth()
-  
-  const menuItems = [
-    { path: '/', label: 'Home', emoji: '🏠', show: true },
-    { path: '/checkin', label: 'Check-in', emoji: '📍', show: true },
-    { path: '/calendario', label: 'Calendario', emoji: '📅', show: true },
-    { path: '/ferie', label: 'Ferie', emoji: '🏖️', show: true },
-    { path: '/team', label: 'Team', emoji: '👥', show: isAtLeast('foreman') },
-    { path: '/rapportino', label: 'Rapportino', emoji: '📝', show: isAtLeast('foreman') },
-    { path: '/documenti', label: 'Documenti', emoji: '📁', show: isAtLeast('foreman') },
-    { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', show: isAtLeast('cm') },
-    { path: '/notifiche', label: 'Notifiche', emoji: '🔔', show: isAtLeast('supervisor') },
-    { path: '/statistiche', label: 'Statistiche', emoji: '📊', show: isAtLeast('supervisor') },
-    { path: '/dashboard', label: 'Dashboard', emoji: '📈', show: isAtLeast('supervisor') },
-    { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', show: isAtLeast('cm') },
-  ].filter(item => item.show)
+// Components
+import Layout from './components/Layout'
 
-  return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">☰ Menu</h1>
-      <div className="space-y-2">
-        {menuItems.map(item => (
-          <a
-            key={item.path}
-            href={item.path}
-            className="flex items-center gap-4 p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:bg-gray-50"
-          >
-            <span className="text-2xl">{item.emoji}</span>
-            <span className="font-medium text-gray-700">{item.label}</span>
-          </a>
-        ))}
-        <button
-          onClick={signOut}
-          className="w-full flex items-center gap-4 p-4 bg-red-50 rounded-xl border border-red-100 hover:bg-red-100 mt-4"
-        >
-          <span className="text-2xl">🚪</span>
-          <span className="font-medium text-red-600">Esci</span>
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function LoadingScreen() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-gray-500">Caricamento...</p>
-      </div>
-    </div>
-  )
-}
-
+// Protected Route Component
 function ProtectedRoute({ children, minRole }) {
   const { user, loading, isAtLeast } = useAuth()
-  
-  if (loading) return <LoadingScreen />
-  if (!user) return <Navigate to="/login" replace />
-  if (minRole && !isAtLeast(minRole)) return <Navigate to="/" replace />
-  
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-900 to-blue-700 rounded-2xl flex items-center justify-center shadow-lg mx-auto mb-4 animate-pulse">
+            <span className="text-amber-400 font-bold text-lg">PTS</span>
+          </div>
+          <p className="text-gray-500">Caricamento...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (minRole && !isAtLeast(minRole)) {
+    return <Navigate to="/" replace />
+  }
+
   return <Layout>{children}</Layout>
 }
 
-function PublicRoute({ children }) {
+// App Routes
+function AppRoutes() {
   const { user, loading } = useAuth()
-  
-  if (loading) return <LoadingScreen />
-  if (user) return <Navigate to="/" replace />
-  
-  return children
-}
 
-function App() {
+  // Set document title
+  useEffect(() => {
+    document.title = 'PTS - Project Tracking System'
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-900 to-blue-700 rounded-2xl flex items-center justify-center shadow-lg mx-auto mb-4 animate-pulse">
+            <span className="text-amber-400 font-bold text-lg">PTS</span>
+          </div>
+          <p className="text-gray-500">Caricamento...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-          <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-          <Route path="/checkin" element={<ProtectedRoute><CheckinPage /></ProtectedRoute>} />
-          <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
-          <Route path="/ferie" element={<ProtectedRoute><FeriePage /></ProtectedRoute>} />
-          <Route path="/menu" element={<ProtectedRoute><MenuPage /></ProtectedRoute>} />
-          <Route path="/team" element={<ProtectedRoute minRole="foreman"><TeamPage /></ProtectedRoute>} />
-          <Route path="/rapportino" element={<ProtectedRoute minRole="foreman"><RapportinoPage /></ProtectedRoute>} />
-          <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
-          <Route path="/dashboard" element={<ProtectedRoute minRole="supervisor"><DashboardPage /></ProtectedRoute>} />
-          <Route path="/documenti" element={<ProtectedRoute minRole="foreman"><DocumentiPage /></ProtectedRoute>} />
-          <Route path="/notifiche" element={<ProtectedRoute minRole="supervisor"><NotifichePage /></ProtectedRoute>} />
-          <Route path="/trasferimenti" element={<ProtectedRoute minRole="cm"><TrasferimentiPage /></ProtectedRoute>} />
-          <Route path="/impostazioni" element={<ProtectedRoute minRole="cm"><ImpostazioniPage /></ProtectedRoute>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        <PWAInstallPrompt />
-      </BrowserRouter>
-    </AuthProvider>
+    <Routes>
+      {/* Public Routes */}
+      <Route 
+        path="/login" 
+        element={user ? <Navigate to="/" replace /> : <LoginPage />} 
+      />
+
+      {/* Protected Routes - All Users */}
+      <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+      <Route path="/checkin" element={<ProtectedRoute><CheckinPage /></ProtectedRoute>} />
+      <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
+      <Route path="/ferie" element={<ProtectedRoute><FeriePage /></ProtectedRoute>} />
+      <Route path="/menu" element={<ProtectedRoute><MenuPage /></ProtectedRoute>} />
+
+      {/* Protected Routes - Foreman+ */}
+      <Route path="/team" element={<ProtectedRoute minRole="foreman"><TeamPage /></ProtectedRoute>} />
+      <Route path="/rapportino" element={<ProtectedRoute minRole="foreman"><RapportinoPage /></ProtectedRoute>} />
+      <Route path="/documenti" element={<ProtectedRoute minRole="foreman"><DocumentiPage /></ProtectedRoute>} />
+      <Route path="/notifiche" element={<ProtectedRoute minRole="foreman"><NotifichePage /></ProtectedRoute>} />
+      <Route path="/trasferimenti" element={<ProtectedRoute minRole="foreman"><TrasferimentiPage /></ProtectedRoute>} />
+
+      {/* Protected Routes - Supervisor+ */}
+      <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute minRole="supervisor"><DashboardPage /></ProtectedRoute>} />
+
+      {/* Protected Routes - Admin */}
+      <Route path="/impostazioni" element={<ProtectedRoute minRole="admin"><ImpostazioniPage /></ProtectedRoute>} />
+
+      {/* Catch all */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
 
-export default App
+// Main App Component
+export default function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </Router>
+  )
+}
