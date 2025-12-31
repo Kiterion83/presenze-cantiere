@@ -20,6 +20,7 @@ import MenuPage from './pages/MenuPage'
 // NUOVE PAGINE CONSTRUCTION
 import ActivitiesPage from './pages/ActivitiesPage'
 import WarehousePage from './pages/WarehousePage'
+import ComponentiPage from './pages/ComponentiPage'
 
 // Components
 import Layout from './components/Layout'
@@ -105,6 +106,7 @@ function AppRoutes() {
       {/* NUOVE ROUTES - Construction Module */}
       <Route path="/activities" element={<ProtectedRoute requiredAccess="activities"><ActivitiesPage /></ProtectedRoute>} />
       <Route path="/warehouse" element={<ProtectedRoute requiredAccess="warehouse"><WarehousePage /></ProtectedRoute>} />
+      <Route path="/componenti" element={<ProtectedRoute requiredAccess="componenti"><ComponentiPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Supervisor+ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
