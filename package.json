@@ -1,8 +1,8 @@
 {
   "name": "project-tracking-system",
   "private": true,
-  "version": "1.0.0",
-  "description": "PTS - Project Tracking System per la gestione digitale di cantieri",
+  "version": "2.0.0",
+  "description": "PTS - Project Tracking System per gestione cantieri e construction progress",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0",
-    "react-signature-canvas": "^1.0.6"
+    "react-signature-canvas": "^1.0.6",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
@@ -35,7 +36,10 @@
     "construction",
     "attendance",
     "rapportino",
-    "cantiere"
+    "cantiere",
+    "componenti",
+    "piping",
+    "progress-tracking"
   ],
   "author": "Giuseppe",
   "license": "UNLICENSED"
