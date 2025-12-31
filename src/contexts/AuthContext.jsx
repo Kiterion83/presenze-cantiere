@@ -214,7 +214,9 @@ export const AuthProvider = ({ children }) => {
       // Componenti: engineer+ per gestione, foreman può solo visualizzare (gestito separatamente)
       'componenti': ['engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
       // Pianificazione CW: engineer+ può pianificare, foreman può visualizzare
-      'pianificazione': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
+      'pianificazione': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Foreman mobile view: foreman e superiori
+      'foreman': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
     }
 
     const allowedRoles = pagePermissions[page]
