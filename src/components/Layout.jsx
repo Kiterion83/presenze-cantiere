@@ -20,21 +20,24 @@ export default function Layout({ children }) {
   const [showProgettiDropdown, setShowProgettiDropdown] = useState(false)
   const dropdownRef = useRef(null)
 
-  // AGGIORNATO: Menu items con permessi aggiornati
-  // Tutti i ruoli vedono tutto TRANNE Impostazioni (solo admin)
+  // AGGIORNATO: Menu items con permessi CORRETTI per ruolo
+  // Helper: solo le basi
+  // Foreman: + gestione team e rapportino
+  // Supervisor+: + statistiche e dashboard
+  // Admin: + impostazioni
   const menuItems = [
     { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
     { path: '/checkin', label: 'Check-in', emoji: '📍', minRole: 'helper' },
     { path: '/calendario', label: 'Calendario', emoji: '📅', minRole: 'helper' },
     { path: '/ferie', label: 'Ferie', emoji: '🏖️', minRole: 'helper' },
-    { path: '/team', label: 'Team', emoji: '👥', minRole: 'helper' },           // MODIFICATO: tutti vedono
-    { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'helper' }, // MODIFICATO: tutti vedono
-    { path: '/documenti', label: 'Documenti', emoji: '📁', minRole: 'helper' },   // MODIFICATO: tutti vedono
-    { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'helper' },   // MODIFICATO: tutti vedono
+    { path: '/team', label: 'Team', emoji: '👥', minRole: 'foreman' },
+    { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'foreman' },
+    { path: '/documenti', label: 'Documenti', emoji: '📁', minRole: 'foreman' },
+    { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'foreman' },
     { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'foreman' },
-    { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'foreman' }, // MODIFICATO
+    { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
     { path: '/dashboard', label: 'Dashboard', emoji: '📈', minRole: 'supervisor' },
-    { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'admin' }, // SOLO ADMIN
+    { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'admin' },
   ]
 
   const visibleMenuItems = menuItems.filter(item => isAtLeast(item.minRole))
