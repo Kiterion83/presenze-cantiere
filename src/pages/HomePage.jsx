@@ -1,360 +1,387 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { useNavigate } from 'react-router-dom'
 
 export default function HomePage() {
-  const { persona, progetto, assegnazione, isAtLeast } = useAuth()
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
-  const [dashboard, setDashboard] = useState({
-    miaPresenzaOggi: null,
-    presenzeOggi: 0,
-    presenzeSettimana: 0,
-    oreSettimana: 0,
-    richiestePendenti: 0,
-    approvazioni: 0,
-    meteoOggi: null,
-    ultimaAttivita: [],
-    prossimiEventi: []
+  const { persona, progetto, assegnazione, ruolo, isAtLeast } = useAuth()
+  const [stats, setStats] = useState({
+    presentiOggi: 0,
+    oreTotaliSettimana: 0,
+    mieRichieste: 0
   })
+  const [loading, setLoading] = useState(true)
+  
+  // Popup state
+  const [popupType, setPopupType] = useState(null) // 'presenti' | 'ore' | 'richieste'
+  const [popupData, setPopupData] = useState([])
+  const [loadingPopup, setLoadingPopup] = useState(false)
 
   useEffect(() => {
-    if (persona?.id && assegnazione?.progetto_id) {
-      loadDashboard()
+    if (assegnazione?.progetto_id) {
+      loadStats()
     }
-  }, [persona?.id, assegnazione?.progetto_id])
+  }, [assegnazione?.progetto_id])
 
-  const loadDashboard = async () => {
+  const loadStats = async () => {
     setLoading(true)
-    const oggi = new Date().toISOString().split('T')[0]
-    const inizioSettimana = new Date()
-    inizioSettimana.setDate(inizioSettimana.getDate() - 7)
-
-    // La mia presenza oggi
-    const { data: miaPresenza } = await supabase
-      .from('presenze')
-      .select('*')
-      .eq('persona_id', persona.id)
-      .eq('data', oggi)
-      .single()
-
-    // Presenze oggi (tutti)
-    const { data: presenzeOggi, count: countOggi } = await supabase
-      .from('presenze')
-      .select('*', { count: 'exact' })
-      .eq('progetto_id', assegnazione.progetto_id)
-      .eq('data', oggi)
-
-    // Presenze settimana
-    const { data: presenzeSettimana } = await supabase
-      .from('presenze')
-      .select('*')
-      .eq('progetto_id', assegnazione.progetto_id)
-      .gte('data', inizioSettimana.toISOString().split('T')[0])
-      .not('ora_uscita', 'is', null)
-
-    // Calcola ore settimana
-    let oreSettimana = 0
-    presenzeSettimana?.forEach(p => {
-      if (p.ora_entrata && p.ora_uscita) {
-        const entrata = new Date(`2000-01-01T${p.ora_entrata}`)
-        const uscita = new Date(`2000-01-01T${p.ora_uscita}`)
-        oreSettimana += (uscita - entrata) / (1000 * 60 * 60)
-      }
-    })
-
-    // Richieste ferie pendenti (mie)
-    const { count: richiestePendenti } = await supabase
-      .from('richieste_assenze')
-      .select('*', { count: 'exact', head: true })
-      .eq('persona_id', persona.id)
-      .eq('stato', 'in_attesa')
-
-    // Approvazioni da fare (se supervisor+)
-    let approvazioni = 0
-    if (isAtLeast('supervisor')) {
-      const { count: countApp } = await supabase
-        .from('richieste_assenze')
+    try {
+      const oggi = new Date().toISOString().split('T')[0]
+      
+      // Presenti oggi (check-in di oggi)
+      const { count: presenti } = await supabase
+        .from('presenze')
         .select('*', { count: 'exact', head: true })
         .eq('progetto_id', assegnazione.progetto_id)
+        .eq('data', oggi)
+
+      // Ore settimana (per l'utente corrente)
+      const inizioSettimana = getInizioSettimana()
+      const { data: oreData } = await supabase
+        .from('presenze')
+        .select('ora_checkin, ora_checkout')
+        .eq('persona_id', persona?.id)
+        .eq('progetto_id', assegnazione.progetto_id)
+        .gte('data', inizioSettimana)
+        .lte('data', oggi)
+
+      let oreTotali = 0
+      oreData?.forEach(p => {
+        if (p.ora_checkin && p.ora_checkout) {
+          const checkin = parseTime(p.ora_checkin)
+          const checkout = parseTime(p.ora_checkout)
+          if (checkout > checkin) {
+            oreTotali += (checkout - checkin) / (1000 * 60 * 60)
+          }
+        }
+      })
+
+      // Mie richieste in attesa
+      const { count: richieste } = await supabase
+        .from('richieste_ferie')
+        .select('*', { count: 'exact', head: true })
+        .eq('persona_id', persona?.id)
         .eq('stato', 'in_attesa')
-      approvazioni = countApp || 0
+
+      setStats({
+        presentiOggi: presenti || 0,
+        oreTotaliSettimana: Math.round(oreTotali * 10) / 10,
+        mieRichieste: richieste || 0
+      })
+    } catch (err) {
+      console.error('Errore caricamento stats:', err)
     }
-
-    // Ultima attività (ultime 5 presenze)
-    const { data: ultimaAttivita } = await supabase
-      .from('presenze')
-      .select('*, persona:persone(nome, cognome)')
-      .eq('progetto_id', assegnazione.progetto_id)
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    // Prossime ferie approvate
-    const { data: prossimiEventi } = await supabase
-      .from('richieste_assenze')
-      .select('*, persona:persone(nome, cognome)')
-      .eq('progetto_id', assegnazione.progetto_id)
-      .eq('stato', 'approvata')
-      .gte('data_inizio', oggi)
-      .order('data_inizio')
-      .limit(5)
-
-    // Meteo (simulato - puoi integrare API vera)
-    const meteo = await fetchMeteo()
-
-    setDashboard({
-      miaPresenzaOggi: miaPresenza,
-      presenzeOggi: countOggi || 0,
-      presenzeSettimana: presenzeSettimana?.length || 0,
-      oreSettimana: Math.round(oreSettimana),
-      richiestePendenti: richiestePendenti || 0,
-      approvazioni,
-      meteoOggi: meteo,
-      ultimaAttivita: ultimaAttivita || [],
-      prossimiEventi: prossimiEventi || []
-    })
-
     setLoading(false)
   }
 
-  const fetchMeteo = async () => {
-    // Coordinate Parma
-    const lat = progetto?.latitudine || 44.8015
-    const lon = progetto?.longitudine || 10.3279
-    try {
-      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Europe/Rome`)
-      const data = await res.json()
-      return {
-        temp: Math.round(data.current?.temperature_2m || 0),
-        code: data.current?.weather_code || 0
+  const getInizioSettimana = () => {
+    const oggi = new Date()
+    const giorno = oggi.getDay()
+    const diff = oggi.getDate() - giorno + (giorno === 0 ? -6 : 1)
+    const lunedi = new Date(oggi.setDate(diff))
+    return lunedi.toISOString().split('T')[0]
+  }
+
+  const parseTime = (timeStr) => {
+    const [h, m, s] = timeStr.split(':').map(Number)
+    return new Date(2000, 0, 1, h, m, s || 0).getTime()
+  }
+
+  // Funzioni per aprire popup
+  const openPresentiPopup = async () => {
+    setPopupType('presenti')
+    setLoadingPopup(true)
+    
+    const oggi = new Date().toISOString().split('T')[0]
+    const { data } = await supabase
+      .from('presenze')
+      .select('*, persona:persone(nome, cognome)')
+      .eq('progetto_id', assegnazione.progetto_id)
+      .eq('data', oggi)
+      .order('ora_checkin')
+
+    setPopupData(data || [])
+    setLoadingPopup(false)
+  }
+
+  const openOrePopup = async () => {
+    setPopupType('ore')
+    setLoadingPopup(true)
+    
+    const oggi = new Date().toISOString().split('T')[0]
+    const inizioSettimana = getInizioSettimana()
+    
+    const { data } = await supabase
+      .from('presenze')
+      .select('data, ora_checkin, ora_checkout')
+      .eq('persona_id', persona?.id)
+      .eq('progetto_id', assegnazione.progetto_id)
+      .gte('data', inizioSettimana)
+      .lte('data', oggi)
+      .order('data', { ascending: false })
+
+    // Calcola ore per ogni giorno
+    const dettagli = data?.map(p => {
+      let ore = 0
+      if (p.ora_checkin && p.ora_checkout) {
+        const checkin = parseTime(p.ora_checkin)
+        const checkout = parseTime(p.ora_checkout)
+        if (checkout > checkin) {
+          ore = (checkout - checkin) / (1000 * 60 * 60)
+        }
       }
-    } catch {
-      return null
-    }
+      return { ...p, ore: Math.round(ore * 10) / 10 }
+    }) || []
+
+    setPopupData(dettagli)
+    setLoadingPopup(false)
   }
 
-  const getMeteoIcon = (code) => {
-    if (code === 0) return '☀️'
-    if (code <= 3) return '⛅'
-    if (code <= 48) return '🌫️'
-    if (code <= 67) return '🌧️'
-    if (code <= 77) return '🌨️'
-    if (code <= 82) return '🌧️'
-    if (code <= 86) return '❄️'
-    if (code >= 95) return '⛈️'
-    return '🌤️'
+  const openRichiestePopup = async () => {
+    setPopupType('richieste')
+    setLoadingPopup(true)
+    
+    const { data } = await supabase
+      .from('richieste_ferie')
+      .select('*')
+      .eq('persona_id', persona?.id)
+      .eq('stato', 'in_attesa')
+      .order('data_inizio')
+
+    setPopupData(data || [])
+    setLoadingPopup(false)
   }
 
-  const getOraCorrente = () => {
-    const ore = new Date().getHours()
-    if (ore < 12) return 'Buongiorno'
-    if (ore < 18) return 'Buon pomeriggio'
-    return 'Buonasera'
+  const closePopup = () => {
+    setPopupType(null)
+    setPopupData([])
   }
 
-  const quickActions = [
-    { label: 'Check-in', emoji: '📍', path: '/checkin', color: 'bg-blue-500' },
-    { label: 'Calendario', emoji: '📅', path: '/calendario', color: 'bg-green-500' },
-    { label: 'Ferie', emoji: '🏖️', path: '/ferie', color: 'bg-purple-500' },
-    ...(isAtLeast('foreman') ? [{ label: 'Rapportino', emoji: '📝', path: '/rapportino', color: 'bg-orange-500' }] : []),
-    ...(isAtLeast('supervisor') ? [{ label: 'Notifiche', emoji: '🔔', path: '/notifiche', color: 'bg-red-500' }] : []),
-  ]
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '-'
+    return timeStr.substring(0, 5)
+  }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Caricamento dashboard...</p>
-        </div>
-      </div>
-    )
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })
   }
 
   return (
-    <div className="p-4 lg:p-8 space-y-6">
-      {/* Header con saluto e meteo */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-6 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-blue-100">{getOraCorrente()}</p>
-            <h1 className="text-2xl font-bold">{persona?.nome} {persona?.cognome}</h1>
-            <p className="text-blue-200 mt-1">{progetto?.nome}</p>
-          </div>
-          {dashboard.meteoOggi && (
-            <div className="text-center">
-              <p className="text-4xl">{getMeteoIcon(dashboard.meteoOggi.code)}</p>
-              <p className="text-2xl font-bold">{dashboard.meteoOggi.temp}°C</p>
-            </div>
-          )}
-        </div>
+    <div className="p-4 lg:p-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-800">
+          Ciao, {persona?.nome || 'Utente'}! 👋
+        </h1>
+        <p className="text-gray-500">{progetto?.nome}</p>
+      </div>
 
-        {/* Stato presenza oggi */}
-        <div className="mt-4 p-3 bg-white/10 rounded-xl">
-          {dashboard.miaPresenzaOggi ? (
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{dashboard.miaPresenzaOggi.ora_uscita ? '✅' : '🟢'}</span>
-              <div>
-                <p className="font-medium">
-                  {dashboard.miaPresenzaOggi.ora_uscita ? 'Giornata completata' : 'Sei in cantiere'}
-                </p>
-                <p className="text-sm text-blue-200">
-                  Entrata: {dashboard.miaPresenzaOggi.ora_entrata}
-                  {dashboard.miaPresenzaOggi.ora_uscita && ` • Uscita: ${dashboard.miaPresenzaOggi.ora_uscita}`}
-                </p>
-              </div>
+      {/* KPI Cards - Cliccabili */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* Presenti oggi */}
+        <button 
+          onClick={openPresentiPopup}
+          className="bg-white rounded-2xl p-6 shadow-sm border hover:shadow-md transition-shadow text-left"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-4xl font-bold ${loading ? 'text-gray-300' : 'text-blue-600'}`}>
+                {loading ? '-' : stats.presentiOggi}
+              </p>
+              <p className="text-gray-600 mt-1">Presenti oggi</p>
             </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⚪</span>
-              <div>
-                <p className="font-medium">Non hai ancora registrato l'entrata</p>
-                <button onClick={() => navigate('/checkin')} className="text-sm text-blue-200 hover:text-white underline">
-                  Vai al check-in →
-                </button>
-              </div>
+            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center">
+              <span className="text-2xl">👥</span>
             </div>
-          )}
-        </div>
+          </div>
+        </button>
+
+        {/* Ore settimana */}
+        <button 
+          onClick={openOrePopup}
+          className="bg-white rounded-2xl p-6 shadow-sm border hover:shadow-md transition-shadow text-left"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-4xl font-bold ${loading ? 'text-gray-300' : 'text-green-600'}`}>
+                {loading ? '-' : stats.oreTotaliSettimana}
+              </p>
+              <p className="text-gray-600 mt-1">Ore settimana</p>
+            </div>
+            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center">
+              <span className="text-2xl">⏱️</span>
+            </div>
+          </div>
+        </button>
+
+        {/* Mie richieste */}
+        <button 
+          onClick={openRichiestePopup}
+          className="bg-white rounded-2xl p-6 shadow-sm border hover:shadow-md transition-shadow text-left"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-4xl font-bold ${loading ? 'text-gray-300' : 'text-purple-600'}`}>
+                {loading ? '-' : stats.mieRichieste}
+              </p>
+              <p className="text-gray-600 mt-1">Mie richieste</p>
+            </div>
+            <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center">
+              <span className="text-2xl">📋</span>
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-3 lg:grid-cols-5 gap-3">
-        {quickActions.map(action => (
-          <button
-            key={action.path}
-            onClick={() => navigate(action.path)}
-            className={`${action.color} text-white rounded-2xl p-4 flex flex-col items-center gap-2 hover:opacity-90 transition-opacity`}
-          >
-            <span className="text-2xl">{action.emoji}</span>
-            <span className="text-sm font-medium">{action.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-3xl font-bold text-blue-600">{dashboard.presenzeOggi}</p>
-              <p className="text-sm text-gray-500">Presenti oggi</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl">👥</div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 shadow-sm border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-3xl font-bold text-green-600">{dashboard.oreSettimana}</p>
-              <p className="text-sm text-gray-500">Ore settimana</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center text-2xl">⏱️</div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 shadow-sm border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-3xl font-bold text-purple-600">{dashboard.richiestePendenti}</p>
-              <p className="text-sm text-gray-500">Mie richieste</p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center text-2xl">📋</div>
-          </div>
-        </div>
-
-        {isAtLeast('supervisor') && (
-          <div 
-            className="bg-white rounded-2xl p-5 shadow-sm border cursor-pointer hover:border-red-300 transition-colors"
-            onClick={() => navigate('/notifiche')}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-3xl font-bold text-red-600">{dashboard.approvazioni}</p>
-                <p className="text-sm text-gray-500">Da approvare</p>
-              </div>
-              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center text-2xl">🔔</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Ultima Attività */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border">
-          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <span>📍</span> Ultima Attività
-          </h3>
-          <div className="space-y-3">
-            {dashboard.ultimaAttivita.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">Nessuna attività recente</p>
-            ) : (
-              dashboard.ultimaAttivita.map((att, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold ${att.ora_uscita ? 'bg-green-500' : 'bg-blue-500'}`}>
-                    {att.persona?.nome?.[0]}{att.persona?.cognome?.[0]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-800 truncate">{att.persona?.nome} {att.persona?.cognome}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(att.data).toLocaleDateString('it-IT')} • {att.ora_entrata}
-                      {att.ora_uscita && ` - ${att.ora_uscita}`}
-                    </p>
-                  </div>
-                  <span className="text-lg">{att.ora_uscita ? '✅' : '🟢'}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Prossime Assenze */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border">
-          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <span>🗓️</span> Prossime Assenze
-          </h3>
-          <div className="space-y-3">
-            {dashboard.prossimiEventi.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">Nessuna assenza programmata</p>
-            ) : (
-              dashboard.prossimiEventi.map((ev, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                  <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-xl">
-                    {ev.tipo === 'ferie' ? '🏖️' : ev.tipo === 'malattia' ? '🏥' : '📋'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-800 truncate">{ev.persona?.nome} {ev.persona?.cognome}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(ev.data_inizio).toLocaleDateString('it-IT')}
-                      {ev.data_inizio !== ev.data_fine && ` → ${new Date(ev.data_fine).toLocaleDateString('it-IT')}`}
-                    </p>
-                  </div>
-                  <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full capitalize">{ev.tipo}</span>
-                </div>
-              ))
-            )}
-          </div>
+      <div className="bg-white rounded-2xl p-6 shadow-sm border mb-8">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Azioni rapide</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Link to="/checkin" className="flex flex-col items-center gap-2 p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">
+            <span className="text-3xl">📍</span>
+            <span className="text-sm font-medium text-blue-700">Check-in</span>
+          </Link>
+          <Link to="/rapportino" className="flex flex-col items-center gap-2 p-4 bg-green-50 rounded-xl hover:bg-green-100 transition-colors">
+            <span className="text-3xl">📝</span>
+            <span className="text-sm font-medium text-green-700">Rapportino</span>
+          </Link>
+          <Link to="/ferie" className="flex flex-col items-center gap-2 p-4 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors">
+            <span className="text-3xl">🏖️</span>
+            <span className="text-sm font-medium text-amber-700">Ferie</span>
+          </Link>
+          <Link to="/calendario" className="flex flex-col items-center gap-2 p-4 bg-purple-50 rounded-xl hover:bg-purple-100 transition-colors">
+            <span className="text-3xl">📅</span>
+            <span className="text-sm font-medium text-purple-700">Calendario</span>
+          </Link>
         </div>
       </div>
 
-      {/* Footer con info progetto */}
-      <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🏗️</span>
+      {/* Info Ruolo */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm">
+            <span className="text-2xl">
+              {ruolo === 'admin' ? '👑' : ruolo === 'cm' || ruolo === 'pm' ? '👔' : ruolo === 'supervisor' ? '🎖️' : ruolo === 'foreman' ? '👷' : '🧑‍💼'}
+            </span>
+          </div>
           <div>
-            <p className="font-medium text-gray-800">{progetto?.nome}</p>
-            <p className="text-sm text-gray-500">{progetto?.citta || 'Località non specificata'}</p>
+            <p className="font-semibold text-gray-800">
+              {ruolo === 'admin' ? 'Amministratore' : 
+               ruolo === 'pm' ? 'Project Manager' :
+               ruolo === 'cm' ? 'Construction Manager' :
+               ruolo === 'supervisor' ? 'Supervisore' :
+               ruolo === 'dept_manager' ? 'Responsabile Dipartimento' :
+               ruolo === 'foreman' ? 'Caposquadra' :
+               ruolo === 'office' ? 'Impiegato' : 'Operatore'}
+            </p>
+            <p className="text-sm text-gray-600">{assegnazione?.ditta?.ragione_sociale || progetto?.nome}</p>
           </div>
         </div>
-        <button 
-          onClick={() => navigate('/impostazioni')} 
-          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-        >
-          Impostazioni →
-        </button>
       </div>
+
+      {/* POPUP Modal */}
+      {popupType && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={closePopup}>
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-4 border-b flex items-center justify-between bg-gray-50">
+              <h3 className="font-semibold text-lg">
+                {popupType === 'presenti' && '👥 Presenti Oggi'}
+                {popupType === 'ore' && '⏱️ Ore Questa Settimana'}
+                {popupType === 'richieste' && '📋 Mie Richieste in Attesa'}
+              </h3>
+              <button onClick={closePopup} className="p-2 hover:bg-gray-200 rounded-lg">✕</button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {loadingPopup ? (
+                <div className="text-center py-8 text-gray-500">Caricamento...</div>
+              ) : popupData.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <p className="text-4xl mb-2">📭</p>
+                  <p>Nessun dato</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Presenti oggi */}
+                  {popupType === 'presenti' && popupData.map((p, i) => (
+                    <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600">
+                        {p.persona?.nome?.[0]}{p.persona?.cognome?.[0]}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{p.persona?.nome} {p.persona?.cognome}</p>
+                        <p className="text-xs text-gray-500">
+                          Entrata: {formatTime(p.ora_checkin)}
+                          {p.ora_checkout && ` • Uscita: ${formatTime(p.ora_checkout)}`}
+                        </p>
+                      </div>
+                      {!p.ora_checkout && (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">In cantiere</span>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Ore settimana */}
+                  {popupType === 'ore' && popupData.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                      <div>
+                        <p className="font-medium">{formatDate(p.data)}</p>
+                        <p className="text-xs text-gray-500">
+                          {formatTime(p.ora_checkin)} - {formatTime(p.ora_checkout)}
+                        </p>
+                      </div>
+                      <span className="text-lg font-bold text-green-600">{p.ore}h</span>
+                    </div>
+                  ))}
+
+                  {/* Richieste */}
+                  {popupType === 'richieste' && popupData.map((r, i) => (
+                    <div key={i} className="p-3 bg-gray-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          r.tipo === 'ferie' ? 'bg-blue-100 text-blue-700' :
+                          r.tipo === 'permesso' ? 'bg-amber-100 text-amber-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {r.tipo === 'ferie' ? '🏖️ Ferie' : r.tipo === 'permesso' ? '⏰ Permesso' : r.tipo}
+                        </span>
+                        <span className="text-xs text-gray-500">{formatDate(r.created_at)}</span>
+                      </div>
+                      <p className="text-sm">
+                        {formatDate(r.data_inizio)}
+                        {r.data_fine !== r.data_inizio && ` → ${formatDate(r.data_fine)}`}
+                      </p>
+                      {r.note && <p className="text-xs text-gray-500 mt-1">{r.note}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t bg-gray-50">
+              {popupType === 'presenti' && isAtLeast('foreman') && (
+                <Link to="/team" className="block w-full text-center py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">
+                  Vai al Team
+                </Link>
+              )}
+              {popupType === 'ore' && (
+                <Link to="/calendario" className="block w-full text-center py-2 bg-green-600 text-white rounded-xl hover:bg-green-700">
+                  Vai al Calendario
+                </Link>
+              )}
+              {popupType === 'richieste' && (
+                <Link to="/ferie" className="block w-full text-center py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700">
+                  Gestisci Richieste
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
