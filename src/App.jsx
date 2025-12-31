@@ -23,6 +23,7 @@ import WarehousePage from './pages/WarehousePage'
 import ComponentiPage from './pages/ComponentiPage'
 import PianificazionePage from './pages/PianificazionePage'
 import ForemanPage from './pages/ForemanPage'
+import OreComponentiPage from './pages/OreComponentiPage'
 
 // Components
 import Layout from './components/Layout'
@@ -111,6 +112,7 @@ function AppRoutes() {
       <Route path="/componenti" element={<ProtectedRoute requiredAccess="componenti"><ComponentiPage /></ProtectedRoute>} />
       <Route path="/pianificazione" element={<ProtectedRoute requiredAccess="pianificazione"><PianificazionePage /></ProtectedRoute>} />
       <Route path="/foreman" element={<ProtectedRoute requiredAccess="foreman"><ForemanPage /></ProtectedRoute>} />
+      <Route path="/ore-componenti" element={<ProtectedRoute requiredAccess="ore-componenti"><OreComponentiPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Supervisor+ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
