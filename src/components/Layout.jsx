@@ -32,6 +32,7 @@ export default function Layout({ children }) {
     { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'foreman' },
     { path: '/activities', label: 'Activities', emoji: '📋', minRole: 'foreman', specialAccess: 'activities' },  // NUOVO
     { path: '/warehouse', label: 'Warehouse', emoji: '📦', minRole: 'warehouse', specialAccess: 'warehouse' },  // NUOVO
+    { path: '/componenti', label: 'Componenti', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },  // NUOVO
     { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'foreman' },
     { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
     { path: '/dashboard', label: 'Dashboard', emoji: '📈', minRole: 'supervisor' },
