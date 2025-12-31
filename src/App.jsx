@@ -17,13 +17,16 @@ import StatistichePage from './pages/StatistichePage'
 import DashboardPage from './pages/DashboardPage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
 import MenuPage from './pages/MenuPage'
+// NUOVE PAGINE CONSTRUCTION
+import ActivitiesPage from './pages/ActivitiesPage'
+import WarehousePage from './pages/WarehousePage'
 
 // Components
 import Layout from './components/Layout'
 
 // Protected Route Component
-function ProtectedRoute({ children, minRole }) {
-  const { user, loading, isAtLeast } = useAuth()
+function ProtectedRoute({ children, minRole, requiredAccess }) {
+  const { user, loading, isAtLeast, canAccess } = useAuth()
 
   if (loading) {
     return (
@@ -42,6 +45,12 @@ function ProtectedRoute({ children, minRole }) {
     return <Navigate to="/login" replace />
   }
 
+  // Check special access (for warehouse, activities, etc.)
+  if (requiredAccess && !canAccess(requiredAccess)) {
+    return <Navigate to="/" replace />
+  }
+
+  // Check minimum role
   if (minRole && !isAtLeast(minRole)) {
     return <Navigate to="/" replace />
   }
@@ -85,16 +94,20 @@ function AppRoutes() {
       <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
       <Route path="/ferie" element={<ProtectedRoute><FeriePage /></ProtectedRoute>} />
       <Route path="/menu" element={<ProtectedRoute><MenuPage /></ProtectedRoute>} />
+      <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
+      <Route path="/rapportino" element={<ProtectedRoute><RapportinoPage /></ProtectedRoute>} />
+      <Route path="/documenti" element={<ProtectedRoute><DocumentiPage /></ProtectedRoute>} />
+      <Route path="/notifiche" element={<ProtectedRoute><NotifichePage /></ProtectedRoute>} />
+
+      {/* Protected Routes - Construction (NEW) */}
+      <Route path="/activities" element={<ProtectedRoute requiredAccess="activities"><ActivitiesPage /></ProtectedRoute>} />
+      <Route path="/warehouse" element={<ProtectedRoute requiredAccess="warehouse"><WarehousePage /></ProtectedRoute>} />
 
       {/* Protected Routes - Foreman+ */}
-      <Route path="/team" element={<ProtectedRoute minRole="foreman"><TeamPage /></ProtectedRoute>} />
-      <Route path="/rapportino" element={<ProtectedRoute minRole="foreman"><RapportinoPage /></ProtectedRoute>} />
-      <Route path="/documenti" element={<ProtectedRoute minRole="foreman"><DocumentiPage /></ProtectedRoute>} />
-      <Route path="/notifiche" element={<ProtectedRoute minRole="foreman"><NotifichePage /></ProtectedRoute>} />
       <Route path="/trasferimenti" element={<ProtectedRoute minRole="foreman"><TrasferimentiPage /></ProtectedRoute>} />
+      <Route path="/statistiche" element={<ProtectedRoute minRole="foreman"><StatistichePage /></ProtectedRoute>} />
 
       {/* Protected Routes - Supervisor+ */}
-      <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute minRole="supervisor"><DashboardPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Admin */}
