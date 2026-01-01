@@ -1,32 +1,48 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
 import { getPosizione, calcolaDistanza } from '../lib/gps'
 
 export default function CheckinPage() {
   const { persona, progetto, assegnazione } = useAuth()
+  const { t, language } = useI18n()
   
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [presenza, setPresenza] = useState(null)
   const [posizione, setPosizione] = useState(null)
   const [posizioneError, setPosizioneError] = useState(null)
-  const [areaLavoro, setAreaLavoro] = useState(null)
   const [meteo, setMeteo] = useState(null)
   const [note, setNote] = useState('')
   const [modalita, setModalita] = useState('gps') // 'gps' o 'qr'
   const [qrCode, setQrCode] = useState('')
   const [storicoPresenze, setStoricoPresenze] = useState([])
   const [showStorico, setShowStorico] = useState(false)
+  
+  // Nuovi state per aree di lavoro
+  const [aree, setAree] = useState([])
+  const [selectedAreaId, setSelectedAreaId] = useState('')
+  const [selectedArea, setSelectedArea] = useState(null)
 
   const oggi = new Date().toISOString().split('T')[0]
 
-  // Carica presenza odierna e area lavoro
+  // Carica dati
   useEffect(() => {
     if (persona?.id && progetto?.id) {
       loadData()
     }
   }, [persona?.id, progetto?.id])
+
+  // Aggiorna selectedArea quando cambia selectedAreaId
+  useEffect(() => {
+    if (selectedAreaId && aree.length > 0) {
+      const area = aree.find(a => a.id === selectedAreaId)
+      setSelectedArea(area || null)
+    } else {
+      setSelectedArea(null)
+    }
+  }, [selectedAreaId, aree])
 
   const loadData = async () => {
     setLoading(true)
@@ -41,16 +57,24 @@ export default function CheckinPage() {
         .maybeSingle()
       
       setPresenza(presenzaData)
+      
+      // Se c'è una presenza con area, preselezionala
+      if (presenzaData?.area_lavoro_id) {
+        setSelectedAreaId(presenzaData.area_lavoro_id)
+      }
 
-      // Carica area lavoro dell'assegnazione
-      if (assegnazione?.area_lavoro_id) {
-        const { data: areaData } = await supabase
-          .from('aree_lavoro')
-          .select('*')
-          .eq('id', assegnazione.area_lavoro_id)
-          .single()
-        
-        setAreaLavoro(areaData)
+      // Carica TUTTE le aree di lavoro del progetto
+      const { data: areeData } = await supabase
+        .from('aree_lavoro')
+        .select('*')
+        .eq('progetto_id', progetto.id)
+        .order('nome')
+      
+      setAree(areeData || [])
+      
+      // Se c'è solo un'area, selezionala automaticamente
+      if (areeData?.length === 1 && !presenzaData?.area_lavoro_id) {
+        setSelectedAreaId(areeData[0].id)
       }
 
       // Carica storico presenze (ultimi 7 giorni)
@@ -59,7 +83,7 @@ export default function CheckinPage() {
       
       const { data: storicoData } = await supabase
         .from('presenze')
-        .select('*')
+        .select('*, area:aree_lavoro(nome)')
         .eq('persona_id', persona.id)
         .eq('progetto_id', progetto.id)
         .gte('data', settimanafa.toISOString().split('T')[0])
@@ -88,7 +112,7 @@ export default function CheckinPage() {
       // Carica meteo
       await caricaMeteo(pos.lat, pos.lng)
     } catch (error) {
-      setPosizioneError(error.message || 'Impossibile ottenere la posizione')
+      setPosizioneError(error.message || t('gpsError'))
     }
   }
 
@@ -99,7 +123,7 @@ export default function CheckinPage() {
       if (!apiKey) return
       
       const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric&lang=it`
+        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric&lang=${language}`
       )
       const data = await response.json()
       
@@ -115,27 +139,32 @@ export default function CheckinPage() {
     }
   }
 
-  // Verifica distanza da area lavoro
+  // Verifica distanza da area lavoro selezionata
   const verificaDistanza = () => {
-    if (!posizione || !areaLavoro) return null
+    if (!posizione || !selectedArea) return null
     
     const distanza = calcolaDistanza(
       posizione.lat,
       posizione.lng,
-      areaLavoro.latitudine,
-      areaLavoro.longitudine
+      selectedArea.latitudine,
+      selectedArea.longitudine
     )
     
     return {
       distanza: Math.round(distanza),
-      dentroArea: distanza <= (areaLavoro.raggio || 100)
+      dentroArea: distanza <= (selectedArea.raggio_metri || 100)
     }
   }
 
   // Registra entrata
   const registraEntrata = async () => {
     if (!posizione && modalita === 'gps') {
-      alert('Ottieni prima la posizione GPS')
+      alert(t('getPositionFirst'))
+      return
+    }
+    
+    if (!selectedAreaId) {
+      alert(t('selectAreaFirst'))
       return
     }
 
@@ -148,6 +177,7 @@ export default function CheckinPage() {
         .insert({
           persona_id: persona.id,
           progetto_id: progetto.id,
+          area_lavoro_id: selectedAreaId,
           data: oggi,
           ora_entrata: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
           latitudine_entrata: posizione?.lat,
@@ -166,7 +196,7 @@ export default function CheckinPage() {
       setNote('')
     } catch (error) {
       console.error('Errore registrazione entrata:', error)
-      alert('Errore durante la registrazione')
+      alert(t('registrationError'))
     } finally {
       setSubmitting(false)
     }
@@ -209,7 +239,7 @@ export default function CheckinPage() {
       setNote('')
     } catch (error) {
       console.error('Errore registrazione uscita:', error)
-      alert('Errore durante la registrazione')
+      alert(t('registrationError'))
     } finally {
       setSubmitting(false)
     }
@@ -217,12 +247,17 @@ export default function CheckinPage() {
 
   const distanzaInfo = verificaDistanza()
 
+  // Formatta data in base alla lingua
+  const formatDate = (date, options) => {
+    return new Date(date).toLocaleDateString(language === 'it' ? 'it-IT' : 'en-GB', options)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500">Caricamento...</p>
+          <p className="text-gray-500">{t('loading')}</p>
         </div>
       </div>
     )
@@ -233,10 +268,10 @@ export default function CheckinPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl lg:text-3xl font-bold text-gray-800 flex items-center gap-2">
-          📍 Check-in / Check-out
+          📍 {t('checkinCheckout')}
         </h1>
         <p className="text-gray-500 mt-1">
-          {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
       </div>
 
@@ -261,23 +296,23 @@ export default function CheckinPage() {
               <div className="text-center sm:text-left flex-1">
                 <h2 className="text-xl font-bold text-gray-800">
                   {!presenza 
-                    ? 'Pronto per iniziare?' 
+                    ? t('readyToStart')
                     : presenza.ora_uscita 
-                      ? 'Giornata completata!'
-                      : 'Sei al lavoro'}
+                      ? t('dayCompleted')
+                      : t('atWork')}
                 </h2>
                 <p className="text-gray-600 mt-1">
                   {!presenza 
-                    ? 'Registra la tua entrata per iniziare'
+                    ? t('registerEntryToStart')
                     : presenza.ora_uscita 
-                      ? `Hai lavorato ${presenza.ore_lavorate || '-'} ore`
-                      : `Entrata alle ${presenza.ora_entrata}`}
+                      ? `${t('youWorked')} ${presenza.ore_lavorate || '-'} ${t('hours')}`
+                      : `${t('entryAt')} ${presenza.ora_entrata}`}
                 </p>
                 {presenza && !presenza.ora_uscita && (
                   <div className="mt-3">
                     <span className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
                       <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
-                      In corso da {presenza.ora_entrata}
+                      {t('inProgressSince')} {presenza.ora_entrata}
                     </span>
                   </div>
                 )}
@@ -287,12 +322,12 @@ export default function CheckinPage() {
               {presenza && (
                 <div className="hidden sm:flex gap-4 text-center">
                   <div className="bg-white/80 rounded-xl px-4 py-2">
-                    <p className="text-xs text-gray-500 uppercase">Entrata</p>
+                    <p className="text-xs text-gray-500 uppercase">{t('entry')}</p>
                     <p className="text-lg font-bold text-green-600">{presenza.ora_entrata}</p>
                   </div>
                   {presenza.ora_uscita && (
                     <div className="bg-white/80 rounded-xl px-4 py-2">
-                      <p className="text-xs text-gray-500 uppercase">Uscita</p>
+                      <p className="text-xs text-gray-500 uppercase">{t('exit')}</p>
                       <p className="text-lg font-bold text-red-600">{presenza.ora_uscita}</p>
                     </div>
                   )}
@@ -305,33 +340,85 @@ export default function CheckinPage() {
           {presenza?.ora_uscita ? (
             <div className="bg-white rounded-2xl p-6 border shadow-sm">
               <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                📋 Riepilogo Giornata
+                📋 {t('daySummary')}
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="bg-gray-50 rounded-xl p-4 text-center">
                   <p className="text-2xl font-bold text-gray-800">{presenza.ora_entrata}</p>
-                  <p className="text-xs text-gray-500 uppercase mt-1">Entrata</p>
+                  <p className="text-xs text-gray-500 uppercase mt-1">{t('entry')}</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 text-center">
                   <p className="text-2xl font-bold text-gray-800">{presenza.ora_uscita}</p>
-                  <p className="text-xs text-gray-500 uppercase mt-1">Uscita</p>
+                  <p className="text-xs text-gray-500 uppercase mt-1">{t('exit')}</p>
                 </div>
                 <div className="bg-blue-50 rounded-xl p-4 text-center">
                   <p className="text-2xl font-bold text-blue-600">{presenza.ore_lavorate}h</p>
-                  <p className="text-xs text-gray-500 uppercase mt-1">Totale</p>
+                  <p className="text-xs text-gray-500 uppercase mt-1">{t('total')}</p>
                 </div>
                 <div className="bg-green-50 rounded-xl p-4 text-center">
                   <p className="text-2xl">✅</p>
-                  <p className="text-xs text-gray-500 uppercase mt-1">Completato</p>
+                  <p className="text-xs text-gray-500 uppercase mt-1">{t('completed')}</p>
                 </div>
               </div>
             </div>
           ) : (
             <>
+              {/* ============ SELEZIONE AREA DI LAVORO ============ */}
+              <div className="bg-white rounded-2xl p-6 border shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  📍 {t('selectWorkArea')}
+                </h3>
+                
+                {aree.length === 0 ? (
+                  <div className="text-center py-6 text-gray-400">
+                    <p className="text-4xl mb-2">📍</p>
+                    <p>{t('noAreasConfigured')}</p>
+                    <p className="text-sm">{t('contactAdminForAreas')}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {aree.map(area => (
+                      <button
+                        key={area.id}
+                        onClick={() => setSelectedAreaId(area.id)}
+                        disabled={presenza}
+                        className={`p-4 rounded-xl border-2 transition-all text-left ${
+                          selectedAreaId === area.id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-blue-200 hover:bg-blue-50/50'
+                        } ${presenza ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="w-4 h-4 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: area.colore || '#3B82F6' }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-800 truncate">{area.nome}</p>
+                            {area.descrizione && (
+                              <p className="text-xs text-gray-500 truncate">{area.descrizione}</p>
+                            )}
+                          </div>
+                          {selectedAreaId === area.id && (
+                            <span className="text-blue-600 text-xl">✓</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                {!selectedAreaId && aree.length > 0 && (
+                  <p className="mt-3 text-sm text-amber-600 flex items-center gap-2">
+                    ⚠️ {t('pleaseSelectArea')}
+                  </p>
+                )}
+              </div>
+
               {/* Modalità Check-in */}
               <div className="bg-white rounded-2xl p-6 border shadow-sm">
                 <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  🎯 Modalità Check-in
+                  🎯 {t('checkinMode')}
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <button
@@ -344,7 +431,7 @@ export default function CheckinPage() {
                   >
                     <div className="text-3xl mb-2">📍</div>
                     <p className="font-medium">GPS</p>
-                    <p className="text-xs text-gray-500 mt-1">Posizione automatica</p>
+                    <p className="text-xs text-gray-500 mt-1">{t('automaticPosition')}</p>
                   </button>
                   <button
                     onClick={() => setModalita('qr')}
@@ -356,7 +443,7 @@ export default function CheckinPage() {
                   >
                     <div className="text-3xl mb-2">📱</div>
                     <p className="font-medium">QR Code</p>
-                    <p className="text-xs text-gray-500 mt-1">Scansiona codice</p>
+                    <p className="text-xs text-gray-500 mt-1">{t('scanCode')}</p>
                   </button>
                 </div>
               </div>
@@ -365,7 +452,7 @@ export default function CheckinPage() {
               {modalita === 'gps' && (
                 <div className="bg-white rounded-2xl p-6 border shadow-sm">
                   <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    🛰️ Posizione GPS
+                    🛰️ {t('gpsPosition')}
                   </h3>
                   
                   {posizione ? (
@@ -373,14 +460,14 @@ export default function CheckinPage() {
                       <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl">
                         <span className="text-2xl">✅</span>
                         <div>
-                          <p className="font-medium text-green-700">Posizione acquisita</p>
+                          <p className="font-medium text-green-700">{t('positionAcquired')}</p>
                           <p className="text-sm text-green-600">
-                            Precisione: ±{Math.round(posizione.accuracy)}m
+                            {t('accuracy')}: ±{Math.round(posizione.accuracy)}m
                           </p>
                         </div>
                       </div>
                       
-                      {distanzaInfo && (
+                      {distanzaInfo && selectedArea && (
                         <div className={`flex items-center gap-3 p-4 rounded-xl ${
                           distanzaInfo.dentroArea 
                             ? 'bg-green-50' 
@@ -394,14 +481,14 @@ export default function CheckinPage() {
                               distanzaInfo.dentroArea ? 'text-green-700' : 'text-amber-700'
                             }`}>
                               {distanzaInfo.dentroArea 
-                                ? 'Dentro l\'area di lavoro' 
-                                : 'Fuori dall\'area di lavoro'}
+                                ? t('insideWorkArea')
+                                : t('outsideWorkArea')}
                             </p>
                             <p className={`text-sm ${
                               distanzaInfo.dentroArea ? 'text-green-600' : 'text-amber-600'
                             }`}>
-                              Distanza: {distanzaInfo.distanza}m 
-                              {areaLavoro && ` (raggio: ${areaLavoro.raggio || 100}m)`}
+                              {t('distance')}: {distanzaInfo.distanza}m 
+                              {` (${t('radius')}: ${selectedArea.raggio_metri || 100}m)`}
                             </p>
                           </div>
                         </div>
@@ -411,7 +498,7 @@ export default function CheckinPage() {
                         onClick={ottieniPosizione}
                         className="w-full py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
                       >
-                        🔄 Aggiorna posizione
+                        🔄 {t('refreshPosition')}
                       </button>
                     </div>
                   ) : (
@@ -425,7 +512,7 @@ export default function CheckinPage() {
                         onClick={ottieniPosizione}
                         className="w-full py-4 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                       >
-                        📍 Ottieni posizione
+                        📍 {t('getPosition')}
                       </button>
                     </div>
                   )}
@@ -436,21 +523,21 @@ export default function CheckinPage() {
               {modalita === 'qr' && (
                 <div className="bg-white rounded-2xl p-6 border shadow-sm">
                   <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    📱 Scansione QR Code
+                    📱 {t('qrCodeScan')}
                   </h3>
                   <div className="space-y-4">
                     <p className="text-gray-500 text-sm">
-                      Inserisci il codice manualmente o scansiona il QR
+                      {t('enterCodeManually')}
                     </p>
                     <input
                       type="text"
                       value={qrCode}
                       onChange={(e) => setQrCode(e.target.value)}
-                      placeholder="Inserisci codice..."
+                      placeholder={t('enterCode')}
                       className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                     <button className="w-full py-4 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
-                      📷 Apri fotocamera
+                      📷 {t('openCamera')}
                     </button>
                   </div>
                 </div>
@@ -459,12 +546,12 @@ export default function CheckinPage() {
               {/* Note */}
               <div className="bg-white rounded-2xl p-6 border shadow-sm">
                 <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  📝 Note
+                  📝 {t('notes')}
                 </h3>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Note opzionali..."
+                  placeholder={t('optionalNotes')}
                   rows={3}
                   className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                 />
@@ -473,7 +560,7 @@ export default function CheckinPage() {
               {/* Pulsante Azione Principale */}
               <button
                 onClick={presenza ? registraUscita : registraEntrata}
-                disabled={submitting || (modalita === 'gps' && !posizione)}
+                disabled={submitting || (modalita === 'gps' && !posizione) || (!presenza && !selectedAreaId)}
                 className={`w-full py-5 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${
                   presenza
                     ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl'
@@ -483,15 +570,15 @@ export default function CheckinPage() {
                 {submitting ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Registrazione...
+                    {t('registering')}
                   </>
                 ) : presenza ? (
                   <>
-                    🚪 Registra Uscita
+                    🚪 {t('registerExit')}
                   </>
                 ) : (
                   <>
-                    ✅ Registra Entrata
+                    ✅ {t('registerEntry')}
                   </>
                 )}
               </button>
@@ -506,7 +593,7 @@ export default function CheckinPage() {
           {meteo && (
             <div className="bg-gradient-to-br from-sky-50 to-blue-50 rounded-2xl p-6 border border-sky-200">
               <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                🌤️ Meteo Attuale
+                🌤️ {t('currentWeather')}
               </h3>
               <div className="flex items-center gap-4">
                 <img 
@@ -521,31 +608,37 @@ export default function CheckinPage() {
               </div>
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div className="bg-white/60 rounded-lg p-3 text-center">
-                  <p className="text-xs text-gray-500">Umidità</p>
+                  <p className="text-xs text-gray-500">{t('humidity')}</p>
                   <p className="font-semibold">{meteo.umidita}%</p>
                 </div>
                 <div className="bg-white/60 rounded-lg p-3 text-center">
-                  <p className="text-xs text-gray-500">Vento</p>
+                  <p className="text-xs text-gray-500">{t('wind')}</p>
                   <p className="font-semibold">{meteo.vento} km/h</p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Card Area Lavoro */}
-          {areaLavoro && (
+          {/* Card Area Selezionata */}
+          {selectedArea && (
             <div className="bg-white rounded-2xl p-6 border shadow-sm">
               <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                🏗️ Area di Lavoro
+                🏗️ {t('selectedArea')}
               </h3>
               <div className="space-y-2">
-                <p className="font-medium text-gray-800">{areaLavoro.nome}</p>
-                {areaLavoro.descrizione && (
-                  <p className="text-sm text-gray-500">{areaLavoro.descrizione}</p>
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="w-4 h-4 rounded-full" 
+                    style={{ backgroundColor: selectedArea.colore || '#3B82F6' }}
+                  />
+                  <p className="font-medium text-gray-800">{selectedArea.nome}</p>
+                </div>
+                {selectedArea.descrizione && (
+                  <p className="text-sm text-gray-500">{selectedArea.descrizione}</p>
                 )}
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <span>📍</span>
-                  <span>Raggio: {areaLavoro.raggio || 100}m</span>
+                  <span>{t('radius')}: {selectedArea.raggio_metri || 100}m</span>
                 </div>
               </div>
             </div>
@@ -558,7 +651,7 @@ export default function CheckinPage() {
               className="w-full flex items-center justify-between"
             >
               <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                📅 Storico Recente
+                📅 {t('recentHistory')}
               </h3>
               <span className={`transition-transform ${showStorico ? 'rotate-180' : ''}`}>
                 ▼
@@ -569,7 +662,7 @@ export default function CheckinPage() {
               <div className="mt-4 space-y-3">
                 {storicoPresenze.length === 0 ? (
                   <p className="text-gray-500 text-sm text-center py-4">
-                    Nessuna presenza registrata
+                    {t('noAttendanceRecorded')}
                   </p>
                 ) : (
                   storicoPresenze.slice(0, 7).map((p) => (
@@ -581,14 +674,11 @@ export default function CheckinPage() {
                     >
                       <div>
                         <p className="font-medium text-sm">
-                          {new Date(p.data).toLocaleDateString('it-IT', { 
-                            weekday: 'short', 
-                            day: 'numeric', 
-                            month: 'short' 
-                          })}
+                          {formatDate(p.data, { weekday: 'short', day: 'numeric', month: 'short' })}
                         </p>
                         <p className="text-xs text-gray-500">
                           {p.ora_entrata} - {p.ora_uscita || '...'}
+                          {p.area?.nome && <span className="ml-1 text-blue-600">• {p.area.nome}</span>}
                         </p>
                       </div>
                       <div className="text-right">
@@ -598,7 +688,7 @@ export default function CheckinPage() {
                           </span>
                         ) : (
                           <span className="text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded">
-                            In corso
+                            {t('inProgress')}
                           </span>
                         )}
                       </div>
@@ -612,7 +702,7 @@ export default function CheckinPage() {
           {/* Info Progetto */}
           <div className="bg-gray-50 rounded-2xl p-6">
             <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              📁 Progetto
+              📁 {t('project')}
             </h3>
             <div className="space-y-2">
               <p className="font-medium text-gray-800">{progetto?.nome}</p>

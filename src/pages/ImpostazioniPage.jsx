@@ -221,7 +221,10 @@ function ProgettoTab() {
       project: assegnazione.progetto_id,
       area: area.id,
       type: 'checkin_checkout'
-    }).replace(/"/g, '&quot;')
+    })
+    
+    // Usa API esterna per generare QR (più affidabile)
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}`
     
     const html = `<!DOCTYPE html><html><head><title>QR Code - ${area.nome}</title>
     <style>
@@ -232,29 +235,17 @@ function ProgettoTab() {
       .code{font-family:monospace;font-size:18px;background:#f0f0f0;padding:10px;border-radius:8px;margin-top:15px}
       .project{color:#666;margin-top:10px;font-size:12px}
       .instructions{margin-top:15px;padding:10px;background:#e8f5e9;border-radius:8px;font-size:12px;color:#2e7d32}
-      #qr{display:block;margin:0 auto}
+      .qr-img{display:block;margin:0 auto;width:200px;height:200px}
     </style></head>
     <body>
       <div class="qr-container">
         <div class="title">📍 ${area.nome}</div>
         <div class="subtitle">${area.descrizione || workAreaText}</div>
-        <canvas id="qr"></canvas>
+        <img class="qr-img" src="${qrImageUrl}" alt="QR Code" onload="setTimeout(function(){window.print()},500)"/>
         <div class="code">${qr.codice}</div>
         <div class="instructions">✅ ${scanText}</div>
         <div class="project">${progetto?.nome}</div>
       </div>
-      <script>
-        var script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
-        script.onload = function() {
-          var data = "${qrData}".replace(/&quot;/g, '"');
-          QRCode.toCanvas(document.getElementById('qr'), data, {width:200,margin:2}, function(error) {
-            if (error) console.error(error);
-            setTimeout(function() { window.print(); }, 500);
-          });
-        };
-        document.head.appendChild(script);
-      <\/script>
     </body></html>`
     const win = window.open('', '_blank')
     win.document.write(html)
