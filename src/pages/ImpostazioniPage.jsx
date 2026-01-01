@@ -288,14 +288,29 @@ function ProgettoTab() {
 }
 
 // ==================== TUTTI I PROGETTI TAB (Admin) ====================
+// ==================== TUTTI PROGETTI TAB (AGGIORNATO v2.1) ====================
+// Nuove funzionalità:
+// - Autocomplete indirizzo con OpenStreetMap
+// - Coordinate GPS + Raggio nel form creazione
+// - Crea dati default: flussi, discipline, fasi workflow
 function TuttiProgettiTab() {
   const { persona } = useAuth()
   const [progetti, setProgetti] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '' })
+  const [formData, setFormData] = useState({
+    nome: '', codice: '', indirizzo: '', citta: '',
+    data_inizio: '', data_fine_prevista: '',
+    latitudine: '', longitudine: '', raggio_checkin: 200
+  })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
+  
+  // Autocomplete indirizzo
+  const [addressSuggestions, setAddressSuggestions] = useState([])
+  const [searchingAddress, setSearchingAddress] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [addressTimeout, setAddressTimeout] = useState(null)
 
   useEffect(() => { loadProgetti() }, [])
 
@@ -307,11 +322,61 @@ function TuttiProgettiTab() {
   }
 
   const resetForm = () => {
-    setFormData({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '' })
+    setFormData({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 })
     setShowForm(false)
     setMessage(null)
+    setAddressSuggestions([])
+    setShowSuggestions(false)
   }
 
+  // ========== AUTOCOMPLETE INDIRIZZO (OpenStreetMap Nominatim) ==========
+  const searchAddress = async (query) => {
+    if (query.length < 3) { setAddressSuggestions([]); return }
+    setSearchingAddress(true)
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
+        { headers: { 'Accept-Language': 'it', 'User-Agent': 'PTS-ProjectTrackingSystem/2.0' } }
+      )
+      const data = await response.json()
+      setAddressSuggestions(data.map(item => ({
+        display: item.display_name,
+        indirizzo: [item.address?.road, item.address?.house_number].filter(Boolean).join(' ') || item.display_name.split(',')[0],
+        citta: item.address?.city || item.address?.town || item.address?.village || item.address?.municipality || '',
+        lat: item.lat, lon: item.lon
+      })))
+      setShowSuggestions(true)
+    } catch (err) { console.error('Errore ricerca indirizzo:', err) }
+    setSearchingAddress(false)
+  }
+
+  const handleAddressChange = (value) => {
+    setFormData({ ...formData, indirizzo: value })
+    if (addressTimeout) clearTimeout(addressTimeout)
+    setAddressTimeout(setTimeout(() => searchAddress(value), 500))
+  }
+
+  const selectAddress = (suggestion) => {
+    setFormData({ ...formData, indirizzo: suggestion.indirizzo, citta: suggestion.citta, latitudine: suggestion.lat, longitudine: suggestion.lon })
+    setShowSuggestions(false)
+    setAddressSuggestions([])
+  }
+
+  // ========== GPS CORRENTE ==========
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) { setMessage({ type: 'error', text: 'Geolocalizzazione non supportata' }); return }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setFormData({ ...formData, latitudine: pos.coords.latitude.toFixed(8), longitudine: pos.coords.longitude.toFixed(8) })
+        setMessage({ type: 'success', text: 'Coordinate GPS acquisite!' })
+        setTimeout(() => setMessage(null), 2000)
+      },
+      (err) => setMessage({ type: 'error', text: 'Errore GPS: ' + err.message }),
+      { enableHighAccuracy: true }
+    )
+  }
+
+  // ========== CREAZIONE PROGETTO ==========
   const handleCreate = async () => {
     if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
     setSaving(true)
@@ -319,24 +384,20 @@ function TuttiProgettiTab() {
     try {
       // 1. Crea il progetto
       const { data: newProject, error: errProj } = await supabase.from('progetti').insert({
-        nome: formData.nome,
-        codice: formData.codice || null,
-        indirizzo: formData.indirizzo || null,
-        citta: formData.citta || null,
-        data_inizio: formData.data_inizio || null,
-        data_fine_prevista: formData.data_fine_prevista || null,
+        nome: formData.nome, codice: formData.codice || null,
+        indirizzo: formData.indirizzo || null, citta: formData.citta || null,
+        data_inizio: formData.data_inizio || null, data_fine_prevista: formData.data_fine_prevista || null,
+        latitudine: formData.latitudine ? parseFloat(formData.latitudine) : null,
+        longitudine: formData.longitudine ? parseFloat(formData.longitudine) : null,
+        raggio_checkin: parseInt(formData.raggio_checkin) || 200,
         stato: 'attivo'
       }).select().single()
-      
       if (errProj) throw errProj
 
-      // 2. Auto-assegna l'utente corrente come admin del nuovo progetto
+      // 2. Auto-assegna l'utente corrente come admin
       if (persona?.id && newProject?.id) {
         const { error: errAss } = await supabase.from('assegnazioni_progetto').insert({
-          persona_id: persona.id,
-          progetto_id: newProject.id,
-          ruolo: 'admin',
-          attivo: true
+          persona_id: persona.id, progetto_id: newProject.id, ruolo: 'admin', attivo: true
         })
         if (errAss) console.error('Errore auto-assegnazione:', errAss)
       }
@@ -352,13 +413,40 @@ function TuttiProgettiTab() {
       ]
       await supabase.from('dipartimenti').insert(dipartimentiDefault)
 
-      setMessage({ type: 'success', text: 'Progetto creato! Ora puoi selezionarlo dal menu in alto.' })
+      // 4. Crea flussi approvazione predefiniti
+      const flussiDefault = [
+        { progetto_id: newProject.id, nome: 'Approvazione Ferie', tipo: 'ferie', descrizione: 'Workflow standard per richieste ferie', attivo: true },
+        { progetto_id: newProject.id, nome: 'Approvazione Rapportino', tipo: 'rapportino', descrizione: 'Workflow standard per rapportini', attivo: true },
+        { progetto_id: newProject.id, nome: 'Approvazione Trasferimento', tipo: 'trasferimento', descrizione: 'Workflow standard per trasferimenti', attivo: true }
+      ]
+      await supabase.from('flussi_approvazione').insert(flussiDefault)
+
+      // 5. Crea discipline predefinite
+      const disciplineDefault = [
+        { nome: 'Piping', codice: 'PIP', colore: '#3B82F6', progetto_id: newProject.id },
+        { nome: 'Civil', codice: 'CIV', colore: '#22C55E', progetto_id: newProject.id },
+        { nome: 'Electrical', codice: 'ELE', colore: '#F59E0B', progetto_id: newProject.id },
+        { nome: 'Instrumentation', codice: 'INS', colore: '#8B5CF6', progetto_id: newProject.id },
+        { nome: 'Mechanical', codice: 'MEC', colore: '#EF4444', progetto_id: newProject.id },
+        { nome: 'Structural', codice: 'STR', colore: '#06B6D4', progetto_id: newProject.id }
+      ]
+      await supabase.from('discipline').insert(disciplineDefault)
+
+      // 6. Crea fasi workflow predefinite
+      const fasiDefault = [
+        { nome: 'Da Ordinare', codice: 'ORD', ordine: 1, colore: '#94A3B8', progetto_id: newProject.id },
+        { nome: 'Ordinato', codice: 'ORDT', ordine: 2, colore: '#F59E0B', progetto_id: newProject.id },
+        { nome: 'In Produzione', codice: 'PROD', ordine: 3, colore: '#8B5CF6', progetto_id: newProject.id },
+        { nome: 'In Warehouse', codice: 'WHS', ordine: 4, colore: '#3B82F6', progetto_id: newProject.id },
+        { nome: 'At Site', codice: 'SITE', ordine: 5, colore: '#06B6D4', progetto_id: newProject.id },
+        { nome: 'In Lavorazione', codice: 'WIP', ordine: 6, colore: '#F97316', progetto_id: newProject.id },
+        { nome: 'Completato', codice: 'DONE', ordine: 7, colore: '#22C55E', progetto_id: newProject.id }
+      ]
+      await supabase.from('fasi_workflow').insert(fasiDefault)
+
+      setMessage({ type: 'success', text: '✅ Progetto creato con successo! Ricarico la pagina...' })
       loadProgetti()
-      
-      // Ricarica la pagina dopo 2 secondi per aggiornare il dropdown progetti
-      setTimeout(() => {
-        window.location.reload()
-      }, 2000)
+      setTimeout(() => { window.location.reload() }, 2000)
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
     } finally {
@@ -390,33 +478,84 @@ function TuttiProgettiTab() {
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
           <h3 className="font-semibold text-blue-800 mb-4">➕ Nuovo Progetto</h3>
           <div className="grid gap-4">
+            {/* Nome e Codice */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div><label className="block text-sm font-medium mb-1">Nome *</label>
                 <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Centrale Gas Milano" /></div>
               <div><label className="block text-sm font-medium mb-1">Codice</label>
                 <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="PRJ-MILANO-001" /></div>
             </div>
+            
+            {/* Indirizzo con Autocomplete */}
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Indirizzo</label>
-                <input type="text" value={formData.indirizzo} onChange={(e) => setFormData({...formData, indirizzo: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div className="relative">
+                <label className="block text-sm font-medium mb-1">
+                  Indirizzo {searchingAddress && <span className="ml-2 text-blue-500 text-xs">🔍 Cercando...</span>}
+                </label>
+                <input type="text" value={formData.indirizzo} 
+                  onChange={(e) => handleAddressChange(e.target.value)}
+                  onFocus={() => addressSuggestions.length > 0 && setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                  className="w-full px-4 py-3 border rounded-xl" placeholder="Inizia a digitare l'indirizzo..." />
+                {showSuggestions && addressSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-60 overflow-auto">
+                    {addressSuggestions.map((suggestion, idx) => (
+                      <button key={idx} type="button" onClick={() => selectAddress(suggestion)} className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b last:border-b-0">
+                        <p className="font-medium text-gray-800 truncate">{suggestion.indirizzo}</p>
+                        <p className="text-sm text-gray-500 truncate">{suggestion.citta}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div><label className="block text-sm font-medium mb-1">Città</label>
-                <input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+                <input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl bg-gray-50" placeholder="Auto-compilata" /></div>
             </div>
+            
+            {/* Coordinate GPS */}
+            <div className="p-4 bg-white rounded-xl border">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-medium text-blue-800">📍 Coordinate GPS Centro Cantiere</label>
+                <button type="button" onClick={getCurrentLocation} className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200">📍 Usa GPS Attuale</button>
+              </div>
+              <div className="grid lg:grid-cols-3 gap-4">
+                <div><label className="block text-xs text-gray-500 mb-1">Latitudine</label>
+                  <input type="text" value={formData.latitudine} onChange={(e) => setFormData({...formData, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl bg-gray-50" placeholder="44.80150000" /></div>
+                <div><label className="block text-xs text-gray-500 mb-1">Longitudine</label>
+                  <input type="text" value={formData.longitudine} onChange={(e) => setFormData({...formData, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl bg-gray-50" placeholder="10.32790000" /></div>
+                <div><label className="block text-xs text-gray-500 mb-1">Raggio Check-in (m)</label>
+                  <input type="number" value={formData.raggio_checkin} onChange={(e) => setFormData({...formData, raggio_checkin: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="200" min="50" max="5000" /></div>
+              </div>
+              {formData.latitudine && formData.longitudine && (
+                <p className="mt-2 text-xs text-green-600">✅ I lavoratori potranno fare check-in entro {formData.raggio_checkin}m da questo punto.</p>
+              )}
+            </div>
+            
+            {/* Date */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div><label className="block text-sm font-medium mb-1">Data Inizio</label>
                 <input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               <div><label className="block text-sm font-medium mb-1">Data Fine Prevista</label>
                 <input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
+            
+            {/* Info */}
+            <div className="p-3 bg-green-50 rounded-xl text-sm text-green-700">
+              💡 <strong>Auto-generati:</strong> Dipartimenti, Discipline, Fasi workflow, Flussi approvazione
+            </div>
+            
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
             <div className="flex gap-2">
-              <button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button>
-              <button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? 'Creazione...' : 'Crea Progetto'}</button>
+              <button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl hover:bg-gray-300">Annulla</button>
+              <button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50">
+                {saving ? '⏳ Creazione...' : '✅ Crea Progetto'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Lista progetti */}
       {loading ? (
         <div className="text-center py-8 text-gray-500">Caricamento...</div>
       ) : (
@@ -424,11 +563,9 @@ function TuttiProgettiTab() {
           {progetti.map(prog => (
             <div key={prog.id} className={`p-4 rounded-xl border ${prog.stato === 'attivo' ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
               <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${prog.stato === 'attivo' ? 'bg-green-100' : 'bg-gray-200'}`}>
-                  🏗️
-                </div>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${prog.stato === 'attivo' ? 'bg-green-100' : 'bg-gray-200'}`}>🏗️</div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-gray-800">{prog.nome}</p>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${prog.stato === 'attivo' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
                       {prog.stato === 'attivo' ? '✅ Attivo' : '📦 Completato'}
@@ -436,14 +573,13 @@ function TuttiProgettiTab() {
                   </div>
                   <p className="text-sm text-gray-500">{prog.codice || 'Nessun codice'} • {prog.citta || 'Località non specificata'}</p>
                   {prog.data_inizio && (
-                    <p className="text-xs text-gray-400">
-                      📅 {new Date(prog.data_inizio).toLocaleDateString('it-IT')}
-                      {prog.data_fine_prevista && <> → {new Date(prog.data_fine_prevista).toLocaleDateString('it-IT')}</>}
-                    </p>
+                    <p className="text-xs text-gray-400">📅 {new Date(prog.data_inizio).toLocaleDateString('it-IT')}{prog.data_fine_prevista && <> → {new Date(prog.data_fine_prevista).toLocaleDateString('it-IT')}</>}</p>
+                  )}
+                  {prog.latitudine && prog.longitudine && (
+                    <p className="text-xs text-blue-500">📍 GPS: {parseFloat(prog.latitudine).toFixed(4)}, {parseFloat(prog.longitudine).toFixed(4)} {prog.raggio_checkin && `(${prog.raggio_checkin}m)`}</p>
                   )}
                 </div>
-                <button onClick={() => handleToggleStato(prog)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium ${prog.stato === 'attivo' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
+                <button onClick={() => handleToggleStato(prog)} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${prog.stato === 'attivo' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
                   {prog.stato === 'attivo' ? 'Completa' : 'Riattiva'}
                 </button>
               </div>
