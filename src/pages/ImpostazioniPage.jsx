@@ -1,38 +1,39 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
 import FlussiTab from '../components/FlussiTab'
-import ConstructionTab from '../components/ConstructionTab'  // NUOVO: Import ConstructionTab
+import ConstructionTab from '../components/ConstructionTab'
 
 export default function ImpostazioniPage() {
   const { progetto, isAtLeast } = useAuth()
+  const { t, language } = useI18n()
   const [activeTab, setActiveTab] = useState('progetto')
 
-  // AGGIORNATO v2.2: QR Codes integrato in Progetto & Aree
   const menuItems = [
-    { id: 'progetto', label: 'Progetto & Aree', emoji: '🏗️', minRole: 'admin' },
-    { id: 'persone', label: 'Persone', emoji: '👥', minRole: 'admin' },
-    { id: 'ditte', label: 'Ditte', emoji: '🏢', minRole: 'admin' },
-    { id: 'squadre', label: 'Squadre', emoji: '👷', minRole: 'admin' },
-    { id: 'dipartimenti', label: 'Dipartimenti', emoji: '🏛️', minRole: 'admin' },
-    { id: 'centriCosto', label: 'Centri Costo', emoji: '💰', minRole: 'admin' },
-    { id: 'flussi', label: 'Flussi Approvazione', emoji: '🔄', minRole: 'admin' },
+    { id: 'progetto', label: t('projectAndAreas'), emoji: '🏗️', minRole: 'admin' },
+    { id: 'persone', label: t('people'), emoji: '👥', minRole: 'admin' },
+    { id: 'ditte', label: t('companies'), emoji: '🏢', minRole: 'admin' },
+    { id: 'squadre', label: t('teams'), emoji: '👷', minRole: 'admin' },
+    { id: 'dipartimenti', label: t('departments'), emoji: '🏛️', minRole: 'admin' },
+    { id: 'centriCosto', label: t('costCenters'), emoji: '💰', minRole: 'admin' },
+    { id: 'flussi', label: t('approvalFlows'), emoji: '🔄', minRole: 'admin' },
     { id: 'construction', label: 'Construction', emoji: '🔧', minRole: 'admin' },
-    { id: 'progetti', label: 'Tutti i Progetti', emoji: '📋', minRole: 'admin' },
-    { id: 'datiTest', label: 'Dati Test', emoji: '🧪', minRole: 'admin' },
+    { id: 'progetti', label: t('allProjectsTab'), emoji: '📋', minRole: 'admin' },
+    { id: 'datiTest', label: t('testData'), emoji: '🧪', minRole: 'admin' },
   ].filter(item => isAtLeast(item.minRole))
 
   return (
     <div className="p-4 lg:p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">⚙️ Impostazioni</h1>
+        <h1 className="text-2xl font-bold text-gray-800">⚙️ {t('settingsTitle')}</h1>
         <p className="text-gray-500">{progetto?.nome}</p>
       </div>
 
       <div className="grid lg:grid-cols-4 gap-6">
         <div className="hidden lg:block">
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden sticky top-4">
-            <div className="p-4 border-b"><h3 className="font-semibold text-gray-700">Menu</h3></div>
+            <div className="p-4 border-b"><h3 className="font-semibold text-gray-700">{t('menu')}</h3></div>
             <nav className="p-2">
               {menuItems.map(item => (
                 <button key={item.id} onClick={() => setActiveTab(item.id)}
@@ -73,15 +74,13 @@ export default function ImpostazioniPage() {
 }
 
 // ==================== PROGETTO + AREE LAVORO + QR CODES TAB ====================
-// AGGIORNATO v2.2: QR Codes integrati nelle Aree di Lavoro
-// Flusso: Crea Area → Genera QR dall'area → Stampa QR → Usa per Check-in/out
 function ProgettoTab() {
   const { progetto, assegnazione } = useAuth()
+  const { t, language } = useI18n()
   const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   
-  // Aree Lavoro + QR Codes
   const [aree, setAree] = useState([])
   const [qrCodes, setQrCodes] = useState({})
   const [loadingAree, setLoadingAree] = useState(true)
@@ -133,7 +132,7 @@ function ProgettoTab() {
         raggio_checkin: parseInt(formData.raggio_checkin) || 200
       }).eq('id', progetto.id)
       if (error) throw error
-      setMessage({ type: 'success', text: 'Progetto aggiornato!' })
+      setMessage({ type: 'success', text: t('projectUpdated') })
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
@@ -141,11 +140,10 @@ function ProgettoTab() {
   const getCurrentLocation = () => {
     navigator.geolocation.getCurrentPosition(
       (pos) => setFormData({...formData, latitudine: pos.coords.latitude.toFixed(8), longitudine: pos.coords.longitude.toFixed(8)}),
-      () => setMessage({ type: 'error', text: 'Errore GPS' })
+      () => setMessage({ type: 'error', text: t('gpsError') })
     )
   }
 
-  // ========== AREA FUNCTIONS ==========
   const resetAreaForm = () => { setAreaForm({ nome: '', descrizione: '', latitudine: '', longitudine: '', raggio_metri: 100, colore: '#3B82F6' }); setEditingArea(null); setShowAreaForm(false); setAreaMessage(null) }
 
   const handleEditArea = (area) => {
@@ -154,20 +152,20 @@ function ProgettoTab() {
   }
 
   const handleSaveArea = async () => {
-    if (!areaForm.nome || !areaForm.latitudine || !areaForm.longitudine) { setAreaMessage({ type: 'error', text: 'Compila nome e coordinate' }); return }
+    if (!areaForm.nome || !areaForm.latitudine || !areaForm.longitudine) { setAreaMessage({ type: 'error', text: t('fillNameAndCoords') }); return }
     setSavingArea(true); setAreaMessage(null)
     try {
       const payload = { progetto_id: assegnazione.progetto_id, nome: areaForm.nome, descrizione: areaForm.descrizione || null, latitudine: parseFloat(areaForm.latitudine), longitudine: parseFloat(areaForm.longitudine), raggio_metri: parseInt(areaForm.raggio_metri), colore: areaForm.colore }
       if (editingArea) { await supabase.from('aree_lavoro').update(payload).eq('id', editingArea.id) }
       else { await supabase.from('aree_lavoro').insert(payload) }
-      setAreaMessage({ type: 'success', text: editingArea ? 'Area aggiornata!' : 'Area creata!' })
+      setAreaMessage({ type: 'success', text: editingArea ? t('areaUpdated') : t('areaCreated') })
       loadAree(); setTimeout(resetAreaForm, 1000)
     } catch (err) { setAreaMessage({ type: 'error', text: err.message }) }
     finally { setSavingArea(false) }
   }
 
   const handleDeleteArea = async (id) => { 
-    if (!confirm('Eliminare questa area? Verrà eliminato anche il QR Code associato.')) return
+    if (!confirm(t('deleteAreaConfirm'))) return
     await supabase.from('qr_codes').delete().eq('area_lavoro_id', id)
     await supabase.from('aree_lavoro').delete().eq('id', id)
     loadAree(); loadQrCodes()
@@ -176,11 +174,10 @@ function ProgettoTab() {
   const getAreaLocation = () => {
     navigator.geolocation.getCurrentPosition(
       (pos) => setAreaForm({...areaForm, latitudine: pos.coords.latitude.toFixed(8), longitudine: pos.coords.longitude.toFixed(8)}),
-      () => setAreaMessage({ type: 'error', text: 'Errore GPS' })
+      () => setAreaMessage({ type: 'error', text: t('gpsError') })
     )
   }
 
-  // ========== QR CODE FUNCTIONS ==========
   const generateQrCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
     let code = 'QR-'
@@ -195,12 +192,12 @@ function ProgettoTab() {
         area_lavoro_id: area.id,
         codice: generateQrCode(),
         nome: area.nome,
-        descrizione: `QR Check-in/out per ${area.nome}`,
+        descrizione: `QR Check-in/out - ${area.nome}`,
         attivo: true
       })
       if (error) throw error
       loadQrCodes()
-      setAreaMessage({ type: 'success', text: `QR Code generato per ${area.nome}!` })
+      setAreaMessage({ type: 'success', text: t('qrGenerated', { area: area.nome }) })
       setTimeout(() => setAreaMessage(null), 2000)
     } catch (err) { setAreaMessage({ type: 'error', text: err.message }) }
   }
@@ -211,12 +208,14 @@ function ProgettoTab() {
   }
 
   const handleDeleteQR = async (qr) => {
-    if (!confirm('Eliminare questo QR Code?')) return
+    if (!confirm(t('deleteQRConfirm'))) return
     await supabase.from('qr_codes').delete().eq('id', qr.id)
     loadQrCodes()
   }
 
   const printQR = (area, qr) => {
+    const scanText = t('scanForCheckin')
+    const workAreaText = t('workArea')
     const qrData = JSON.stringify({
       code: qr.codice,
       project: assegnazione.progetto_id,
@@ -238,10 +237,10 @@ function ProgettoTab() {
     <body>
       <div class="qr-container">
         <div class="title">📍 ${area.nome}</div>
-        <div class="subtitle">${area.descrizione || 'Area di lavoro'}</div>
+        <div class="subtitle">${area.descrizione || workAreaText}</div>
         <canvas id="qr"></canvas>
         <div class="code">${qr.codice}</div>
-        <div class="instructions">✅ Scansiona per Check-in / Check-out</div>
+        <div class="instructions">✅ ${scanText}</div>
         <div class="project">${progetto?.nome}</div>
       </div>
       <script>
@@ -264,95 +263,91 @@ function ProgettoTab() {
 
   return (
     <div className="space-y-6">
-      {/* Dettagli Progetto */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
-        <h2 className="text-xl font-bold text-gray-800 mb-6">🏗️ Dettagli Progetto</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-6">🏗️ {t('projectDetails')}</h2>
         <div className="space-y-4">
           <div className="grid lg:grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">{t('name')} *</label>
               <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Codice Commessa</label>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">{t('projectCode')}</label>
               <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Indirizzo</label>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">{t('address')}</label>
               <input type="text" value={formData.indirizzo} onChange={(e) => setFormData({...formData, indirizzo: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Città</label>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">{t('city')}</label>
               <input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Data Inizio</label>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">{t('startDate')}</label>
               <input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Data Fine Prevista</label>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">{t('endDate')}</label>
               <input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
           </div>
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-blue-800">📍 Coordinate GPS Centro Cantiere</h3>
-              <button onClick={getCurrentLocation} className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200">📍 Usa GPS</button>
+              <h3 className="font-semibold text-blue-800">📍 {t('gpsCoordinates')}</h3>
+              <button onClick={getCurrentLocation} className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200">📍 {t('useGPS')}</button>
             </div>
             <div className="grid lg:grid-cols-4 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Latitudine</label>
+              <div><label className="block text-sm font-medium mb-1">{t('latitude')}</label>
                 <input type="text" value={formData.latitudine} onChange={(e) => setFormData({...formData, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="44.80150000" /></div>
-              <div><label className="block text-sm font-medium mb-1">Longitudine</label>
+              <div><label className="block text-sm font-medium mb-1">{t('longitude')}</label>
                 <input type="text" value={formData.longitudine} onChange={(e) => setFormData({...formData, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="10.32790000" /></div>
-              <div><label className="block text-sm font-medium mb-1">Raggio Check-in (m)</label>
+              <div><label className="block text-sm font-medium mb-1">{t('checkinRadius')}</label>
                 <input type="number" value={formData.raggio_checkin} onChange={(e) => setFormData({...formData, raggio_checkin: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="200" min="50" max="5000" /></div>
             </div>
             {formData.latitudine && formData.longitudine && (
-              <p className="mt-2 text-xs text-green-600">✅ I lavoratori potranno fare check-in entro {formData.raggio_checkin}m da questo punto.</p>
+              <p className="mt-2 text-xs text-green-600">✅ {t('workersCanCheckin', { radius: formData.raggio_checkin })}</p>
             )}
           </div>
           {message && <div className={`p-4 rounded-xl ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{message.text}</div>}
           <button onClick={handleSave} disabled={saving} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:bg-blue-300">
-            {saving ? 'Salvataggio...' : '💾 Salva Progetto'}
+            {saving ? t('saving') : `💾 ${t('saveProject')}`}
           </button>
         </div>
       </div>
 
-      {/* Aree di Lavoro + QR Codes */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-800">📍 Aree di Lavoro & QR Codes</h2>
-            <p className="text-sm text-gray-500">Crea aree e genera QR codes per check-in/out</p>
+            <h2 className="text-xl font-bold text-gray-800">📍 {t('workAreasAndQR')}</h2>
+            <p className="text-sm text-gray-500">{t('createAreasForQR')}</p>
           </div>
           {!showAreaForm && (
             <button onClick={() => setShowAreaForm(true)} className="px-4 py-2 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700">
-              + Nuova Area
+              + {t('newArea')}
             </button>
           )}
         </div>
 
         <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 mb-4">
-          <p className="text-sm text-blue-700">
-            💡 <strong>Flusso:</strong> Crea un'area di lavoro → Genera il QR Code → Stampa e posiziona il QR → I lavoratori scansionano per check-in/out
-          </p>
+          <p className="text-sm text-blue-700">💡 <strong>{language === 'it' ? 'Flusso' : 'Flow'}:</strong> {t('workAreaFlow')}</p>
         </div>
 
         {showAreaForm && (
           <div className="p-4 bg-green-50 rounded-xl border border-green-200 mb-6">
-            <h3 className="font-semibold text-green-800 mb-4">{editingArea ? '✏️ Modifica Area' : '➕ Nuova Area'}</h3>
+            <h3 className="font-semibold text-green-800 mb-4">{editingArea ? `✏️ ${t('editArea')}` : `➕ ${t('newArea')}`}</h3>
             <div className="grid gap-4">
               <div className="grid lg:grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium mb-1">Nome Area *</label>
-                  <input type="text" value={areaForm.nome} onChange={(e) => setAreaForm({...areaForm, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Ingresso Cantiere" /></div>
-                <div><label className="block text-sm font-medium mb-1">Descrizione</label>
+                <div><label className="block text-sm font-medium mb-1">{t('areaName')} *</label>
+                  <input type="text" value={areaForm.nome} onChange={(e) => setAreaForm({...areaForm, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder={t('exampleAreaName')} /></div>
+                <div><label className="block text-sm font-medium mb-1">{t('description')}</label>
                   <input type="text" value={areaForm.descrizione} onChange={(e) => setAreaForm({...areaForm, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               </div>
               <div className="grid lg:grid-cols-4 gap-4">
-                <div><label className="block text-sm font-medium mb-1">Latitudine *</label>
+                <div><label className="block text-sm font-medium mb-1">{t('latitude')} *</label>
                   <input type="text" value={areaForm.latitudine} onChange={(e) => setAreaForm({...areaForm, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-                <div><label className="block text-sm font-medium mb-1">Longitudine *</label>
+                <div><label className="block text-sm font-medium mb-1">{t('longitude')} *</label>
                   <input type="text" value={areaForm.longitudine} onChange={(e) => setAreaForm({...areaForm, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-                <div><label className="block text-sm font-medium mb-1">Raggio (m)</label>
+                <div><label className="block text-sm font-medium mb-1">{t('radiusMeters')}</label>
                   <input type="number" value={areaForm.raggio_metri} onChange={(e) => setAreaForm({...areaForm, raggio_metri: e.target.value})} className="w-full px-4 py-3 border rounded-xl" min="10" max="500" /></div>
                 <div className="flex items-end">
                   <button onClick={getAreaLocation} className="w-full px-4 py-3 bg-green-100 text-green-700 rounded-xl font-medium hover:bg-green-200">📍 GPS</button>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Colore</label>
+                <label className="block text-sm font-medium mb-2">{t('color')}</label>
                 <div className="flex gap-2">
                   {colori.map(c => (
                     <button key={c} onClick={() => setAreaForm({...areaForm, colore: c})}
@@ -363,8 +358,8 @@ function ProgettoTab() {
               </div>
               {areaMessage && <div className={`p-3 rounded-xl ${areaMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{areaMessage.text}</div>}
               <div className="flex gap-2">
-                <button onClick={resetAreaForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button>
-                <button onClick={handleSaveArea} disabled={savingArea} className="px-4 py-2 bg-green-600 text-white rounded-xl">{savingArea ? 'Salvataggio...' : 'Salva Area'}</button>
+                <button onClick={resetAreaForm} className="px-4 py-2 bg-gray-200 rounded-xl">{t('cancel')}</button>
+                <button onClick={handleSaveArea} disabled={savingArea} className="px-4 py-2 bg-green-600 text-white rounded-xl">{savingArea ? t('saving') : t('saveArea')}</button>
               </div>
             </div>
           </div>
@@ -373,12 +368,12 @@ function ProgettoTab() {
         {areaMessage && !showAreaForm && <div className={`p-3 rounded-xl mb-4 ${areaMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{areaMessage.text}</div>}
 
         {loadingAree ? (
-          <div className="text-center py-8 text-gray-500">Caricamento...</div>
+          <div className="text-center py-8 text-gray-500">{t('loading')}</div>
         ) : aree.length === 0 ? (
           <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
             <p className="text-4xl mb-2">📍</p>
-            <p>Nessuna area definita</p>
-            <p className="text-sm">Crea aree per validare i check-in GPS e generare QR codes</p>
+            <p>{t('noAreas')}</p>
+            <p className="text-sm">{t('createAreasForGPS')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -393,30 +388,30 @@ function ProgettoTab() {
                         <p className="font-medium text-gray-800">{area.nome}</p>
                         {qr && (
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${qr.attivo ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>
-                            📱 QR {qr.attivo ? 'Attivo' : 'Disattivo'}
+                            📱 {qr.attivo ? t('qrActive') : t('qrInactive')}
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500">{area.latitudine?.toFixed(6)}, {area.longitudine?.toFixed(6)} • Raggio: {area.raggio_metri}m</p>
+                      <p className="text-sm text-gray-500">{area.latitudine?.toFixed(6)}, {area.longitudine?.toFixed(6)} • {t('radiusMeters').replace(' (m)', '')}: {area.raggio_metri}m</p>
                       {area.descrizione && <p className="text-xs text-gray-400">{area.descrizione}</p>}
-                      {qr && <p className="text-xs font-mono text-purple-600 mt-1">Codice: {qr.codice}</p>}
+                      {qr && <p className="text-xs font-mono text-purple-600 mt-1">{t('code')}: {qr.codice}</p>}
                     </div>
                     <div className="flex gap-1 flex-wrap">
                       {!qr ? (
-                        <button onClick={() => handleGenerateQR(area)} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200" title="Genera QR Code">
-                          📱 Genera QR
+                        <button onClick={() => handleGenerateQR(area)} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200" title={t('generateQR')}>
+                          📱 {t('generateQR')}
                         </button>
                       ) : (
                         <>
-                          <button onClick={() => printQR(area, qr)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg" title="Stampa QR">🖨️</button>
-                          <button onClick={() => handleToggleQR(qr)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title={qr.attivo ? 'Disattiva' : 'Attiva'}>
+                          <button onClick={() => printQR(area, qr)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg" title={t('printQR')}>🖨️</button>
+                          <button onClick={() => handleToggleQR(qr)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title={qr.attivo ? t('deactivateQR') : t('activateQR')}>
                             {qr.attivo ? '⏸️' : '▶️'}
                           </button>
-                          <button onClick={() => handleDeleteQR(qr)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Elimina QR">🗑️</button>
+                          <button onClick={() => handleDeleteQR(qr)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title={t('delete')}>🗑️</button>
                         </>
                       )}
-                      <button onClick={() => handleEditArea(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Modifica Area">✏️</button>
-                      <button onClick={() => handleDeleteArea(area.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Elimina Area">🗑️</button>
+                      <button onClick={() => handleEditArea(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title={t('edit')}>✏️</button>
+                      <button onClick={() => handleDeleteArea(area.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title={t('delete')}>🗑️</button>
                     </div>
                   </div>
                 </div>
@@ -429,328 +424,127 @@ function ProgettoTab() {
   )
 }
 
-// ==================== TUTTI I PROGETTI TAB (Admin) ====================
-// ==================== TUTTI PROGETTI TAB (AGGIORNATO v2.1) ====================
-// Nuove funzionalità:
-// - Autocomplete indirizzo con OpenStreetMap
-// - Coordinate GPS + Raggio nel form creazione
-// - Crea dati default: flussi, discipline, fasi workflow
-// - Auto-assegnazione admin al nuovo progetto
+// ==================== TUTTI PROGETTI TAB ====================
 function TuttiProgettiTab() {
   const { persona } = useAuth()
+  const { t } = useI18n()
   const [progetti, setProgetti] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({
-    nome: '', codice: '', indirizzo: '', citta: '',
-    data_inizio: '', data_fine_prevista: '',
-    latitudine: '', longitudine: '', raggio_checkin: 200
-  })
+  const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
-  
-  // Autocomplete indirizzo
   const [addressSuggestions, setAddressSuggestions] = useState([])
-  const [searchingAddress, setSearchingAddress] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [addressTimeout, setAddressTimeout] = useState(null)
 
   useEffect(() => { loadProgetti() }, [])
 
-  const loadProgetti = async () => {
-    setLoading(true)
-    const { data } = await supabase.from('progetti').select('*').order('created_at', { ascending: false })
-    setProgetti(data || [])
-    setLoading(false)
-  }
+  const loadProgetti = async () => { setLoading(true); const { data } = await supabase.from('progetti').select('*').order('created_at', { ascending: false }); setProgetti(data || []); setLoading(false) }
 
-  const resetForm = () => {
-    setFormData({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 })
-    setShowForm(false)
-    setMessage(null)
-    setAddressSuggestions([])
-    setShowSuggestions(false)
-  }
-
-  // ========== AUTOCOMPLETE INDIRIZZO (OpenStreetMap Nominatim) ==========
   const searchAddress = async (query) => {
     if (query.length < 3) { setAddressSuggestions([]); return }
-    setSearchingAddress(true)
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
-        { headers: { 'Accept-Language': 'it', 'User-Agent': 'PTS-ProjectTrackingSystem/2.0' } }
-      )
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`, { headers: { 'User-Agent': 'PTS/2.0' } })
       const data = await response.json()
-      setAddressSuggestions(data.map(item => ({
-        display: item.display_name,
-        indirizzo: [item.address?.road, item.address?.house_number].filter(Boolean).join(' ') || item.display_name.split(',')[0],
-        citta: item.address?.city || item.address?.town || item.address?.village || item.address?.municipality || '',
-        lat: item.lat, lon: item.lon
-      })))
+      setAddressSuggestions(data.map(item => ({ indirizzo: item.display_name.split(',').slice(0, 3).join(','), citta: item.address?.city || item.address?.town || item.address?.village || '', lat: item.lat, lon: item.lon })))
       setShowSuggestions(true)
-    } catch (err) { console.error('Errore ricerca indirizzo:', err) }
-    setSearchingAddress(false)
-  }
-
-  const handleAddressChange = (value) => {
-    setFormData({ ...formData, indirizzo: value })
-    if (addressTimeout) clearTimeout(addressTimeout)
-    setAddressTimeout(setTimeout(() => searchAddress(value), 500))
+    } catch { setAddressSuggestions([]) }
   }
 
   const selectAddress = (suggestion) => {
     setFormData({ ...formData, indirizzo: suggestion.indirizzo, citta: suggestion.citta, latitudine: suggestion.lat, longitudine: suggestion.lon })
-    setShowSuggestions(false)
-    setAddressSuggestions([])
+    setShowSuggestions(false); setAddressSuggestions([])
   }
 
-  // ========== GPS CORRENTE ==========
   const getCurrentLocation = () => {
-    if (!navigator.geolocation) { setMessage({ type: 'error', text: 'Geolocalizzazione non supportata' }); return }
+    if (!navigator.geolocation) { setMessage({ type: 'error', text: t('geolocationNotSupported') }); return }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setFormData({ ...formData, latitudine: pos.coords.latitude.toFixed(8), longitudine: pos.coords.longitude.toFixed(8) })
-        setMessage({ type: 'success', text: 'Coordinate GPS acquisite!' })
-        setTimeout(() => setMessage(null), 2000)
-      },
-      (err) => setMessage({ type: 'error', text: 'Errore GPS: ' + err.message }),
+      (pos) => { setFormData({ ...formData, latitudine: pos.coords.latitude.toFixed(8), longitudine: pos.coords.longitude.toFixed(8) }); setMessage({ type: 'success', text: t('gpsAcquired') }); setTimeout(() => setMessage(null), 2000) },
+      (err) => setMessage({ type: 'error', text: t('gpsError') + ': ' + err.message }),
       { enableHighAccuracy: true }
     )
   }
 
-  // ========== CREAZIONE PROGETTO ==========
   const handleCreate = async () => {
-    if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
-    setSaving(true)
-    setMessage(null)
+    if (!formData.nome) { setMessage({ type: 'error', text: t('nameRequired') }); return }
+    setSaving(true); setMessage(null)
     try {
-      // 0. Verifica unicità nome e codice
-      const { data: esistenti } = await supabase
-        .from('progetti')
-        .select('nome, codice')
-        .or(`nome.ilike.${formData.nome}${formData.codice ? `,codice.ilike.${formData.codice}` : ''}`)
-      
+      const { data: esistenti } = await supabase.from('progetti').select('nome, codice').or(`nome.ilike.${formData.nome}${formData.codice ? `,codice.ilike.${formData.codice}` : ''}`)
       if (esistenti && esistenti.length > 0) {
         const nomeEsiste = esistenti.some(p => p.nome?.toLowerCase() === formData.nome.toLowerCase())
         const codiceEsiste = formData.codice && esistenti.some(p => p.codice?.toLowerCase() === formData.codice.toLowerCase())
-        
-        if (nomeEsiste && codiceEsiste) {
-          setMessage({ type: 'error', text: '⚠️ Esiste già un progetto con questo nome E questo codice!' })
-          setSaving(false)
-          return
-        } else if (nomeEsiste) {
-          setMessage({ type: 'error', text: '⚠️ Esiste già un progetto con questo nome!' })
-          setSaving(false)
-          return
-        } else if (codiceEsiste) {
-          setMessage({ type: 'error', text: '⚠️ Esiste già un progetto con questo codice commessa!' })
-          setSaving(false)
-          return
-        }
+        if (nomeEsiste && codiceEsiste) { setMessage({ type: 'error', text: `⚠️ ${t('projectExistsBoth')}` }); setSaving(false); return }
+        else if (nomeEsiste) { setMessage({ type: 'error', text: `⚠️ ${t('projectExistsName')}` }); setSaving(false); return }
+        else if (codiceEsiste) { setMessage({ type: 'error', text: `⚠️ ${t('projectExistsCode')}` }); setSaving(false); return }
       }
-
-      // 1. Crea il progetto
-      const { data: newProject, error: errProj } = await supabase.from('progetti').insert({
-        nome: formData.nome, codice: formData.codice || null,
-        indirizzo: formData.indirizzo || null, citta: formData.citta || null,
-        data_inizio: formData.data_inizio || null, data_fine_prevista: formData.data_fine_prevista || null,
-        latitudine: formData.latitudine ? parseFloat(formData.latitudine) : null,
-        longitudine: formData.longitudine ? parseFloat(formData.longitudine) : null,
-        raggio_checkin: parseInt(formData.raggio_checkin) || 200,
-        stato: 'attivo'
-      }).select().single()
+      const { data: newProject, error: errProj } = await supabase.from('progetti').insert({ nome: formData.nome, codice: formData.codice || null, indirizzo: formData.indirizzo || null, citta: formData.citta || null, data_inizio: formData.data_inizio || null, data_fine_prevista: formData.data_fine_prevista || null, latitudine: formData.latitudine ? parseFloat(formData.latitudine) : null, longitudine: formData.longitudine ? parseFloat(formData.longitudine) : null, raggio_checkin: parseInt(formData.raggio_checkin) || 200, stato: 'attivo' }).select().single()
       if (errProj) throw errProj
-
-      // 2. Auto-assegna l'utente corrente come admin
-      if (persona?.id && newProject?.id) {
-        const { error: errAss } = await supabase.from('assegnazioni_progetto').insert({
-          persona_id: persona.id, progetto_id: newProject.id, ruolo: 'admin', attivo: true
-        })
-        if (errAss) console.error('Errore auto-assegnazione:', errAss)
-      }
-
-      // 3. Crea dipartimenti predefiniti
-      const dipartimentiDefault = [
-        { nome: 'Engineering', codice: 'ENG', progetto_id: newProject.id },
-        { nome: 'Procurement', codice: 'PROC', progetto_id: newProject.id },
-        { nome: 'Construction', codice: 'CONST', progetto_id: newProject.id },
-        { nome: 'HSE', codice: 'HSE', progetto_id: newProject.id },
-        { nome: 'Administration', codice: 'ADM', progetto_id: newProject.id },
-        { nome: 'Quality', codice: 'QA', progetto_id: newProject.id }
-      ]
+      if (persona?.id && newProject?.id) { await supabase.from('assegnazioni_progetto').insert({ persona_id: persona.id, progetto_id: newProject.id, ruolo: 'admin', attivo: true }) }
+      const dipartimentiDefault = [{ nome: 'Engineering', codice: 'ENG', progetto_id: newProject.id },{ nome: 'Procurement', codice: 'PROC', progetto_id: newProject.id },{ nome: 'Construction', codice: 'CONST', progetto_id: newProject.id },{ nome: 'HSE', codice: 'HSE', progetto_id: newProject.id },{ nome: 'Administration', codice: 'ADM', progetto_id: newProject.id },{ nome: 'Quality', codice: 'QA', progetto_id: newProject.id }]
       await supabase.from('dipartimenti').insert(dipartimentiDefault)
-
-      // 4. Crea flussi approvazione predefiniti
-      const flussiDefault = [
-        { progetto_id: newProject.id, nome: 'Approvazione Ferie', tipo: 'ferie', descrizione: 'Workflow standard per richieste ferie', attivo: true },
-        { progetto_id: newProject.id, nome: 'Approvazione Rapportino', tipo: 'rapportino', descrizione: 'Workflow standard per rapportini', attivo: true },
-        { progetto_id: newProject.id, nome: 'Approvazione Trasferimento', tipo: 'trasferimento', descrizione: 'Workflow standard per trasferimenti', attivo: true }
-      ]
+      const flussiDefault = [{ tipo: 'ferie', nome: 'Ferie', progetto_id: newProject.id },{ tipo: 'rapportino', nome: 'Rapportino', progetto_id: newProject.id },{ tipo: 'trasferimento', nome: 'Trasferimento', progetto_id: newProject.id }]
       await supabase.from('flussi_approvazione').insert(flussiDefault)
-
-      // 5. Crea discipline predefinite
-      const disciplineDefault = [
-        { nome: 'Piping', codice: 'PIP', colore: '#3B82F6', progetto_id: newProject.id },
-        { nome: 'Civil', codice: 'CIV', colore: '#22C55E', progetto_id: newProject.id },
-        { nome: 'Electrical', codice: 'ELE', colore: '#F59E0B', progetto_id: newProject.id },
-        { nome: 'Instrumentation', codice: 'INS', colore: '#8B5CF6', progetto_id: newProject.id },
-        { nome: 'Mechanical', codice: 'MEC', colore: '#EF4444', progetto_id: newProject.id },
-        { nome: 'Structural', codice: 'STR', colore: '#06B6D4', progetto_id: newProject.id }
-      ]
-      await supabase.from('discipline').insert(disciplineDefault)
-
-      // 6. Crea fasi workflow predefinite
-      const fasiDefault = [
-        { nome: 'Da Ordinare', codice: 'ORD', ordine: 1, colore: '#94A3B8', progetto_id: newProject.id },
-        { nome: 'Ordinato', codice: 'ORDT', ordine: 2, colore: '#F59E0B', progetto_id: newProject.id },
-        { nome: 'In Produzione', codice: 'PROD', ordine: 3, colore: '#8B5CF6', progetto_id: newProject.id },
-        { nome: 'In Warehouse', codice: 'WHS', ordine: 4, colore: '#3B82F6', progetto_id: newProject.id },
-        { nome: 'At Site', codice: 'SITE', ordine: 5, colore: '#06B6D4', progetto_id: newProject.id },
-        { nome: 'In Lavorazione', codice: 'WIP', ordine: 6, colore: '#F97316', progetto_id: newProject.id },
-        { nome: 'Completato', codice: 'DONE', ordine: 7, colore: '#22C55E', progetto_id: newProject.id }
-      ]
-      await supabase.from('fasi_workflow').insert(fasiDefault)
-
-      setMessage({ type: 'success', text: '✅ Progetto creato con successo! Ricarico la pagina...' })
-      loadProgetti()
-      setTimeout(() => { window.location.reload() }, 2000)
-    } catch (err) {
-      setMessage({ type: 'error', text: err.message })
-    } finally {
-      setSaving(false)
-    }
+      setMessage({ type: 'success', text: t('projectCreated') })
+      loadProgetti(); setTimeout(() => { setShowForm(false); setFormData({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 }); setMessage(null) }, 1500)
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+    finally { setSaving(false) }
   }
 
-  const handleToggleStato = async (prog) => {
-    const nuovoStato = prog.stato === 'attivo' ? 'completato' : 'attivo'
-    await supabase.from('progetti').update({ stato: nuovoStato }).eq('id', prog.id)
-    loadProgetti()
-  }
+  const toggleStato = async (p) => { await supabase.from('progetti').update({ stato: p.stato === 'attivo' ? 'completato' : 'attivo' }).eq('id', p.id); loadProgetti() }
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">📋 Tutti i Progetti</h2>
-          <p className="text-sm text-gray-500">{progetti.length} progetti totali</p>
-        </div>
-        {!showForm && (
-          <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">
-            + Nuovo Progetto
-          </button>
-        )}
+        <h2 className="text-xl font-bold text-gray-800">📋 {t('allProjectsTab')}</h2>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ {t('createProject')}</button>}
       </div>
 
       {showForm && (
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-4">➕ Nuovo Progetto</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">➕ {t('newProject')}</h3>
           <div className="grid gap-4">
-            {/* Nome e Codice */}
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Nome *</label>
-                <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Centrale Gas Milano" /></div>
-              <div><label className="block text-sm font-medium mb-1">Codice</label>
-                <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="PRJ-MILANO-001" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('name')} *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('projectCode')}</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
-            
-            {/* Indirizzo con Autocomplete */}
             <div className="grid lg:grid-cols-2 gap-4">
-              <div className="relative">
-                <label className="block text-sm font-medium mb-1">
-                  Indirizzo {searchingAddress && <span className="ml-2 text-blue-500 text-xs">🔍 Cercando...</span>}
-                </label>
-                <input type="text" value={formData.indirizzo} 
-                  onChange={(e) => handleAddressChange(e.target.value)}
-                  onFocus={() => addressSuggestions.length > 0 && setShowSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="w-full px-4 py-3 border rounded-xl" placeholder="Inizia a digitare l'indirizzo..." />
+              <div className="relative"><label className="block text-sm font-medium mb-1">{t('address')}</label>
+                <input type="text" value={formData.indirizzo} onChange={(e) => { setFormData({...formData, indirizzo: e.target.value}); searchAddress(e.target.value) }} className="w-full px-4 py-3 border rounded-xl" placeholder={t('search')}/>
                 {showSuggestions && addressSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-60 overflow-auto">
-                    {addressSuggestions.map((suggestion, idx) => (
-                      <button key={idx} type="button" onClick={() => selectAddress(suggestion)} className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b last:border-b-0">
-                        <p className="font-medium text-gray-800 truncate">{suggestion.indirizzo}</p>
-                        <p className="text-sm text-gray-500 truncate">{suggestion.citta}</p>
-                      </button>
-                    ))}
+                  <div className="absolute z-10 w-full bg-white border rounded-xl mt-1 shadow-lg max-h-48 overflow-auto">
+                    {addressSuggestions.map((s, i) => (<div key={i} onClick={() => selectAddress(s)} className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm">{s.indirizzo}</div>))}
                   </div>
                 )}
               </div>
-              <div><label className="block text-sm font-medium mb-1">Città</label>
-                <input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl bg-gray-50" placeholder="Auto-compilata" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('city')}</label><input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
-            
-            {/* Coordinate GPS */}
-            <div className="p-4 bg-white rounded-xl border">
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-sm font-medium text-blue-800">📍 Coordinate GPS Centro Cantiere</label>
-                <button type="button" onClick={getCurrentLocation} className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200">📍 Usa GPS Attuale</button>
-              </div>
-              <div className="grid lg:grid-cols-3 gap-4">
-                <div><label className="block text-xs text-gray-500 mb-1">Latitudine</label>
-                  <input type="text" value={formData.latitudine} onChange={(e) => setFormData({...formData, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl bg-gray-50" placeholder="44.80150000" /></div>
-                <div><label className="block text-xs text-gray-500 mb-1">Longitudine</label>
-                  <input type="text" value={formData.longitudine} onChange={(e) => setFormData({...formData, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl bg-gray-50" placeholder="10.32790000" /></div>
-                <div><label className="block text-xs text-gray-500 mb-1">Raggio Check-in (m)</label>
-                  <input type="number" value={formData.raggio_checkin} onChange={(e) => setFormData({...formData, raggio_checkin: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="200" min="50" max="5000" /></div>
-              </div>
-              {formData.latitudine && formData.longitudine && (
-                <p className="mt-2 text-xs text-green-600">✅ I lavoratori potranno fare check-in entro {formData.raggio_checkin}m da questo punto.</p>
-              )}
-            </div>
-            
-            {/* Date */}
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Data Inizio</label>
-                <input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Data Fine Prevista</label>
-                <input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('startDate')}</label><input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('endDate')}</label><input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
-            
-            {/* Info */}
-            <div className="p-3 bg-green-50 rounded-xl text-sm text-green-700">
-              💡 <strong>Auto-generati:</strong> Dipartimenti, Discipline, Fasi workflow, Flussi approvazione
+            <div className="grid lg:grid-cols-4 gap-4">
+              <div><label className="block text-sm font-medium mb-1">{t('latitude')}</label><input type="text" value={formData.latitudine} onChange={(e) => setFormData({...formData, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('longitude')}</label><input type="text" value={formData.longitudine} onChange={(e) => setFormData({...formData, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('checkinRadius')}</label><input type="number" value={formData.raggio_checkin} onChange={(e) => setFormData({...formData, raggio_checkin: e.target.value})} className="w-full px-4 py-3 border rounded-xl" min="50" max="5000" /></div>
+              <div className="flex items-end"><button onClick={getCurrentLocation} className="w-full px-4 py-3 bg-blue-100 text-blue-700 rounded-xl">📍 GPS</button></div>
             </div>
-            
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2">
-              <button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl hover:bg-gray-300">Annulla</button>
-              <button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50">
-                {saving ? '⏳ Creazione...' : '✅ Crea Progetto'}
-              </button>
-            </div>
+            <div className="flex gap-2"><button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-200 rounded-xl">{t('cancel')}</button><button onClick={handleCreate} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? t('saving') : t('createProject')}</button></div>
           </div>
         </div>
       )}
 
-      {/* Lista progetti */}
-      {loading ? (
-        <div className="text-center py-8 text-gray-500">Caricamento...</div>
-      ) : (
+      {loading ? <div className="text-center py-8 text-gray-500">{t('loading')}</div> : (
         <div className="space-y-3">
-          {progetti.map(prog => (
-            <div key={prog.id} className={`p-4 rounded-xl border ${prog.stato === 'attivo' ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${prog.stato === 'attivo' ? 'bg-green-100' : 'bg-gray-200'}`}>🏗️</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-gray-800">{prog.nome}</p>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${prog.stato === 'attivo' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
-                      {prog.stato === 'attivo' ? '✅ Attivo' : '📦 Completato'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500">{prog.codice || 'Nessun codice'} • {prog.citta || 'Località non specificata'}</p>
-                  {prog.data_inizio && (
-                    <p className="text-xs text-gray-400">📅 {new Date(prog.data_inizio).toLocaleDateString('it-IT')}{prog.data_fine_prevista && <> → {new Date(prog.data_fine_prevista).toLocaleDateString('it-IT')}</>}</p>
-                  )}
-                  {prog.latitudine && prog.longitudine && (
-                    <p className="text-xs text-blue-500">📍 GPS: {parseFloat(prog.latitudine).toFixed(4)}, {parseFloat(prog.longitudine).toFixed(4)} {prog.raggio_checkin && `(${prog.raggio_checkin}m)`}</p>
-                  )}
-                </div>
-                <button onClick={() => handleToggleStato(prog)} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${prog.stato === 'attivo' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
-                  {prog.stato === 'attivo' ? 'Completa' : 'Riattiva'}
-                </button>
+          {progetti.map(p => (
+            <div key={p.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
+              <div className={`w-3 h-3 rounded-full ${p.stato === 'attivo' ? 'bg-green-500' : 'bg-gray-400'}`} />
+              <div className="flex-1">
+                <p className="font-semibold">{p.nome}</p>
+                <p className="text-xs text-gray-500">{p.codice || '-'} • {p.citta || '-'}</p>
               </div>
+              <span className={`px-2 py-1 rounded-full text-xs ${p.stato === 'attivo' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{p.stato === 'attivo' ? t('statusActive') : t('statusCompleted')}</span>
+              <button onClick={() => toggleStato(p)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title={t('toggleStatus')}>{p.stato === 'attivo' ? '⏸️' : '▶️'}</button>
             </div>
           ))}
         </div>
@@ -762,112 +556,105 @@ function TuttiProgettiTab() {
 // ==================== PERSONE TAB ====================
 function PersoneTab() {
   const { assegnazione } = useAuth()
+  const { t } = useI18n()
   const [persone, setPersone] = useState([])
   const [ditte, setDitte] = useState([])
   const [squadre, setSquadre] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingPersona, setEditingPersona] = useState(null)
-  const [formData, setFormData] = useState({ nome: '', cognome: '', email: '', telefono: '', codice_fiscale: '', ruolo: 'helper', ditta_id: '', squadra_id: '' })
+  const [formData, setFormData] = useState({ nome: '', cognome: '', email: '', telefono: '', ruolo: 'helper', ditta_id: '', squadra_id: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
-  const [filter, setFilter] = useState('')
-  // AGGIORNATO: Lista ruoli con warehouse, engineer, PM e Dept Manager
-  const ruoli = [
-    { value: 'helper', label: 'Operaio' },
-    { value: 'warehouse', label: 'Magazziniere' },
-    { value: 'office', label: 'Impiegato' },
-    { value: 'foreman', label: 'Caposquadra' },
-    { value: 'engineer', label: 'Engineer' },
-    { value: 'dept_manager', label: 'Responsabile Dipartimento' },
-    { value: 'supervisor', label: 'Supervisore' },
-    { value: 'cm', label: 'Construction Manager' },
-    { value: 'pm', label: 'Project Manager' },
-    { value: 'admin', label: 'Admin' }
-  ]
+  const [searchTerm, setSearchTerm] = useState('')
+  const ruoli = ['helper', 'warehouse', 'office', 'foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
+  const ruoliLabels = { helper: t('roleHelper'), warehouse: t('roleWarehouse'), office: t('roleOffice'), foreman: t('roleForeman'), engineer: t('roleEngineer'), dept_manager: t('roleDeptManager'), supervisor: t('roleSupervisor'), cm: t('roleCM'), pm: t('rolePM'), admin: t('roleAdmin') }
 
-  useEffect(() => { if (assegnazione?.progetto_id) loadData() }, [assegnazione?.progetto_id])
+  useEffect(() => { if (assegnazione?.progetto_id) { loadPersone(); loadDitte(); loadSquadre() } }, [assegnazione?.progetto_id])
 
-  const loadData = async () => {
-    setLoading(true)
-    const { data: p } = await supabase.from('assegnazioni_progetto').select('*, persona:persone(*), ditta:ditte(id, nome), squadra:squadre(id, nome)').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('ruolo')
-    setPersone(p || [])
-    const { data: d } = await supabase.from('ditte').select('*').eq('attivo', true).order('nome')
-    setDitte(d || [])
-    const { data: s } = await supabase.from('squadre').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('nome')
-    setSquadre(s || [])
-    setLoading(false)
-  }
+  const loadPersone = async () => { setLoading(true); const { data } = await supabase.from('assegnazioni_progetto').select('*, persona:persone(*), ditta:ditte(nome), squadra:squadre(nome)').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('created_at', { ascending: false }); setPersone(data || []); setLoading(false) }
+  const loadDitte = async () => { const { data } = await supabase.from('ditte').select('*').eq('attivo', true).order('nome'); setDitte(data || []) }
+  const loadSquadre = async () => { const { data } = await supabase.from('squadre').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('nome'); setSquadre(data || []) }
 
-  const resetForm = () => { setFormData({ nome: '', cognome: '', email: '', telefono: '', codice_fiscale: '', ruolo: 'helper', ditta_id: '', squadra_id: '' }); setEditingPersona(null); setShowForm(false); setMessage(null) }
+  const resetForm = () => { setFormData({ nome: '', cognome: '', email: '', telefono: '', ruolo: 'helper', ditta_id: '', squadra_id: '' }); setEditingPersona(null); setShowForm(false); setMessage(null) }
 
   const handleEdit = (ass) => {
-    setFormData({ nome: ass.persona.nome || '', cognome: ass.persona.cognome || '', email: ass.persona.email || '', telefono: ass.persona.telefono || '', codice_fiscale: ass.persona.codice_fiscale || '', ruolo: ass.ruolo || 'helper', ditta_id: ass.ditta_id || '', squadra_id: ass.squadra_id || '' })
+    setFormData({ nome: ass.persona?.nome || '', cognome: ass.persona?.cognome || '', email: ass.persona?.email || '', telefono: ass.persona?.telefono || '', ruolo: ass.ruolo || 'helper', ditta_id: ass.ditta_id || '', squadra_id: ass.squadra_id || '' })
     setEditingPersona(ass); setShowForm(true)
   }
 
   const handleSave = async () => {
-    if (!formData.nome || !formData.cognome) { setMessage({ type: 'error', text: 'Nome e cognome obbligatori' }); return }
+    if (!formData.nome || !formData.cognome) { setMessage({ type: 'error', text: `${t('name')} ${t('required').toLowerCase()}` }); return }
     setSaving(true); setMessage(null)
     try {
       if (editingPersona) {
-        await supabase.from('persone').update({ nome: formData.nome, cognome: formData.cognome, email: formData.email || null, telefono: formData.telefono || null, codice_fiscale: formData.codice_fiscale || null }).eq('id', editingPersona.persona.id)
+        await supabase.from('persone').update({ nome: formData.nome, cognome: formData.cognome, email: formData.email || null, telefono: formData.telefono || null }).eq('id', editingPersona.persona_id)
         await supabase.from('assegnazioni_progetto').update({ ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null }).eq('id', editingPersona.id)
       } else {
-        const { data: newP, error: e1 } = await supabase.from('persone').insert({ nome: formData.nome, cognome: formData.cognome, email: formData.email || null, telefono: formData.telefono || null, codice_fiscale: formData.codice_fiscale || null }).select().single()
-        if (e1) throw e1
-        await supabase.from('assegnazioni_progetto').insert({ persona_id: newP.id, progetto_id: assegnazione.progetto_id, ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null, attivo: true })
+        const { data: newPersona, error: errP } = await supabase.from('persone').insert({ nome: formData.nome, cognome: formData.cognome, email: formData.email || null, telefono: formData.telefono || null }).select().single()
+        if (errP) throw errP
+        await supabase.from('assegnazioni_progetto').insert({ persona_id: newPersona.id, progetto_id: assegnazione.progetto_id, ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null, attivo: true })
       }
-      setMessage({ type: 'success', text: editingPersona ? 'Aggiornato!' : 'Creato!' })
-      loadData(); setTimeout(resetForm, 1000)
+      setMessage({ type: 'success', text: t('personSaved') }); loadPersone(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
 
-  const handleDisable = async (ass) => { if (!confirm('Disattivare?')) return; await supabase.from('assegnazioni_progetto').update({ attivo: false }).eq('id', ass.id); loadData() }
+  const handleDelete = async (id) => { if (!confirm(t('deactivateConfirm'))) return; await supabase.from('assegnazioni_progetto').update({ attivo: false }).eq('id', id); loadPersone() }
 
-  const filteredPersone = persone.filter(p => !filter || p.persona.nome?.toLowerCase().includes(filter.toLowerCase()) || p.persona.cognome?.toLowerCase().includes(filter.toLowerCase()))
+  const filtered = persone.filter(a => {
+    const term = searchTerm.toLowerCase()
+    return a.persona?.nome?.toLowerCase().includes(term) || a.persona?.cognome?.toLowerCase().includes(term) || a.persona?.email?.toLowerCase().includes(term)
+  })
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-4">
-        <div><h2 className="text-xl font-bold text-gray-800">👥 Persone</h2><p className="text-sm text-gray-500">{persone.length} nel progetto</p></div>
-        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Aggiungi</button>}
+        <h2 className="text-xl font-bold text-gray-800">👥 {t('peopleTitle')}</h2>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ {t('addPerson')}</button>}
       </div>
+
+      {!showForm && (
+        <div className="mb-4">
+          <input type="text" placeholder={t('searchPeople')} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full px-4 py-2 border rounded-xl" />
+        </div>
+      )}
 
       {showForm && (
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-4">{editingPersona ? '✏️ Modifica' : '➕ Nuova'}</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">{editingPersona ? `✏️ ${t('editPerson')}` : `➕ ${t('newPerson')}`}</h3>
           <div className="grid gap-4">
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Cognome *</label><input type="text" value={formData.cognome} onChange={(e) => setFormData({...formData, cognome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('firstName')} *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('lastName')} *</label><input type="text" value={formData.cognome} onChange={(e) => setFormData({...formData, cognome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">{t('email')}</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('phone')}</label><input type="text" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
             <div className="grid lg:grid-cols-3 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Email</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Telefono</label><input type="tel" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">CF</label><input type="text" value={formData.codice_fiscale} onChange={(e) => setFormData({...formData, codice_fiscale: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" maxLength={16} /></div>
-            </div>
-            <div className="grid lg:grid-cols-3 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Ruolo</label><select value={formData.ruolo} onChange={(e) => setFormData({...formData, ruolo: e.target.value})} className="w-full px-4 py-3 border rounded-xl">{ruoli.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</select></div>
-              <div><label className="block text-sm font-medium mb-1">Ditta</label><select value={formData.ditta_id} onChange={(e) => setFormData({...formData, ditta_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">Committente</option>{ditte.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></div>
-              <div><label className="block text-sm font-medium mb-1">Squadra</label><select value={formData.squadra_id} onChange={(e) => setFormData({...formData, squadra_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">Nessuna</option>{squadre.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
+              <div><label className="block text-sm font-medium mb-1">{t('role')}</label><select value={formData.ruolo} onChange={(e) => setFormData({...formData, ruolo: e.target.value})} className="w-full px-4 py-3 border rounded-xl">{ruoli.map(r => <option key={r} value={r}>{ruoliLabels[r]}</option>)}</select></div>
+              <div><label className="block text-sm font-medium mb-1">{t('company')}</label><select value={formData.ditta_id} onChange={(e) => setFormData({...formData, ditta_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">-</option>{ditte.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}</select></div>
+              <div><label className="block text-sm font-medium mb-1">{t('teamLabel')}</label><select value={formData.squadra_id} onChange={(e) => setFormData({...formData, squadra_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">-</option>{squadre.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
             </div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">{t('cancel')}</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? t('saving') : t('save')}</button></div>
           </div>
         </div>
       )}
 
-      <div className="mb-4"><input type="text" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="🔍 Cerca..." className="w-full px-4 py-3 border rounded-xl" /></div>
-
-      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : (
-        <div className="space-y-2 max-h-96 overflow-y-auto">
-          {filteredPersone.map(ass => (
-            <div key={ass.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center font-semibold text-blue-600">{ass.persona.nome?.[0]}{ass.persona.cognome?.[0]}</div>
-              <div className="flex-1 min-w-0"><p className="font-medium truncate">{ass.persona.nome} {ass.persona.cognome}</p><p className="text-xs text-gray-500">{ruoli.find(r => r.value === ass.ruolo)?.label} • {ass.ditta?.nome || 'Committente'}</p></div>
-              <div className="flex gap-1"><button onClick={() => handleEdit(ass)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDisable(ass)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
+      {loading ? <div className="text-center py-8 text-gray-500">{t('loading')}</div> : filtered.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl"><p className="text-4xl mb-2">👥</p><p>{t('noPeople')}</p><p className="text-sm">{t('addPeopleToProject')}</p></div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(a => (
+            <div key={a.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">{a.persona?.nome?.[0]}{a.persona?.cognome?.[0]}</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium">{a.persona?.nome} {a.persona?.cognome}</p>
+                <p className="text-xs text-gray-500">{ruoliLabels[a.ruolo]} {a.ditta?.nome && `• ${a.ditta.nome}`} {a.squadra?.nome && `• ${a.squadra.nome}`}</p>
+              </div>
+              <div className="flex gap-1"><button onClick={() => handleEdit(a)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(a.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
             </div>
           ))}
         </div>
@@ -878,6 +665,7 @@ function PersoneTab() {
 
 // ==================== DITTE TAB ====================
 function DitteTab() {
+  const { t } = useI18n()
   const [ditte, setDitte] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -893,50 +681,54 @@ function DitteTab() {
   const handleEdit = (d) => { setFormData({ nome: d.nome || '', ragione_sociale: d.ragione_sociale || '', partita_iva: d.partita_iva || '', indirizzo: d.indirizzo || '', telefono: d.telefono || '', email: d.email || '' }); setEditingDitta(d); setShowForm(true) }
 
   const handleSave = async () => {
-    if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
+    if (!formData.nome) { setMessage({ type: 'error', text: `${t('name')} ${t('required').toLowerCase()}` }); return }
     setSaving(true); setMessage(null)
     try {
-      if (editingDitta) { await supabase.from('ditte').update(formData).eq('id', editingDitta.id) }
-      else { await supabase.from('ditte').insert({ ...formData, attivo: true }) }
-      setMessage({ type: 'success', text: 'Salvato!' }); loadDitte(); setTimeout(resetForm, 1000)
+      const payload = { nome: formData.nome, ragione_sociale: formData.ragione_sociale || null, partita_iva: formData.partita_iva || null, indirizzo: formData.indirizzo || null, telefono: formData.telefono || null, email: formData.email || null }
+      if (editingDitta) { await supabase.from('ditte').update(payload).eq('id', editingDitta.id) }
+      else { await supabase.from('ditte').insert({ ...payload, attivo: true }) }
+      setMessage({ type: 'success', text: t('companySaved') }); loadDitte(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
 
-  const handleDelete = async (id) => { if (!confirm('Disattivare?')) return; await supabase.from('ditte').update({ attivo: false }).eq('id', id); loadDitte() }
+  const handleDelete = async (id) => { if (!confirm(t('deactivateConfirm'))) return; await supabase.from('ditte').update({ attivo: false }).eq('id', id); loadDitte() }
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">🏢 Ditte</h2>
-        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Aggiungi</button>}
+        <h2 className="text-xl font-bold text-gray-800">🏢 {t('companiesTitle')}</h2>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ {t('add')}</button>}
       </div>
 
       {showForm && (
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-4">{editingDitta ? '✏️ Modifica' : '➕ Nuova'}</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">{editingDitta ? `✏️ ${t('editCompany')}` : `➕ ${t('newCompany')}`}</h3>
           <div className="grid gap-4">
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Ragione Sociale</label><input type="text" value={formData.ragione_sociale} onChange={(e) => setFormData({...formData, ragione_sociale: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('companyName')} *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('businessName')}</label><input type="text" value={formData.ragione_sociale} onChange={(e) => setFormData({...formData, ragione_sociale: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
             <div className="grid lg:grid-cols-3 gap-4">
-              <div><label className="block text-sm font-medium mb-1">P.IVA</label><input type="text" value={formData.partita_iva} onChange={(e) => setFormData({...formData, partita_iva: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Telefono</label><input type="tel" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Email</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('vatNumber')}</label><input type="text" value={formData.partita_iva} onChange={(e) => setFormData({...formData, partita_iva: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('phone')}</label><input type="text" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('email')}</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
+            <div><label className="block text-sm font-medium mb-1">{t('address')}</label><input type="text" value={formData.indirizzo} onChange={(e) => setFormData({...formData, indirizzo: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">{t('cancel')}</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? t('saving') : t('save')}</button></div>
           </div>
         </div>
       )}
 
-      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : (
+      {loading ? <div className="text-center py-8 text-gray-500">{t('loading')}</div> : ditte.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl"><p className="text-4xl mb-2">🏢</p><p>{t('noCompanies')}</p><p className="text-sm">{t('addCompaniesToStart')}</p></div>
+      ) : (
         <div className="space-y-2">
           {ditte.map(d => (
             <div key={d.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-bold">{d.nome?.[0]}</div>
-              <div className="flex-1"><p className="font-medium">{d.nome}</p><p className="text-xs text-gray-500">{d.partita_iva || 'P.IVA non inserita'}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">{d.nome?.[0]}</div>
+              <div className="flex-1"><p className="font-medium">{d.nome}</p><p className="text-xs text-gray-500">{d.partita_iva || '-'}</p></div>
               <div className="flex gap-1"><button onClick={() => handleEdit(d)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(d.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
             </div>
           ))}
@@ -949,11 +741,12 @@ function DitteTab() {
 // ==================== SQUADRE TAB ====================
 function SquadreTab() {
   const { assegnazione } = useAuth()
+  const { t } = useI18n()
   const [squadre, setSquadre] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingSquadra, setEditingSquadra] = useState(null)
-  const [formData, setFormData] = useState({ nome: '', descrizione: '', colore: '#3B82F6' })
+  const [formData, setFormData] = useState({ nome: '', colore: '#3B82F6' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   const colori = ['#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16']
@@ -961,50 +754,51 @@ function SquadreTab() {
   useEffect(() => { if (assegnazione?.progetto_id) loadSquadre() }, [assegnazione?.progetto_id])
 
   const loadSquadre = async () => { setLoading(true); const { data } = await supabase.from('squadre').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('nome'); setSquadre(data || []); setLoading(false) }
-  const resetForm = () => { setFormData({ nome: '', descrizione: '', colore: '#3B82F6' }); setEditingSquadra(null); setShowForm(false); setMessage(null) }
-  const handleEdit = (sq) => { setFormData({ nome: sq.nome || '', descrizione: sq.descrizione || '', colore: sq.colore || '#3B82F6' }); setEditingSquadra(sq); setShowForm(true) }
+  const resetForm = () => { setFormData({ nome: '', colore: '#3B82F6' }); setEditingSquadra(null); setShowForm(false); setMessage(null) }
+  const handleEdit = (s) => { setFormData({ nome: s.nome || '', colore: s.colore || '#3B82F6' }); setEditingSquadra(s); setShowForm(true) }
 
   const handleSave = async () => {
-    if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
+    if (!formData.nome) { setMessage({ type: 'error', text: `${t('name')} ${t('required').toLowerCase()}` }); return }
     setSaving(true); setMessage(null)
     try {
-      const payload = { nome: formData.nome, descrizione: formData.descrizione || null, colore: formData.colore, progetto_id: assegnazione.progetto_id }
+      const payload = { nome: formData.nome, colore: formData.colore, progetto_id: assegnazione.progetto_id }
       if (editingSquadra) { await supabase.from('squadre').update(payload).eq('id', editingSquadra.id) }
       else { await supabase.from('squadre').insert({ ...payload, attivo: true }) }
-      setMessage({ type: 'success', text: 'Salvato!' }); loadSquadre(); setTimeout(resetForm, 1000)
+      setMessage({ type: 'success', text: t('teamSaved') }); loadSquadre(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
 
-  const handleDelete = async (id) => { if (!confirm('Eliminare?')) return; await supabase.from('squadre').update({ attivo: false }).eq('id', id); loadSquadre() }
+  const handleDelete = async (id) => { if (!confirm(t('deactivateConfirm'))) return; await supabase.from('squadre').update({ attivo: false }).eq('id', id); loadSquadre() }
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">👷 Squadre</h2>
-        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Aggiungi</button>}
+        <h2 className="text-xl font-bold text-gray-800">👷 {t('teamsTitle')}</h2>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ {t('add')}</button>}
       </div>
 
       {showForm && (
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-4">{editingSquadra ? '✏️ Modifica' : '➕ Nuova'}</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">{editingSquadra ? `✏️ ${t('editTeam')}` : `➕ ${t('newTeam')}`}</h3>
           <div className="grid gap-4">
-            <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-            <div><label className="block text-sm font-medium mb-1">Descrizione</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-            <div><label className="block text-sm font-medium mb-2">Colore</label><div className="flex gap-2">{colori.map(c => (<button key={c} onClick={() => setFormData({...formData, colore: c})} className={`w-8 h-8 rounded-full border-2 ${formData.colore === c ? 'border-gray-800 scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />))}</div></div>
+            <div><label className="block text-sm font-medium mb-1">{t('teamName')} *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            <div><label className="block text-sm font-medium mb-2">{t('color')}</label><div className="flex gap-2">{colori.map(c => (<button key={c} onClick={() => setFormData({...formData, colore: c})} className={`w-8 h-8 rounded-full border-2 ${formData.colore === c ? 'border-gray-800 scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />))}</div></div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">{t('cancel')}</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? t('saving') : t('save')}</button></div>
           </div>
         </div>
       )}
 
-      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : (
+      {loading ? <div className="text-center py-8 text-gray-500">{t('loading')}</div> : squadre.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl"><p className="text-4xl mb-2">👷</p><p>{t('noTeams')}</p><p className="text-sm">{t('createTeams')}</p></div>
+      ) : (
         <div className="space-y-2">
-          {squadre.map(sq => (
-            <div key={sq.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: sq.colore }} />
-              <div className="flex-1"><p className="font-medium">{sq.nome}</p>{sq.descrizione && <p className="text-xs text-gray-500">{sq.descrizione}</p>}</div>
-              <div className="flex gap-1"><button onClick={() => handleEdit(sq)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(sq.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
+          {squadre.map(s => (
+            <div key={s.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
+              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: s.colore }} />
+              <div className="flex-1"><p className="font-medium">{s.nome}</p></div>
+              <div className="flex gap-1"><button onClick={() => handleEdit(s)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(s.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
             </div>
           ))}
         </div>
@@ -1016,6 +810,7 @@ function SquadreTab() {
 // ==================== CENTRI COSTO TAB ====================
 function CentriCostoTab() {
   const { assegnazione } = useAuth()
+  const { t } = useI18n()
   const [centri, setCentri] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -1031,45 +826,47 @@ function CentriCostoTab() {
   const handleEdit = (cc) => { setFormData({ codice: cc.codice || '', descrizione: cc.descrizione || '', budget_ore: cc.budget_ore?.toString() || '', budget_euro: cc.budget_euro?.toString() || '' }); setEditingCentro(cc); setShowForm(true) }
 
   const handleSave = async () => {
-    if (!formData.codice || !formData.descrizione) { setMessage({ type: 'error', text: 'Codice e descrizione obbligatori' }); return }
+    if (!formData.codice || !formData.descrizione) { setMessage({ type: 'error', text: `${t('code')} & ${t('description')} ${t('required').toLowerCase()}` }); return }
     setSaving(true); setMessage(null)
     try {
       const payload = { codice: formData.codice, descrizione: formData.descrizione, budget_ore: formData.budget_ore ? parseFloat(formData.budget_ore) : null, budget_euro: formData.budget_euro ? parseFloat(formData.budget_euro) : null, progetto_id: assegnazione.progetto_id }
       if (editingCentro) { await supabase.from('centri_costo').update(payload).eq('id', editingCentro.id) }
       else { await supabase.from('centri_costo').insert({ ...payload, attivo: true }) }
-      setMessage({ type: 'success', text: 'Salvato!' }); loadCentri(); setTimeout(resetForm, 1000)
+      setMessage({ type: 'success', text: t('costCenterSaved') }); loadCentri(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
 
-  const handleDelete = async (id) => { if (!confirm('Disattivare?')) return; await supabase.from('centri_costo').update({ attivo: false }).eq('id', id); loadCentri() }
+  const handleDelete = async (id) => { if (!confirm(t('deactivateCC'))) return; await supabase.from('centri_costo').update({ attivo: false }).eq('id', id); loadCentri() }
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">💰 Centri di Costo</h2>
-        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Aggiungi</button>}
+        <h2 className="text-xl font-bold text-gray-800">💰 {t('costCentersTitle')}</h2>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ {t('add')}</button>}
       </div>
 
       {showForm && (
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-4">{editingCentro ? '✏️ Modifica' : '➕ Nuovo'}</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">{editingCentro ? `✏️ ${t('editCostCenter')}` : `➕ ${t('newCostCenter')}`}</h3>
           <div className="grid gap-4">
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Codice *</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Descrizione *</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('costCenterCode')} *</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('costCenterDesc')} *</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Budget Ore</label><input type="number" value={formData.budget_ore} onChange={(e) => setFormData({...formData, budget_ore: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Budget €</label><input type="number" value={formData.budget_euro} onChange={(e) => setFormData({...formData, budget_euro: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('budgetHours')}</label><input type="number" value={formData.budget_ore} onChange={(e) => setFormData({...formData, budget_ore: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('budgetEuro')}</label><input type="number" value={formData.budget_euro} onChange={(e) => setFormData({...formData, budget_euro: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">{t('cancel')}</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? t('saving') : t('save')}</button></div>
           </div>
         </div>
       )}
 
-      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : (
+      {loading ? <div className="text-center py-8 text-gray-500">{t('loading')}</div> : centri.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl"><p className="text-4xl mb-2">💰</p><p>{t('noCostCenters')}</p><p className="text-sm">{t('addCostCenters')}</p></div>
+      ) : (
         <div className="space-y-2">
           {centri.map(cc => (
             <div key={cc.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
@@ -1087,6 +884,7 @@ function CentriCostoTab() {
 // ==================== DIPARTIMENTI TAB ====================
 function DipartimentiTab() {
   const { assegnazione } = useAuth()
+  const { t } = useI18n()
   const [dipartimenti, setDipartimenti] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -1102,46 +900,46 @@ function DipartimentiTab() {
   const handleEdit = (d) => { setFormData({ nome: d.nome || '', codice: d.codice || '', descrizione: d.descrizione || '' }); setEditingDip(d); setShowForm(true) }
 
   const handleSave = async () => {
-    if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
+    if (!formData.nome) { setMessage({ type: 'error', text: `${t('name')} ${t('required').toLowerCase()}` }); return }
     setSaving(true); setMessage(null)
     try {
       const payload = { nome: formData.nome, codice: formData.codice || null, descrizione: formData.descrizione || null, progetto_id: assegnazione.progetto_id }
       if (editingDip) { await supabase.from('dipartimenti').update(payload).eq('id', editingDip.id) }
       else { await supabase.from('dipartimenti').insert(payload) }
-      setMessage({ type: 'success', text: 'Salvato!' }); loadDipartimenti(); setTimeout(resetForm, 1000)
+      setMessage({ type: 'success', text: t('departmentSaved') }); loadDipartimenti(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
 
-  const handleDelete = async (id) => { if (!confirm('Eliminare?')) return; await supabase.from('dipartimenti').delete().eq('id', id); loadDipartimenti() }
+  const handleDelete = async (id) => { if (!confirm(t('deleteConfirm'))) return; await supabase.from('dipartimenti').delete().eq('id', id); loadDipartimenti() }
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">🏛️ Dipartimenti</h2>
-        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Aggiungi</button>}
+        <h2 className="text-xl font-bold text-gray-800">🏛️ {t('departmentsTitle')}</h2>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ {t('add')}</button>}
       </div>
 
       {showForm && (
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-4">{editingDip ? '✏️ Modifica' : '➕ Nuovo'}</h3>
+          <h3 className="font-semibold text-blue-800 mb-4">{editingDip ? `✏️ ${t('editDepartment')}` : `➕ ${t('newDepartment')}`}</h3>
           <div className="grid gap-4">
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Codice</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('departmentName')} *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">{t('departmentCode')}</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
-            <div><label className="block text-sm font-medium mb-1">Descrizione</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+            <div><label className="block text-sm font-medium mb-1">{t('description')}</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">{t('cancel')}</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? t('saving') : t('save')}</button></div>
           </div>
         </div>
       )}
 
-      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : dipartimenti.length === 0 ? (
+      {loading ? <div className="text-center py-8 text-gray-500">{t('loading')}</div> : dipartimenti.length === 0 ? (
         <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
           <p className="text-4xl mb-2">🏛️</p>
-          <p>Nessun dipartimento</p>
-          <p className="text-sm">I dipartimenti vengono creati automaticamente con il progetto</p>
+          <p>{t('noDepartments')}</p>
+          <p className="text-sm">{t('departmentsAutoCreated')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -1161,15 +959,15 @@ function DipartimentiTab() {
 // ==================== DATI TEST TAB ====================
 function DatiTestTab() {
   const { assegnazione } = useAuth()
+  const { t } = useI18n()
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
 
   const generaDatiTest = async () => {
-    if (!confirm('Generare dati di test? Questo creerà persone, ditte, squadre fittizie.')) return
+    if (!confirm(t('generateTestDataConfirm'))) return
     setLoading(true)
     setMessage(null)
     try {
-      // Crea alcune ditte di test
       const ditteTest = [
         { nome: 'Costruzioni Rossi', partita_iva: '12345678901', attivo: true },
         { nome: 'Edilizia Bianchi', partita_iva: '23456789012', attivo: true },
@@ -1177,14 +975,13 @@ function DatiTestTab() {
       ]
       await supabase.from('ditte').insert(ditteTest)
 
-      // Crea alcune squadre di test
       const squadreTest = [
         { nome: 'Squadra Alpha', colore: '#3B82F6', progetto_id: assegnazione.progetto_id, attivo: true },
         { nome: 'Squadra Beta', colore: '#22C55E', progetto_id: assegnazione.progetto_id, attivo: true }
       ]
       await supabase.from('squadre').insert(squadreTest)
 
-      setMessage({ type: 'success', text: 'Dati di test generati con successo!' })
+      setMessage({ type: 'success', text: t('testDataGenerated') })
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
     } finally {
@@ -1194,8 +991,8 @@ function DatiTestTab() {
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
-      <h2 className="text-xl font-bold text-gray-800 mb-4">🧪 Dati Test</h2>
-      <p className="text-gray-500 mb-6">Genera dati di test per popolare il sistema rapidamente durante lo sviluppo.</p>
+      <h2 className="text-xl font-bold text-gray-800 mb-4">🧪 {t('testDataTitle')}</h2>
+      <p className="text-gray-500 mb-6">{t('testDataDescription')}</p>
       
       {message && (
         <div className={`p-4 rounded-xl mb-4 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
@@ -1208,12 +1005,12 @@ function DatiTestTab() {
         disabled={loading}
         className="px-6 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 disabled:opacity-50"
       >
-        {loading ? '⏳ Generazione...' : '🎲 Genera Dati Test'}
+        {loading ? `⏳ ${t('generating')}` : `🎲 ${t('generateTestData')}`}
       </button>
 
       <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
         <p className="text-sm text-amber-700">
-          ⚠️ <strong>Attenzione:</strong> Questa funzione è pensata solo per ambienti di sviluppo/test. Non usare in produzione.
+          ⚠️ <strong>{t('testDataWarning').split(':')[0]}:</strong> {t('testDataWarning').split(':')[1]}
         </p>
       </div>
     </div>
