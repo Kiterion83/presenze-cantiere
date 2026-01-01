@@ -39,6 +39,8 @@ const translations = {
     statistics: 'Statistiche',
     dashboard: 'Dashboard',
     settings: 'Impostazioni',
+    gantt: 'Gantt',
+    aiInsights: 'AI Insights',
     
     // User Section
     testRole: 'Test Ruolo',
@@ -176,6 +178,8 @@ const translations = {
     statistics: 'Statistics',
     dashboard: 'Dashboard',
     settings: 'Settings',
+    gantt: 'Gantt',
+    aiInsights: 'AI Insights',
     
     // User Section
     testRole: 'Test Role',
@@ -324,22 +328,31 @@ export function useI18n() {
   return context
 }
 
-// Componente bandierina lingua
+// Componente bandierina lingua - con grafica SVG
 export function LanguageSwitch({ className = '' }) {
   const { language, toggleLanguage } = useI18n()
   
   return (
     <button
       onClick={toggleLanguage}
-      className={`flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition-colors ${className}`}
+      className={`flex items-center justify-center w-9 h-7 rounded overflow-hidden border border-gray-200 hover:border-gray-400 transition-all shadow-sm ${className}`}
       title={language === 'it' ? 'Switch to English' : 'Passa a Italiano'}
     >
       {language === 'it' ? (
-        // Bandiera Italia
-        <span className="text-lg">🇮🇹</span>
+        // Bandiera Italia 🇮🇹
+        <div className="w-full h-full flex">
+          <div className="w-1/3 h-full bg-green-500"></div>
+          <div className="w-1/3 h-full bg-white"></div>
+          <div className="w-1/3 h-full bg-red-500"></div>
+        </div>
       ) : (
-        // Bandiera UK
-        <span className="text-lg">🇬🇧</span>
+        // Bandiera UK 🇬🇧
+        <div className="w-full h-full bg-blue-700 relative flex items-center justify-center">
+          <div className="absolute w-full h-1.5 bg-white"></div>
+          <div className="absolute w-1.5 h-full bg-white"></div>
+          <div className="absolute w-full h-1 bg-red-600"></div>
+          <div className="absolute w-1 h-full bg-red-600"></div>
+        </div>
       )}
     </button>
   )
