@@ -418,7 +418,7 @@ function ProgettoTab() {
 // ==================== TUTTI PROGETTI TAB ====================
 function TuttiProgettiTab() {
   const { persona } = useAuth()
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const [progetti, setProgetti] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -427,6 +427,11 @@ function TuttiProgettiTab() {
   const [message, setMessage] = useState(null)
   const [addressSuggestions, setAddressSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  
+  // Stati per eliminazione con doppia conferma
+  const [deleteModal, setDeleteModal] = useState({ show: false, project: null })
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { loadProgetti() }, [])
 
@@ -483,12 +488,73 @@ function TuttiProgettiTab() {
 
   const toggleStato = async (p) => { await supabase.from('progetti').update({ stato: p.stato === 'attivo' ? 'completato' : 'attivo' }).eq('id', p.id); loadProgetti() }
 
+  // Apri modal eliminazione
+  const openDeleteModal = (project) => {
+    setDeleteModal({ show: true, project })
+    setDeleteConfirmText('')
+  }
+
+  // Chiudi modal
+  const closeDeleteModal = () => {
+    setDeleteModal({ show: false, project: null })
+    setDeleteConfirmText('')
+  }
+
+  // Elimina progetto con tutte le dipendenze
+  const handleDeleteProject = async () => {
+    if (!deleteModal.project) return
+    if (deleteConfirmText !== deleteModal.project.nome) return
+    
+    setDeleting(true)
+    try {
+      const projectId = deleteModal.project.id
+      
+      // Elimina in ordine per rispettare le foreign keys
+      // 1. QR codes
+      await supabase.from('qr_codes').delete().eq('progetto_id', projectId)
+      // 2. Aree lavoro
+      await supabase.from('aree_lavoro').delete().eq('progetto_id', projectId)
+      // 3. Presenze
+      await supabase.from('presenze').delete().eq('progetto_id', projectId)
+      // 4. Assegnazioni progetto
+      await supabase.from('assegnazioni_progetto').delete().eq('progetto_id', projectId)
+      // 5. Flussi approvazione
+      await supabase.from('flussi_approvazione').delete().eq('progetto_id', projectId)
+      // 6. Dipartimenti
+      await supabase.from('dipartimenti').delete().eq('progetto_id', projectId)
+      // 7. Centri costo
+      await supabase.from('centri_costo').delete().eq('progetto_id', projectId)
+      // 8. Squadre
+      await supabase.from('squadre').delete().eq('progetto_id', projectId)
+      // 9. Finalmente il progetto
+      const { error } = await supabase.from('progetti').delete().eq('id', projectId)
+      
+      if (error) throw error
+      
+      closeDeleteModal()
+      loadProgetti()
+      setMessage({ type: 'success', text: t('projectDeleted') })
+      setTimeout(() => setMessage(null), 3000)
+    } catch (err) {
+      console.error('Errore eliminazione:', err)
+      setMessage({ type: 'error', text: err.message })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-gray-800">📋 {t('allProjectsTab')}</h2>
         {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ {t('createProject')}</button>}
       </div>
+
+      {message && !showForm && (
+        <div className={`p-3 rounded-xl mb-4 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          {message.text}
+        </div>
+      )}
 
       {showForm && (
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
@@ -536,8 +602,56 @@ function TuttiProgettiTab() {
               </div>
               <span className={`px-2 py-1 rounded-full text-xs ${p.stato === 'attivo' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{p.stato === 'attivo' ? t('statusActive') : t('statusCompleted')}</span>
               <button onClick={() => toggleStato(p)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title={t('toggleStatus')}>{p.stato === 'attivo' ? '⏸️' : '▶️'}</button>
+              <button onClick={() => openDeleteModal(p)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title={t('deleteProject')}>🗑️</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal Conferma Eliminazione */}
+      {deleteModal.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="text-5xl mb-4">⚠️</div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">{t('deleteProjectTitle')}</h3>
+              <p className="text-gray-600 text-sm">{t('deleteProjectWarning')}</p>
+            </div>
+            
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+              <p className="text-red-700 font-medium text-center">{deleteModal.project?.nome}</p>
+              <p className="text-red-600 text-xs text-center mt-1">{deleteModal.project?.codice}</p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {t('typeProjectNameToConfirm')}
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={deleteModal.project?.nome}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:ring-0"
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={closeDeleteModal}
+                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleDeleteProject}
+                disabled={deleteConfirmText !== deleteModal.project?.nome || deleting}
+                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {deleting ? t('deleting') : t('confirmDelete')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
