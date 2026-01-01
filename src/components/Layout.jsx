@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useNotifications, NotificationPermissionBanner } from '../hooks/useNotifications.jsx'
+import { useI18n, LanguageSwitch } from '../contexts/I18nContext'
 
 export default function Layout({ children }) {
   const location = useLocation()
   const { persona, progetto, assegnazioni, assegnazione, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast, canAccess, cambiaProgetto } = useAuth()
-  const { unreadCount, requestPermission } = useNotifications(persona?.id, assegnazione?.progetto_id)
+  const { t, language } = useI18n()
   
   // Sidebar ridimensionabile
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -25,46 +25,55 @@ export default function Layout({ children }) {
   // Dropdown progetti
   const [showProgettiDropdown, setShowProgettiDropdown] = useState(false)
   const dropdownRef = useRef(null)
+  
+  // Banner notifiche - stato per nasconderlo
+  const [showNotificationBanner, setShowNotificationBanner] = useState(() => {
+    const dismissed = localStorage.getItem('notification_banner_dismissed')
+    return !dismissed
+  })
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  )
 
-  // Menu items organizzati per sezione
+  // Menu items organizzati per sezione - AGGIORNATO con traduzioni
   const menuSections = [
     {
       id: 'core',
-      label: 'Generale',
+      labelKey: 'general',
       emoji: '📱',
       items: [
-        { path: '/', label: 'Home', emoji: '🏠', minRole: 'helper' },
-        { path: '/checkin', label: 'Check-in', emoji: '📍', minRole: 'helper' },
-        { path: '/calendario', label: 'Calendario', emoji: '📅', minRole: 'helper' },
-        { path: '/ferie', label: 'Ferie', emoji: '🏖️', minRole: 'helper' },
-        { path: '/team', label: 'Team', emoji: '👥', minRole: 'foreman' },
-        { path: '/rapportino', label: 'Rapportino', emoji: '📝', minRole: 'foreman' },
-        { path: '/documenti', label: 'Documenti', emoji: '📁', minRole: 'foreman' },
-        { path: '/notifiche', label: 'Notifiche', emoji: '🔔', minRole: 'foreman' },
+        { path: '/', labelKey: 'home', emoji: '🏠', minRole: 'helper' },
+        { path: '/checkin', labelKey: 'checkIn', emoji: '📍', minRole: 'helper' },
+        { path: '/calendario', labelKey: 'calendar', emoji: '📅', minRole: 'helper' },
+        { path: '/ferie', labelKey: 'vacation', emoji: '🏖️', minRole: 'helper' },
+        { path: '/team', labelKey: 'team', emoji: '👥', minRole: 'foreman' },
+        { path: '/rapportino', labelKey: 'timesheet', emoji: '📝', minRole: 'foreman' },
+        { path: '/documenti', labelKey: 'documents', emoji: '📁', minRole: 'foreman' },
+        { path: '/notifiche', labelKey: 'notifications', emoji: '🔔', minRole: 'foreman' },
       ]
     },
     {
       id: 'construction',
-      label: 'Construction',
+      labelKey: 'construction',
       emoji: '🏗️',
       items: [
-        { path: '/componenti', label: 'Componenti', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
-        { path: '/pianificazione', label: 'Pianificazione', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
-        { path: '/foreman', label: 'Campo', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
-        { path: '/ore-componenti', label: 'Ore Lavoro', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
-        { path: '/activities', label: 'Activities', emoji: '📋', minRole: 'foreman', specialAccess: 'activities' },
-        { path: '/warehouse', label: 'Warehouse', emoji: '📦', minRole: 'warehouse', specialAccess: 'warehouse' },
+        { path: '/materiali', labelKey: 'materials', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
+        { path: '/pianificazione', labelKey: 'planning', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
+        { path: '/foreman', labelKey: 'field', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
+        { path: '/ore-componenti', labelKey: 'workHours', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
+        { path: '/activities', labelKey: 'activities', emoji: '📋', minRole: 'foreman', specialAccess: 'activities' },
+        { path: '/warehouse', labelKey: 'warehouse', emoji: '📦', minRole: 'warehouse', specialAccess: 'warehouse' },
       ]
     },
     {
       id: 'admin',
-      label: 'Gestione',
+      labelKey: 'management',
       emoji: '⚙️',
       items: [
-        { path: '/trasferimenti', label: 'Trasferimenti', emoji: '🔄', minRole: 'foreman' },
-        { path: '/statistiche', label: 'Statistiche', emoji: '📊', minRole: 'supervisor' },
-        { path: '/dashboard', label: 'Dashboard', emoji: '📈', minRole: 'supervisor' },
-        { path: '/impostazioni', label: 'Impostazioni', emoji: '⚙️', minRole: 'admin' },
+        { path: '/trasferimenti', labelKey: 'transfers', emoji: '🔄', minRole: 'foreman' },
+        { path: '/statistiche', labelKey: 'statistics', emoji: '📊', minRole: 'supervisor' },
+        { path: '/dashboard', labelKey: 'dashboard', emoji: '📈', minRole: 'supervisor' },
+        { path: '/impostazioni', labelKey: 'settings', emoji: '⚙️', minRole: 'admin' },
       ]
     }
   ]
@@ -86,9 +95,8 @@ export default function Layout({ children }) {
     localStorage.setItem('menu_sections', JSON.stringify(newSections))
   }
 
-  // Lista ruoli con pm, dept_manager, warehouse e engineer
+  // Lista ruoli - RIMOSSO "Ruolo reale", Admin è il top
   const roles = [
-    { value: '', label: 'Ruolo reale' },
     { value: 'admin', label: 'Admin' },
     { value: 'pm', label: 'PM' },
     { value: 'cm', label: 'CM' },
@@ -165,6 +173,22 @@ export default function Layout({ children }) {
     }
     setShowProgettiDropdown(false)
   }
+  
+  // Gestione notifiche
+  const handleEnableNotifications = async () => {
+    if (typeof Notification !== 'undefined') {
+      const permission = await Notification.requestPermission()
+      setNotificationPermission(permission)
+      if (permission === 'granted') {
+        setShowNotificationBanner(false)
+      }
+    }
+  }
+  
+  const handleDismissNotificationBanner = () => {
+    setShowNotificationBanner(false)
+    localStorage.setItem('notification_banner_dismissed', 'true')
+  }
 
   // Se non autenticato, mostra solo children
   if (!persona) {
@@ -188,7 +212,7 @@ export default function Layout({ children }) {
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="font-bold text-gray-800">PTS</h1>
-              <p className="text-xs text-gray-500 truncate">Project Tracking System</p>
+              <p className="text-xs text-gray-500 truncate">{t('projectTrackingSystem')}</p>
             </div>
           </div>
           
@@ -201,7 +225,7 @@ export default function Layout({ children }) {
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-lg">📁</span>
                 <span className="font-medium text-gray-800 truncate text-sm">
-                  {progetto?.nome || 'Seleziona progetto'}
+                  {progetto?.nome || t('selectProject')}
                 </span>
               </div>
               <span className={`text-gray-400 transition-transform ${showProgettiDropdown ? 'rotate-180' : ''}`}>
@@ -214,7 +238,7 @@ export default function Layout({ children }) {
               <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 <div className="p-2 border-b bg-gray-50">
                   <p className="text-xs font-medium text-gray-500 uppercase">
-                    {assegnazioni.some(a => a.isVirtual) ? 'Tutti i progetti (Admin)' : 'I tuoi progetti'}
+                    {assegnazioni.some(a => a.isVirtual) ? t('allProjects') : t('yourProjects')}
                   </p>
                 </div>
                 <div className="max-h-64 overflow-y-auto">
@@ -237,7 +261,7 @@ export default function Layout({ children }) {
                         <p className="font-medium text-gray-800 truncate text-sm">{ass.progetto?.nome}</p>
                         <p className="text-xs text-gray-500">
                           {ass.ruolo}
-                          {ass.isVirtual && <span className="ml-1 text-amber-600">(accesso admin)</span>}
+                          {ass.isVirtual && <span className="ml-1 text-amber-600">{t('adminAccess')}</span>}
                         </p>
                       </div>
                       {ass.progetto_id === progetto?.id && (
@@ -249,7 +273,7 @@ export default function Layout({ children }) {
                 {assegnazioni.length > 1 && (
                   <div className="p-2 border-t bg-gray-50">
                     <p className="text-xs text-gray-400 text-center">
-                      {assegnazioni.length} progetti disponibili
+                      {assegnazioni.length} {t('projectsAvailable')}
                     </p>
                   </div>
                 )}
@@ -275,7 +299,7 @@ export default function Layout({ children }) {
                 >
                   <span className="flex items-center gap-2">
                     <span>{section.emoji}</span>
-                    <span>{section.label}</span>
+                    <span>{t(section.labelKey)}</span>
                     <span className="text-gray-300 font-normal">({visibleItems.length})</span>
                   </span>
                   <span className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}>
@@ -297,12 +321,7 @@ export default function Layout({ children }) {
                         }`}
                       >
                         <span className="text-lg">{item.emoji}</span>
-                        <span className="truncate text-sm">{item.label}</span>
-                        {item.path === '/notifiche' && unreadCount > 0 && (
-                          <span className="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                            {unreadCount}
-                          </span>
-                        )}
+                        <span className="truncate text-sm">{t(item.labelKey)}</span>
                       </Link>
                     ))}
                   </div>
@@ -314,20 +333,23 @@ export default function Layout({ children }) {
 
         {/* Footer con Test Ruolo e User */}
         <div className="p-4 border-t border-gray-100">
-          <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
-            <label className="block text-xs font-medium text-amber-700 mb-1">🧪 Test Ruolo</label>
-            <select
-              value={testRoleOverride || ''}
-              onChange={(e) => setTestRole(e.target.value || null)}
-              className="w-full px-2 py-1.5 text-sm border border-amber-300 rounded-lg bg-white"
-            >
-              {roles.map(r => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
-          </div>
+          {/* Test Ruolo - Solo per Admin */}
+          {ruolo === 'admin' && (
+            <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
+              <label className="block text-xs font-medium text-amber-700 mb-1">🧪 {t('testRole')}</label>
+              <select
+                value={testRoleOverride || 'admin'}
+                onChange={(e) => setTestRole(e.target.value === 'admin' ? null : e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-amber-300 rounded-lg bg-white"
+              >
+                {roles.map(r => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          {/* User Info */}
+          {/* User Info con Bandierina Lingua */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold">
               {persona?.nome?.[0]}{persona?.cognome?.[0]}
@@ -340,13 +362,15 @@ export default function Layout({ children }) {
                 {ruolo}
               </span>
             </div>
+            {/* Bandierina Lingua */}
+            <LanguageSwitch />
           </div>
           
           <button
             onClick={signOut}
             className="mt-3 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
-            Esci
+            {t('logout')}
           </button>
         </div>
 
@@ -361,10 +385,41 @@ export default function Layout({ children }) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <NotificationPermissionBanner 
-          persona={persona} 
-          requestPermission={requestPermission} 
-        />
+        {/* Banner Notifiche - con possibilità di chiudere */}
+        {showNotificationBanner && notificationPermission === 'default' && (
+          <div className="bg-white border-b shadow-sm p-4">
+            <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🔔</span>
+                <div>
+                  <p className="font-medium text-gray-800">{t('enableNotifications')}</p>
+                  <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDismissNotificationBanner}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  {t('notNow')}
+                </button>
+                <button
+                  onClick={handleEnableNotifications}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  {t('enable')}
+                </button>
+              </div>
+              {/* X per chiudere */}
+              <button
+                onClick={handleDismissNotificationBanner}
+                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
         {children}
       </main>
     </div>
