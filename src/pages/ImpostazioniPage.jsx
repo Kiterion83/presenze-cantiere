@@ -77,7 +77,7 @@ export default function ImpostazioniPage() {
 // ==================== PROGETTO + AREE LAVORO TAB ====================
 function ProgettoTab() {
   const { progetto, assegnazione } = useAuth()
-  const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '' })
+  const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   
@@ -96,7 +96,8 @@ function ProgettoTab() {
       setFormData({
         nome: progetto.nome || '', codice: progetto.codice || '', indirizzo: progetto.indirizzo || '', citta: progetto.citta || '',
         data_inizio: progetto.data_inizio || '', data_fine_prevista: progetto.data_fine_prevista || '',
-        latitudine: progetto.latitudine || '', longitudine: progetto.longitudine || ''
+        latitudine: progetto.latitudine || '', longitudine: progetto.longitudine || '',
+        raggio_checkin: progetto.raggio_checkin || 200
       })
     }
     if (assegnazione?.progetto_id) loadAree()
@@ -117,7 +118,8 @@ function ProgettoTab() {
         nome: formData.nome, codice: formData.codice, indirizzo: formData.indirizzo, citta: formData.citta,
         data_inizio: formData.data_inizio || null, data_fine_prevista: formData.data_fine_prevista || null,
         latitudine: formData.latitudine ? parseFloat(formData.latitudine) : null,
-        longitudine: formData.longitudine ? parseFloat(formData.longitudine) : null
+        longitudine: formData.longitudine ? parseFloat(formData.longitudine) : null,
+        raggio_checkin: parseInt(formData.raggio_checkin) || 200
       }).eq('id', progetto.id)
       if (error) throw error
       setMessage({ type: 'success', text: 'Progetto aggiornato!' })
@@ -187,16 +189,21 @@ function ProgettoTab() {
               <input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
           </div>
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-            <h3 className="font-semibold text-blue-800 mb-3">📍 Coordinate GPS Centro Cantiere</h3>
-            <div className="grid lg:grid-cols-3 gap-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-blue-800">📍 Coordinate GPS Centro Cantiere</h3>
+              <button onClick={getCurrentLocation} className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200">📍 Usa GPS</button>
+            </div>
+            <div className="grid lg:grid-cols-4 gap-4">
               <div><label className="block text-sm font-medium mb-1">Latitudine</label>
                 <input type="text" value={formData.latitudine} onChange={(e) => setFormData({...formData, latitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="44.80150000" /></div>
               <div><label className="block text-sm font-medium mb-1">Longitudine</label>
                 <input type="text" value={formData.longitudine} onChange={(e) => setFormData({...formData, longitudine: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="10.32790000" /></div>
-              <div className="flex items-end">
-                <button onClick={getCurrentLocation} className="w-full px-4 py-3 bg-blue-100 text-blue-700 rounded-xl font-medium hover:bg-blue-200">📍 Usa GPS</button>
-              </div>
+              <div><label className="block text-sm font-medium mb-1">Raggio Check-in (m)</label>
+                <input type="number" value={formData.raggio_checkin} onChange={(e) => setFormData({...formData, raggio_checkin: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="200" min="50" max="5000" /></div>
             </div>
+            {formData.latitudine && formData.longitudine && (
+              <p className="mt-2 text-xs text-green-600">✅ I lavoratori potranno fare check-in entro {formData.raggio_checkin}m da questo punto.</p>
+            )}
           </div>
           {message && <div className={`p-4 rounded-xl ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{message.text}</div>}
           <button onClick={handleSave} disabled={saving} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:bg-blue-300">
@@ -386,6 +393,31 @@ function TuttiProgettiTab() {
     setSaving(true)
     setMessage(null)
     try {
+      // 0. Verifica unicità nome e codice
+      const { data: esistenti } = await supabase
+        .from('progetti')
+        .select('nome, codice')
+        .or(`nome.ilike.${formData.nome}${formData.codice ? `,codice.ilike.${formData.codice}` : ''}`)
+      
+      if (esistenti && esistenti.length > 0) {
+        const nomeEsiste = esistenti.some(p => p.nome?.toLowerCase() === formData.nome.toLowerCase())
+        const codiceEsiste = formData.codice && esistenti.some(p => p.codice?.toLowerCase() === formData.codice.toLowerCase())
+        
+        if (nomeEsiste && codiceEsiste) {
+          setMessage({ type: 'error', text: '⚠️ Esiste già un progetto con questo nome E questo codice!' })
+          setSaving(false)
+          return
+        } else if (nomeEsiste) {
+          setMessage({ type: 'error', text: '⚠️ Esiste già un progetto con questo nome!' })
+          setSaving(false)
+          return
+        } else if (codiceEsiste) {
+          setMessage({ type: 'error', text: '⚠️ Esiste già un progetto con questo codice commessa!' })
+          setSaving(false)
+          return
+        }
+      }
+
       // 1. Crea il progetto
       const { data: newProject, error: errProj } = await supabase.from('progetti').insert({
         nome: formData.nome, codice: formData.codice || null,
