@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
+import WorkPackageDetail from './WorkPackageDetail'
 
 export default function ConstructionTab() {
   const { progetto } = useAuth()
@@ -1407,6 +1408,66 @@ function WorkPackagesSection({ progettoId }) {
     soloNonAssegnati: true
   })
 
+  // Funzione per caricare WP
+  const loadWorkPackages = async () => {
+    try {
+      // Query base semplificata
+      const { data: wpData, error } = await supabase
+        .from('work_packages')
+        .select('*')
+        .eq('progetto_id', progettoId)
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.error('Errore caricamento WP:', error)
+        return []
+      }
+      
+      // Arricchisci con dati correlati
+      const enrichedWP = await Promise.all((wpData || []).map(async (wp) => {
+        // Conta componenti
+        const { count } = await supabase
+          .from('work_package_componenti')
+          .select('*', { count: 'exact', head: true })
+          .eq('work_package_id', wp.id)
+        
+        // Squadra
+        let squadra = null
+        if (wp.squadra_id) {
+          const { data } = await supabase.from('squadre').select('id, nome').eq('id', wp.squadra_id).single()
+          squadra = data
+        }
+        
+        // Foreman
+        let foreman = null
+        if (wp.foreman_id) {
+          const { data } = await supabase.from('persone').select('id, nome, cognome').eq('id', wp.foreman_id).single()
+          foreman = data
+        }
+        
+        // Predecessore
+        let predecessore = null
+        if (wp.predecessore_id) {
+          const { data } = await supabase.from('work_packages').select('id, codice, nome').eq('id', wp.predecessore_id).single()
+          predecessore = data
+        }
+        
+        return {
+          ...wp,
+          squadra,
+          foreman,
+          predecessore,
+          componenti_count: count || 0
+        }
+      }))
+      
+      return enrichedWP
+    } catch (error) {
+      console.error('Errore:', error)
+      return []
+    }
+  }
+
   // Load data
   useEffect(() => {
     const loadData = async () => {
@@ -1414,19 +1475,8 @@ function WorkPackagesSection({ progettoId }) {
       setLoading(true)
       try {
         // WP
-        const { data: wpData } = await supabase
-          .from('work_packages')
-          .select(`
-            *,
-            squadra:squadre(id, nome),
-            foreman:persone(id, nome, cognome),
-            predecessore:work_packages!predecessore_id(id, codice, nome),
-            work_package_componenti(count),
-            work_package_fasi(fase_workflow_id)
-          `)
-          .eq('progetto_id', progettoId)
-          .order('created_at', { ascending: false })
-        setWorkPackages(wpData || [])
+        const wpData = await loadWorkPackages()
+        setWorkPackages(wpData)
         
         // Squadre
         const { data: sqData } = await supabase
@@ -1594,13 +1644,9 @@ function WorkPackagesSection({ progettoId }) {
       setShowForm(false)
       resetForm()
       
-      // Reload
-      const { data: wpData } = await supabase
-        .from('work_packages')
-        .select(`*, squadra:squadre(id, nome), foreman:persone(id, nome, cognome), predecessore:work_packages!predecessore_id(id, codice, nome), work_package_componenti(count)`)
-        .eq('progetto_id', progettoId)
-        .order('created_at', { ascending: false })
-      setWorkPackages(wpData || [])
+      // Reload usando la funzione
+      const wpData = await loadWorkPackages()
+      setWorkPackages(wpData)
       
     } catch (error) {
       console.error('Errore:', error)
@@ -1748,7 +1794,7 @@ function WorkPackagesSection({ progettoId }) {
                       {wp.data_inizio_pianificata && (
                         <span>📅 {new Date(wp.data_inizio_pianificata).toLocaleDateString()} → {wp.data_fine_pianificata ? new Date(wp.data_fine_pianificata).toLocaleDateString() : '?'}</span>
                       )}
-                      <span>📦 {wp.work_package_componenti?.[0]?.count || 0} {language === 'it' ? 'componenti' : 'components'}</span>
+                      <span>📦 {wp.componenti_count || 0} {language === 'it' ? 'componenti' : 'components'}</span>
                       {wp.predecessore && <span>🔗 dopo {wp.predecessore.codice}</span>}
                     </div>
                     
@@ -1992,27 +2038,17 @@ function WorkPackagesSection({ progettoId }) {
         </div>
       )}
 
-      {/* Modal Dettaglio WP (placeholder per pianificazione) */}
+      {/* Modal Dettaglio WP */}
       {showDetail && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex justify-between items-center">
-              <div>
-                <h3 className="text-xl font-bold">{showDetail.codice} - {showDetail.nome}</h3>
-                <p className="text-sm text-gray-500">{showDetail.descrizione}</p>
-              </div>
-              <button onClick={() => setShowDetail(null)} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
-            </div>
-            
-            <div className="p-6">
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-                <p className="text-4xl mb-2">🚧</p>
-                <p className="text-amber-700">{language === 'it' ? 'Pianificazione settimanale e documenti in arrivo...' : 'Weekly planning and documents coming soon...'}</p>
-                <p className="text-sm text-amber-600 mt-2">{language === 'it' ? 'Qui potrai pianificare quali componenti fare ogni settimana' : 'Here you can plan which components to do each week'}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <WorkPackageDetail
+          wp={showDetail}
+          onClose={() => setShowDetail(null)}
+          onUpdate={async () => {
+            const wpData = await loadWorkPackages()
+            setWorkPackages(wpData)
+          }}
+          language={language}
+        />
       )}
     </div>
   )
