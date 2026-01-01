@@ -309,18 +309,83 @@ function CategorieSection({ progettoId }) {
   const [message, setMessage] = useState(null)
 
   const unitaMisura = ['pz', 'mt', 'm²', 'm³', 'kg', 'ton', 'lt', 'set']
-  // Nuove icone con cilindro/tubo
-  const icone = ['📦', '🔩', '🧪', '🔌', '⬛', '🟫', '🔶', '📏', '🧱', '🪨', '🔗', '⚙️']
-  // Icone SVG custom per categorie piping
-  const iconeSvg = {
-    spool: '🛢️',
-    supporto: '📍',
-    fitting: '🔩',
-    strumento: '📡',
-    valvola: '🚰',
-    flangia: '⭕',
-    tubo: '🔧'
+  
+  // Icone SVG stilizzate per categorie piping
+  const IconaSupporto = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <circle cx="12" cy="8" r="6" fill="#60A5FA" stroke="#3B82F6" strokeWidth="1"/>
+      <path d="M6 14 L8 12 L16 12 L18 14" fill="none" stroke="#3B82F6" strokeWidth="2"/>
+      <rect x="9" y="14" width="2" height="6" fill="#3B82F6"/>
+      <rect x="13" y="14" width="2" height="6" fill="#3B82F6"/>
+      <rect x="7" y="20" width="10" height="2" fill="#3B82F6"/>
+    </svg>
+  )
+  
+  const IconaSpool = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <ellipse cx="4" cy="12" rx="3" ry="5" fill="none" stroke="#6B7280" strokeWidth="1.5"/>
+      <ellipse cx="20" cy="12" rx="3" ry="5" fill="none" stroke="#6B7280" strokeWidth="1.5"/>
+      <rect x="4" y="10" width="16" height="4" fill="#9CA3AF" stroke="#6B7280" strokeWidth="1"/>
+      <line x1="12" y1="6" x2="12" y2="4" stroke="#6B7280" strokeWidth="2"/>
+      <rect x="10" y="2" width="4" height="3" fill="#9CA3AF" stroke="#6B7280" strokeWidth="1"/>
+    </svg>
+  )
+  
+  const IconaFlangia = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <circle cx="12" cy="12" r="10" fill="#3B82F6" stroke="#1E40AF" strokeWidth="1"/>
+      <circle cx="12" cy="12" r="4" fill="white"/>
+      <circle cx="12" cy="4" r="1.5" fill="white"/>
+      <circle cx="12" cy="20" r="1.5" fill="white"/>
+      <circle cx="4" cy="12" r="1.5" fill="white"/>
+      <circle cx="20" cy="12" r="1.5" fill="white"/>
+      <circle cx="6.3" cy="6.3" r="1.5" fill="white"/>
+      <circle cx="17.7" cy="6.3" r="1.5" fill="white"/>
+      <circle cx="6.3" cy="17.7" r="1.5" fill="white"/>
+      <circle cx="17.7" cy="17.7" r="1.5" fill="white"/>
+    </svg>
+  )
+  
+  const IconaFitting = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <path d="M4 20 L4 14 Q4 8 10 8 L20 8 L20 4" fill="none" stroke="#374151" strokeWidth="4" strokeLinecap="round"/>
+      <ellipse cx="4" cy="20" rx="2" ry="3" fill="#374151"/>
+      <ellipse cx="20" cy="4" rx="3" ry="2" fill="#374151"/>
+    </svg>
+  )
+  
+  const IconaValvola = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <rect x="2" y="10" width="6" height="4" fill="#6B7280" stroke="#374151" strokeWidth="1"/>
+      <rect x="16" y="10" width="6" height="4" fill="#6B7280" stroke="#374151" strokeWidth="1"/>
+      <rect x="8" y="8" width="8" height="8" fill="#9CA3AF" stroke="#374151" strokeWidth="1"/>
+      <line x1="12" y1="8" x2="12" y2="4" stroke="#374151" strokeWidth="2"/>
+      <ellipse cx="12" cy="3" rx="4" ry="1.5" fill="#6B7280" stroke="#374151" strokeWidth="1"/>
+    </svg>
+  )
+  
+  const IconaStrumento = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <rect x="6" y="4" width="12" height="16" rx="2" fill="#E0F2FE" stroke="#0EA5E9" strokeWidth="1.5"/>
+      <rect x="8" y="6" width="8" height="6" fill="white" stroke="#0EA5E9" strokeWidth="1"/>
+      <circle cx="12" cy="16" r="2" fill="#0EA5E9"/>
+      <line x1="10" y1="9" x2="14" y2="9" stroke="#0EA5E9" strokeWidth="0.5"/>
+      <line x1="12" y1="7" x2="12" y2="11" stroke="#0EA5E9" strokeWidth="0.5"/>
+    </svg>
+  )
+
+  // Mappa icone per categoria
+  const iconeCategorie = {
+    supporto: <IconaSupporto />,
+    spool: <IconaSpool />,
+    flangia: <IconaFlangia />,
+    fitting: <IconaFitting />,
+    valvola: <IconaValvola />,
+    strumento: <IconaStrumento />,
   }
+  
+  // Icone emoji di base
+  const iconeBase = ['📦', '🔩', '⚙️', '🔗', '🛢️', '📡']
 
   useEffect(() => {
     const loadDiscipline = async () => {
@@ -528,19 +593,34 @@ function CategorieSection({ progettoId }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'it' ? 'Icona' : 'Icon'}</label>
-              <div className="flex flex-wrap gap-1">
-                {/* Icone standard */}
-                {icone.map(ic => (
-                  <button key={ic} type="button" onClick={() => setForm({ ...form, icona: ic })}
-                    className={`w-8 h-8 rounded text-lg flex items-center justify-center ${form.icona === ic ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-gray-100 hover:bg-gray-200'}`}>
-                    {ic}
+              <div className="flex flex-wrap gap-2">
+                {/* Icone SVG stilizzate per piping */}
+                {Object.entries(iconeCategorie).map(([key, IconComponent]) => (
+                  <button 
+                    key={key} 
+                    type="button" 
+                    onClick={() => setForm({ ...form, icona: key })}
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+                      form.icona === key 
+                        ? 'bg-blue-100 ring-2 ring-blue-500 scale-110' 
+                        : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                  >
+                    {IconComponent}
                   </button>
                 ))}
-                {/* Icone speciali piping */}
-                {Object.entries(iconeSvg).map(([key, ic]) => (
-                  <button key={key} type="button" onClick={() => setForm({ ...form, icona: ic })}
-                    className={`w-8 h-8 rounded text-lg flex items-center justify-center ${form.icona === ic ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-gray-100 hover:bg-gray-200'}`}
-                    title={key}>
+                {/* Icone emoji di base */}
+                {iconeBase.map(ic => (
+                  <button 
+                    key={ic} 
+                    type="button" 
+                    onClick={() => setForm({ ...form, icona: ic })}
+                    className={`w-10 h-10 rounded-lg text-xl flex items-center justify-center transition-all ${
+                      form.icona === ic 
+                        ? 'bg-blue-100 ring-2 ring-blue-500 scale-110' 
+                        : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                  >
                     {ic}
                   </button>
                 ))}
@@ -594,8 +674,8 @@ function CategorieSection({ progettoId }) {
         ) : (
           categorie.map(cat => (
             <div key={cat.id} className="p-4 flex items-center gap-4 hover:bg-gray-50 transition-colors">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-xl">
-                {cat.icona}
+              <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center">
+                {iconeCategorie[cat.icona] || <span className="text-2xl">{cat.icona}</span>}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
@@ -633,6 +713,73 @@ function ComponentiSection({ progettoId }) {
   const [importing, setImporting] = useState(false)
   const [message, setMessage] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Icone SVG stilizzate (stesse di CategorieSection)
+  const IconaSupporto = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <circle cx="12" cy="8" r="6" fill="#60A5FA" stroke="#3B82F6" strokeWidth="1"/>
+      <path d="M6 14 L8 12 L16 12 L18 14" fill="none" stroke="#3B82F6" strokeWidth="2"/>
+      <rect x="9" y="14" width="2" height="6" fill="#3B82F6"/>
+      <rect x="13" y="14" width="2" height="6" fill="#3B82F6"/>
+      <rect x="7" y="20" width="10" height="2" fill="#3B82F6"/>
+    </svg>
+  )
+  const IconaSpool = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <ellipse cx="4" cy="12" rx="3" ry="5" fill="none" stroke="#6B7280" strokeWidth="1.5"/>
+      <ellipse cx="20" cy="12" rx="3" ry="5" fill="none" stroke="#6B7280" strokeWidth="1.5"/>
+      <rect x="4" y="10" width="16" height="4" fill="#9CA3AF" stroke="#6B7280" strokeWidth="1"/>
+      <line x1="12" y1="6" x2="12" y2="4" stroke="#6B7280" strokeWidth="2"/>
+      <rect x="10" y="2" width="4" height="3" fill="#9CA3AF" stroke="#6B7280" strokeWidth="1"/>
+    </svg>
+  )
+  const IconaFlangia = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <circle cx="12" cy="12" r="10" fill="#3B82F6" stroke="#1E40AF" strokeWidth="1"/>
+      <circle cx="12" cy="12" r="4" fill="white"/>
+      <circle cx="12" cy="4" r="1.5" fill="white"/>
+      <circle cx="12" cy="20" r="1.5" fill="white"/>
+      <circle cx="4" cy="12" r="1.5" fill="white"/>
+      <circle cx="20" cy="12" r="1.5" fill="white"/>
+      <circle cx="6.3" cy="6.3" r="1.5" fill="white"/>
+      <circle cx="17.7" cy="6.3" r="1.5" fill="white"/>
+      <circle cx="6.3" cy="17.7" r="1.5" fill="white"/>
+      <circle cx="17.7" cy="17.7" r="1.5" fill="white"/>
+    </svg>
+  )
+  const IconaFitting = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <path d="M4 20 L4 14 Q4 8 10 8 L20 8 L20 4" fill="none" stroke="#374151" strokeWidth="4" strokeLinecap="round"/>
+      <ellipse cx="4" cy="20" rx="2" ry="3" fill="#374151"/>
+      <ellipse cx="20" cy="4" rx="3" ry="2" fill="#374151"/>
+    </svg>
+  )
+  const IconaValvola = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <rect x="2" y="10" width="6" height="4" fill="#6B7280" stroke="#374151" strokeWidth="1"/>
+      <rect x="16" y="10" width="6" height="4" fill="#6B7280" stroke="#374151" strokeWidth="1"/>
+      <rect x="8" y="8" width="8" height="8" fill="#9CA3AF" stroke="#374151" strokeWidth="1"/>
+      <line x1="12" y1="8" x2="12" y2="4" stroke="#374151" strokeWidth="2"/>
+      <ellipse cx="12" cy="3" rx="4" ry="1.5" fill="#6B7280" stroke="#374151" strokeWidth="1"/>
+    </svg>
+  )
+  const IconaStrumento = () => (
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+      <rect x="6" y="4" width="12" height="16" rx="2" fill="#E0F2FE" stroke="#0EA5E9" strokeWidth="1.5"/>
+      <rect x="8" y="6" width="8" height="6" fill="white" stroke="#0EA5E9" strokeWidth="1"/>
+      <circle cx="12" cy="16" r="2" fill="#0EA5E9"/>
+      <line x1="10" y1="9" x2="14" y2="9" stroke="#0EA5E9" strokeWidth="0.5"/>
+      <line x1="12" y1="7" x2="12" y2="11" stroke="#0EA5E9" strokeWidth="0.5"/>
+    </svg>
+  )
+  const iconeCategorie = {
+    supporto: <IconaSupporto />,
+    spool: <IconaSpool />,
+    flangia: <IconaFlangia />,
+    fitting: <IconaFitting />,
+    valvola: <IconaValvola />,
+    strumento: <IconaStrumento />,
+  }
 
   useEffect(() => {
     const loadDiscipline = async () => {
@@ -860,7 +1007,9 @@ function ComponentiSection({ progettoId }) {
       {selectedCat && (
         <div className="p-4 bg-blue-50 border-b">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{selectedCat.icona}</span>
+            <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-sm">
+              {iconeCategorie[selectedCat.icona] || <span className="text-2xl">{selectedCat.icona}</span>}
+            </div>
             <div>
               <p className="font-medium">{selectedCat.nome}</p>
               <p className="text-sm text-gray-600">
@@ -923,9 +1072,14 @@ function ComponentiSection({ progettoId }) {
             <h3 className="text-xl font-bold mb-4">📥 {language === 'it' ? 'Import Massivo Componenti' : 'Bulk Import Components'}</h3>
             
             {selectedCat && (
-              <div className="p-3 bg-blue-50 rounded-lg mb-4">
-                <p className="text-sm text-gray-600">{language === 'it' ? 'Categoria:' : 'Category:'} <strong>{selectedCat.nome}</strong></p>
-                <p className="text-sm text-gray-600">{language === 'it' ? 'Prefisso:' : 'Prefix:'} <strong className="font-mono">{selectedCat.prefisso_codice}</strong></p>
+              <div className="p-3 bg-blue-50 rounded-lg mb-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center">
+                  {iconeCategorie[selectedCat.icona] || <span className="text-xl">{selectedCat.icona}</span>}
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">{language === 'it' ? 'Categoria:' : 'Category:'} <strong>{selectedCat.nome}</strong></p>
+                  <p className="text-sm text-gray-600">{language === 'it' ? 'Prefisso:' : 'Prefix:'} <strong className="font-mono">{selectedCat.prefisso_codice}</strong></p>
+                </div>
               </div>
             )}
             
