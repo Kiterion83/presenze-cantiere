@@ -171,7 +171,7 @@ function ProgettoTab() {
           <div className="grid lg:grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
               <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Codice</label>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Codice Commessa</label>
               <input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
