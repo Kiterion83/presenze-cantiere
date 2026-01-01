@@ -1,6 +1,6 @@
 // WorkPackageDetail.jsx - Dettaglio WP con pianificazione settimanale
 import { useState, useEffect } from 'react'
-import { supabase } from '../supabaseClient'
+import { supabase } from '../lib/supabase'
 
 // Helper per settimane
 const getWeekNumber = (date) => {
