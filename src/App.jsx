@@ -25,6 +25,9 @@ import MaterialiPage from './pages/MaterialiPage'  // Rinominato da ComponentiPa
 import PianificazionePage from './pages/PianificazionePage'
 import ForemanPage from './pages/ForemanPage'
 import OreComponentiPage from './pages/OreComponentiPage'
+// NUOVE PAGINE - Statistiche e AI
+import GanttPage from './pages/GanttPage'
+import AIInsightsPage from './pages/AIInsightsPage'
 
 // Components
 import Layout from './components/Layout'
@@ -119,6 +122,8 @@ function AppRoutes() {
       {/* Protected Routes - Supervisor+ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute minRole="supervisor"><DashboardPage /></ProtectedRoute>} />
+      <Route path="/gantt" element={<ProtectedRoute minRole="supervisor"><GanttPage /></ProtectedRoute>} />
+      <Route path="/ai-insights" element={<ProtectedRoute minRole="supervisor"><AIInsightsPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Admin */}
       <Route path="/impostazioni" element={<ProtectedRoute minRole="admin"><ImpostazioniPage /></ProtectedRoute>} />
