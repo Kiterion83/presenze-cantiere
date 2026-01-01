@@ -8,17 +8,16 @@ export default function ImpostazioniPage() {
   const { progetto, isAtLeast } = useAuth()
   const [activeTab, setActiveTab] = useState('progetto')
 
-  // AGGIORNATO: Aggiunto tab Construction
+  // AGGIORNATO v2.2: QR Codes integrato in Progetto & Aree
   const menuItems = [
-    { id: 'progetto', label: 'Progetto', emoji: '🏗️', minRole: 'admin' },
+    { id: 'progetto', label: 'Progetto & Aree', emoji: '🏗️', minRole: 'admin' },
     { id: 'persone', label: 'Persone', emoji: '👥', minRole: 'admin' },
     { id: 'ditte', label: 'Ditte', emoji: '🏢', minRole: 'admin' },
     { id: 'squadre', label: 'Squadre', emoji: '👷', minRole: 'admin' },
     { id: 'dipartimenti', label: 'Dipartimenti', emoji: '🏛️', minRole: 'admin' },
     { id: 'centriCosto', label: 'Centri Costo', emoji: '💰', minRole: 'admin' },
     { id: 'flussi', label: 'Flussi Approvazione', emoji: '🔄', minRole: 'admin' },
-    { id: 'construction', label: 'Construction', emoji: '🔧', minRole: 'admin' },  // NUOVO
-    { id: 'qrCodes', label: 'QR Codes', emoji: '📱', minRole: 'admin' },
+    { id: 'construction', label: 'Construction', emoji: '🔧', minRole: 'admin' },
     { id: 'progetti', label: 'Tutti i Progetti', emoji: '📋', minRole: 'admin' },
     { id: 'datiTest', label: 'Dati Test', emoji: '🧪', minRole: 'admin' },
   ].filter(item => isAtLeast(item.minRole))
@@ -65,7 +64,6 @@ export default function ImpostazioniPage() {
           {activeTab === 'centriCosto' && <CentriCostoTab />}
           {activeTab === 'flussi' && <FlussiTab />}
           {activeTab === 'construction' && <ConstructionTab />}
-          {activeTab === 'qrCodes' && <QRCodesTab />}
           {activeTab === 'progetti' && <TuttiProgettiTab />}
           {activeTab === 'datiTest' && <DatiTestTab />}
         </div>
@@ -74,15 +72,18 @@ export default function ImpostazioniPage() {
   )
 }
 
-// ==================== PROGETTO + AREE LAVORO TAB ====================
+// ==================== PROGETTO + AREE LAVORO + QR CODES TAB ====================
+// AGGIORNATO v2.2: QR Codes integrati nelle Aree di Lavoro
+// Flusso: Crea Area → Genera QR dall'area → Stampa QR → Usa per Check-in/out
 function ProgettoTab() {
   const { progetto, assegnazione } = useAuth()
   const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   
-  // Aree Lavoro
+  // Aree Lavoro + QR Codes
   const [aree, setAree] = useState([])
+  const [qrCodes, setQrCodes] = useState({})
   const [loadingAree, setLoadingAree] = useState(true)
   const [showAreaForm, setShowAreaForm] = useState(false)
   const [editingArea, setEditingArea] = useState(null)
@@ -100,7 +101,10 @@ function ProgettoTab() {
         raggio_checkin: progetto.raggio_checkin || 200
       })
     }
-    if (assegnazione?.progetto_id) loadAree()
+    if (assegnazione?.progetto_id) {
+      loadAree()
+      loadQrCodes()
+    }
   }, [progetto, assegnazione?.progetto_id])
 
   const loadAree = async () => {
@@ -108,6 +112,13 @@ function ProgettoTab() {
     const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome')
     setAree(data || [])
     setLoadingAree(false)
+  }
+
+  const loadQrCodes = async () => {
+    const { data } = await supabase.from('qr_codes').select('*').eq('progetto_id', assegnazione.progetto_id)
+    const qrMap = {}
+    data?.forEach(qr => { if (qr.area_lavoro_id) qrMap[qr.area_lavoro_id] = qr })
+    setQrCodes(qrMap)
   }
 
   const handleSave = async () => {
@@ -134,7 +145,7 @@ function ProgettoTab() {
     )
   }
 
-  // Area functions
+  // ========== AREA FUNCTIONS ==========
   const resetAreaForm = () => { setAreaForm({ nome: '', descrizione: '', latitudine: '', longitudine: '', raggio_metri: 100, colore: '#3B82F6' }); setEditingArea(null); setShowAreaForm(false); setAreaMessage(null) }
 
   const handleEditArea = (area) => {
@@ -155,13 +166,83 @@ function ProgettoTab() {
     finally { setSavingArea(false) }
   }
 
-  const handleDeleteArea = async (id) => { if (!confirm('Eliminare questa area?')) return; await supabase.from('aree_lavoro').delete().eq('id', id); loadAree() }
+  const handleDeleteArea = async (id) => { 
+    if (!confirm('Eliminare questa area? Verrà eliminato anche il QR Code associato.')) return
+    await supabase.from('qr_codes').delete().eq('area_lavoro_id', id)
+    await supabase.from('aree_lavoro').delete().eq('id', id)
+    loadAree(); loadQrCodes()
+  }
 
   const getAreaLocation = () => {
     navigator.geolocation.getCurrentPosition(
       (pos) => setAreaForm({...areaForm, latitudine: pos.coords.latitude.toFixed(8), longitudine: pos.coords.longitude.toFixed(8)}),
       () => setAreaMessage({ type: 'error', text: 'Errore GPS' })
     )
+  }
+
+  // ========== QR CODE FUNCTIONS ==========
+  const generateQrCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    let code = 'QR-'
+    for (let i = 0; i < 8; i++) code += chars.charAt(Math.floor(Math.random() * chars.length))
+    return code
+  }
+
+  const handleGenerateQR = async (area) => {
+    try {
+      const { error } = await supabase.from('qr_codes').insert({
+        progetto_id: assegnazione.progetto_id,
+        area_lavoro_id: area.id,
+        codice: generateQrCode(),
+        nome: area.nome,
+        descrizione: `QR Check-in/out per ${area.nome}`,
+        attivo: true
+      })
+      if (error) throw error
+      loadQrCodes()
+      setAreaMessage({ type: 'success', text: `QR Code generato per ${area.nome}!` })
+      setTimeout(() => setAreaMessage(null), 2000)
+    } catch (err) { setAreaMessage({ type: 'error', text: err.message }) }
+  }
+
+  const handleToggleQR = async (qr) => {
+    await supabase.from('qr_codes').update({ attivo: !qr.attivo }).eq('id', qr.id)
+    loadQrCodes()
+  }
+
+  const handleDeleteQR = async (qr) => {
+    if (!confirm('Eliminare questo QR Code?')) return
+    await supabase.from('qr_codes').delete().eq('id', qr.id)
+    loadQrCodes()
+  }
+
+  const printQR = (area, qr) => {
+    const html = `<!DOCTYPE html><html><head><title>QR Code - ${area.nome}</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"><\/script>
+    <style>
+      body{font-family:Arial,sans-serif;text-align:center;padding:40px}
+      .qr-container{display:inline-block;padding:30px;border:3px solid #333;border-radius:20px;margin:20px}
+      .title{font-size:24px;font-weight:bold;margin-bottom:5px}
+      .subtitle{font-size:14px;color:#666;margin-bottom:15px}
+      .code{font-family:monospace;font-size:18px;background:#f0f0f0;padding:10px;border-radius:8px;margin-top:15px}
+      .project{color:#666;margin-top:10px;font-size:12px}
+      .instructions{margin-top:15px;padding:10px;background:#e8f5e9;border-radius:8px;font-size:12px;color:#2e7d32}
+    </style></head>
+    <body>
+      <div class="qr-container">
+        <div class="title">📍 ${area.nome}</div>
+        <div class="subtitle">${area.descrizione || 'Area di lavoro'}</div>
+        <canvas id="qr"></canvas>
+        <div class="code">${qr.codice}</div>
+        <div class="instructions">✅ Scansiona per Check-in / Check-out</div>
+        <div class="project">${progetto?.nome}</div>
+      </div>
+      <script>QRCode.toCanvas(document.getElementById('qr'),JSON.stringify({code:'${qr.codice}',project:'${assegnazione.progetto_id}',area:'${area.id}',type:'checkin_checkout'}),{width:200,margin:2})<\/script>
+    </body></html>`
+    const win = window.open('', '_blank')
+    win.document.write(html)
+    win.document.close()
+    setTimeout(() => win.print(), 500)
   }
 
   return (
@@ -212,18 +293,24 @@ function ProgettoTab() {
         </div>
       </div>
 
-      {/* Aree di Lavoro */}
+      {/* Aree di Lavoro + QR Codes */}
       <div className="bg-white rounded-xl p-6 shadow-sm border">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-800">📍 Aree di Lavoro</h2>
-            <p className="text-sm text-gray-500">Zone del cantiere per validazione check-in GPS</p>
+            <h2 className="text-xl font-bold text-gray-800">📍 Aree di Lavoro & QR Codes</h2>
+            <p className="text-sm text-gray-500">Crea aree e genera QR codes per check-in/out</p>
           </div>
           {!showAreaForm && (
             <button onClick={() => setShowAreaForm(true)} className="px-4 py-2 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700">
               + Nuova Area
             </button>
           )}
+        </div>
+
+        <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 mb-4">
+          <p className="text-sm text-blue-700">
+            💡 <strong>Flusso:</strong> Crea un'area di lavoro → Genera il QR Code → Stampa e posiziona il QR → I lavoratori scansionano per check-in/out
+          </p>
         </div>
 
         {showAreaForm && (
@@ -266,30 +353,58 @@ function ProgettoTab() {
           </div>
         )}
 
+        {areaMessage && !showAreaForm && <div className={`p-3 rounded-xl mb-4 ${areaMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{areaMessage.text}</div>}
+
         {loadingAree ? (
           <div className="text-center py-8 text-gray-500">Caricamento...</div>
         ) : aree.length === 0 ? (
           <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
             <p className="text-4xl mb-2">📍</p>
             <p>Nessuna area definita</p>
-            <p className="text-sm">Crea aree per validare i check-in GPS</p>
+            <p className="text-sm">Crea aree per validare i check-in GPS e generare QR codes</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {aree.map(area => (
-              <div key={area.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
-                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: area.colore }} />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-800">{area.nome}</p>
-                  <p className="text-sm text-gray-500">{area.latitudine?.toFixed(6)}, {area.longitudine?.toFixed(6)} • Raggio: {area.raggio_metri}m</p>
-                  {area.descrizione && <p className="text-xs text-gray-400">{area.descrizione}</p>}
+            {aree.map(area => {
+              const qr = qrCodes[area.id]
+              return (
+                <div key={area.id} className="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 border">
+                  <div className="flex items-start gap-4">
+                    <div className="w-4 h-4 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: area.colore }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-gray-800">{area.nome}</p>
+                        {qr && (
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${qr.attivo ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>
+                            📱 QR {qr.attivo ? 'Attivo' : 'Disattivo'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500">{area.latitudine?.toFixed(6)}, {area.longitudine?.toFixed(6)} • Raggio: {area.raggio_metri}m</p>
+                      {area.descrizione && <p className="text-xs text-gray-400">{area.descrizione}</p>}
+                      {qr && <p className="text-xs font-mono text-purple-600 mt-1">Codice: {qr.codice}</p>}
+                    </div>
+                    <div className="flex gap-1 flex-wrap">
+                      {!qr ? (
+                        <button onClick={() => handleGenerateQR(area)} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200" title="Genera QR Code">
+                          📱 Genera QR
+                        </button>
+                      ) : (
+                        <>
+                          <button onClick={() => printQR(area, qr)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg" title="Stampa QR">🖨️</button>
+                          <button onClick={() => handleToggleQR(qr)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title={qr.attivo ? 'Disattiva' : 'Attiva'}>
+                            {qr.attivo ? '⏸️' : '▶️'}
+                          </button>
+                          <button onClick={() => handleDeleteQR(qr)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Elimina QR">🗑️</button>
+                        </>
+                      )}
+                      <button onClick={() => handleEditArea(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Modifica Area">✏️</button>
+                      <button onClick={() => handleDeleteArea(area.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Elimina Area">🗑️</button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => handleEditArea(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
-                  <button onClick={() => handleDeleteArea(area.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -952,145 +1067,137 @@ function CentriCostoTab() {
   )
 }
 
-// ==================== QR CODES TAB ====================
-function QRCodesTab() {
-  const { assegnazione, progetto } = useAuth()
-  const [qrCodes, setQrCodes] = useState([])
-  const [aree, setAree] = useState([])
+// ==================== DIPARTIMENTI TAB ====================
+function DipartimentiTab() {
+  const { assegnazione } = useAuth()
+  const [dipartimenti, setDipartimenti] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [editingQR, setEditingQR] = useState(null)
-  const [formData, setFormData] = useState({ nome: '', descrizione: '', area_lavoro_id: '', scadenza: '' })
+  const [editingDip, setEditingDip] = useState(null)
+  const [formData, setFormData] = useState({ nome: '', codice: '', descrizione: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
-  useEffect(() => { if (assegnazione?.progetto_id) { loadQRCodes(); loadAree() } }, [assegnazione?.progetto_id])
+  useEffect(() => { if (assegnazione?.progetto_id) loadDipartimenti() }, [assegnazione?.progetto_id])
 
-  const loadQRCodes = async () => {
-    setLoading(true)
-    const { data } = await supabase.from('qr_codes').select('*, area:aree_lavoro(nome)').eq('progetto_id', assegnazione.progetto_id).order('created_at', { ascending: false })
-    setQrCodes(data || [])
-    setLoading(false)
-  }
-
-  const loadAree = async () => {
-    const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true)
-    setAree(data || [])
-  }
-
-  const generateCode = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-    let code = 'QR-'
-    for (let i = 0; i < 8; i++) code += chars.charAt(Math.floor(Math.random() * chars.length))
-    return code
-  }
-
-  const resetForm = () => { setFormData({ nome: '', descrizione: '', area_lavoro_id: '', scadenza: '' }); setEditingQR(null); setShowForm(false); setMessage(null) }
-
-  const handleEdit = (qr) => {
-    setFormData({ nome: qr.nome || '', descrizione: qr.descrizione || '', area_lavoro_id: qr.area_lavoro_id || '', scadenza: qr.scadenza || '' })
-    setEditingQR(qr); setShowForm(true)
-  }
+  const loadDipartimenti = async () => { setLoading(true); const { data } = await supabase.from('dipartimenti').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome'); setDipartimenti(data || []); setLoading(false) }
+  const resetForm = () => { setFormData({ nome: '', codice: '', descrizione: '' }); setEditingDip(null); setShowForm(false); setMessage(null) }
+  const handleEdit = (d) => { setFormData({ nome: d.nome || '', codice: d.codice || '', descrizione: d.descrizione || '' }); setEditingDip(d); setShowForm(true) }
 
   const handleSave = async () => {
     if (!formData.nome) { setMessage({ type: 'error', text: 'Nome obbligatorio' }); return }
     setSaving(true); setMessage(null)
     try {
-      if (editingQR) {
-        await supabase.from('qr_codes').update({ nome: formData.nome, descrizione: formData.descrizione || null, area_lavoro_id: formData.area_lavoro_id || null, scadenza: formData.scadenza || null }).eq('id', editingQR.id)
-      } else {
-        await supabase.from('qr_codes').insert({ progetto_id: assegnazione.progetto_id, codice: generateCode(), nome: formData.nome, descrizione: formData.descrizione || null, area_lavoro_id: formData.area_lavoro_id || null, scadenza: formData.scadenza || null, attivo: true })
-      }
-      setMessage({ type: 'success', text: editingQR ? 'Aggiornato!' : 'Creato!' })
-      loadQRCodes(); setTimeout(resetForm, 1000)
+      const payload = { nome: formData.nome, codice: formData.codice || null, descrizione: formData.descrizione || null, progetto_id: assegnazione.progetto_id }
+      if (editingDip) { await supabase.from('dipartimenti').update(payload).eq('id', editingDip.id) }
+      else { await supabase.from('dipartimenti').insert(payload) }
+      setMessage({ type: 'success', text: 'Salvato!' }); loadDipartimenti(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
 
-  const handleToggle = async (qr) => {
-    await supabase.from('qr_codes').update({ attivo: !qr.attivo }).eq('id', qr.id)
-    loadQRCodes()
-  }
-
-  const handleDelete = async (id) => {
-    if (!confirm('Eliminare questo QR Code?')) return
-    await supabase.from('qr_codes').delete().eq('id', id)
-    loadQRCodes()
-  }
-
-  const printQR = (qr) => {
-    const html = `<!DOCTYPE html><html><head><title>QR Code - ${qr.nome}</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-    <style>body{font-family:Arial,sans-serif;text-align:center;padding:40px}.qr-container{display:inline-block;padding:30px;border:3px solid #333;border-radius:20px;margin:20px}.title{font-size:24px;font-weight:bold;margin-bottom:10px}.code{font-family:monospace;font-size:20px;background:#f0f0f0;padding:10px;border-radius:8px;margin-top:15px}.project{color:#666;margin-top:10px}</style></head>
-    <body><div class="qr-container"><div class="title">📍 ${qr.nome}</div><canvas id="qr"></canvas><div class="code">${qr.codice}</div><div class="project">${progetto?.nome}</div></div>
-    <script>QRCode.toCanvas(document.getElementById('qr'),JSON.stringify({code:'${qr.codice}',project:'${assegnazione.progetto_id}'}),{width:200,margin:2})</script></body></html>`
-    const win = window.open('', '_blank')
-    win.document.write(html)
-    win.document.close()
-    setTimeout(() => win.print(), 500)
-  }
+  const handleDelete = async (id) => { if (!confirm('Eliminare?')) return; await supabase.from('dipartimenti').delete().eq('id', id); loadDipartimenti() }
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border">
       <div className="flex items-center justify-between mb-4">
-        <div><h2 className="text-xl font-bold text-gray-800">📱 QR Codes Check-in</h2><p className="text-sm text-gray-500">Punti di timbratura con QR code</p></div>
-        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-purple-600 text-white rounded-xl">+ Nuovo QR</button>}
+        <h2 className="text-xl font-bold text-gray-800">🏛️ Dipartimenti</h2>
+        {!showForm && <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl">+ Aggiungi</button>}
       </div>
 
       {showForm && (
-        <div className="p-4 bg-purple-50 rounded-xl border border-purple-200 mb-6">
-          <h3 className="font-semibold text-purple-800 mb-4">{editingQR ? '✏️ Modifica' : '➕ Nuovo'} QR Code</h3>
+        <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
+          <h3 className="font-semibold text-blue-800 mb-4">{editingDip ? '✏️ Modifica' : '➕ Nuovo'}</h3>
           <div className="grid gap-4">
             <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" placeholder="Es: Ingresso Cantiere" /></div>
-              <div><label className="block text-sm font-medium mb-1">Area di Lavoro</label><select value={formData.area_lavoro_id} onChange={(e) => setFormData({...formData, area_lavoro_id: e.target.value})} className="w-full px-4 py-3 border rounded-xl"><option value="">Nessuna</option>{aree.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select></div>
+              <div><label className="block text-sm font-medium mb-1">Nome *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
+              <div><label className="block text-sm font-medium mb-1">Codice</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
-            <div className="grid lg:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Descrizione</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-              <div><label className="block text-sm font-medium mb-1">Scadenza</label><input type="date" value={formData.scadenza} onChange={(e) => setFormData({...formData, scadenza: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
-            </div>
+            <div><label className="block text-sm font-medium mb-1">Descrizione</label><input type="text" value={formData.descrizione} onChange={(e) => setFormData({...formData, descrizione: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             {message && <div className={`p-3 rounded-xl ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{message.text}</div>}
-            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-purple-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
+            <div className="flex gap-2"><button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded-xl">Annulla</button><button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-xl">{saving ? '...' : 'Salva'}</button></div>
           </div>
         </div>
       )}
 
-      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : qrCodes.length === 0 ? (
-        <div className="text-center py-8 text-gray-400"><p className="text-4xl mb-2">📱</p><p>Nessun QR Code creato</p><p className="text-sm">Crea QR codes per permettere il check-in tramite scansione</p></div>
+      {loading ? <div className="text-center py-8 text-gray-500">Caricamento...</div> : dipartimenti.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl">
+          <p className="text-4xl mb-2">🏛️</p>
+          <p>Nessun dipartimento</p>
+          <p className="text-sm">I dipartimenti vengono creati automaticamente con il progetto</p>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {qrCodes.map(qr => (
-            <div key={qr.id} className={`p-4 rounded-xl border ${qr.attivo ? 'bg-white' : 'bg-gray-100 opacity-60'}`}>
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-purple-100 rounded-xl flex items-center justify-center text-2xl">📱</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-800">{qr.nome}</p>
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${qr.attivo ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{qr.attivo ? 'Attivo' : 'Disattivo'}</span>
-                  </div>
-                  <p className="font-mono text-sm text-purple-600 bg-purple-50 px-2 py-0.5 rounded inline-block mt-1">{qr.codice}</p>
-                  {qr.area?.nome && <p className="text-xs text-gray-500 mt-1">📍 {qr.area.nome}</p>}
-                  {qr.scadenza && <p className="text-xs text-gray-400">Scade: {new Date(qr.scadenza).toLocaleDateString('it-IT')}</p>}
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => printQR(qr)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg" title="Stampa">🖨️</button>
-                  <button onClick={() => handleEdit(qr)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
-                  <button onClick={() => handleToggle(qr)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg">{qr.attivo ? '⏸️' : '▶️'}</button>
-                  <button onClick={() => handleDelete(qr.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button>
-                </div>
-              </div>
+        <div className="space-y-2">
+          {dipartimenti.map(d => (
+            <div key={d.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-700 font-mono font-bold text-sm">{d.codice || '?'}</div>
+              <div className="flex-1"><p className="font-medium">{d.nome}</p>{d.descrizione && <p className="text-xs text-gray-500">{d.descrizione}</p>}</div>
+              <div className="flex gap-1"><button onClick={() => handleEdit(d)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button><button onClick={() => handleDelete(d.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">🗑️</button></div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  )
+}
 
-      <div className="mt-6 p-4 bg-blue-50 rounded-xl">
-        <h4 className="font-semibold text-blue-800 mb-2">💡 Come funziona</h4>
-        <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-          <li>Crea un QR Code per ogni punto di timbratura</li>
-          <li>Stampa il QR Code e posizionalo nel punto desiderato</li>
-          <li>I lavoratori scansionano il QR per fare check-in/out</li>
-        </ol>
+// ==================== DATI TEST TAB ====================
+function DatiTestTab() {
+  const { assegnazione } = useAuth()
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  const generaDatiTest = async () => {
+    if (!confirm('Generare dati di test? Questo creerà persone, ditte, squadre fittizie.')) return
+    setLoading(true)
+    setMessage(null)
+    try {
+      // Crea alcune ditte di test
+      const ditteTest = [
+        { nome: 'Costruzioni Rossi', partita_iva: '12345678901', attivo: true },
+        { nome: 'Edilizia Bianchi', partita_iva: '23456789012', attivo: true },
+        { nome: 'Impianti Verdi', partita_iva: '34567890123', attivo: true }
+      ]
+      await supabase.from('ditte').insert(ditteTest)
+
+      // Crea alcune squadre di test
+      const squadreTest = [
+        { nome: 'Squadra Alpha', colore: '#3B82F6', progetto_id: assegnazione.progetto_id, attivo: true },
+        { nome: 'Squadra Beta', colore: '#22C55E', progetto_id: assegnazione.progetto_id, attivo: true }
+      ]
+      await supabase.from('squadre').insert(squadreTest)
+
+      setMessage({ type: 'success', text: 'Dati di test generati con successo!' })
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border">
+      <h2 className="text-xl font-bold text-gray-800 mb-4">🧪 Dati Test</h2>
+      <p className="text-gray-500 mb-6">Genera dati di test per popolare il sistema rapidamente durante lo sviluppo.</p>
+      
+      {message && (
+        <div className={`p-4 rounded-xl mb-4 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+          {message.text}
+        </div>
+      )}
+
+      <button 
+        onClick={generaDatiTest} 
+        disabled={loading}
+        className="px-6 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 disabled:opacity-50"
+      >
+        {loading ? '⏳ Generazione...' : '🎲 Genera Dati Test'}
+      </button>
+
+      <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
+        <p className="text-sm text-amber-700">
+          ⚠️ <strong>Attenzione:</strong> Questa funzione è pensata solo per ambienti di sviluppo/test. Non usare in produzione.
+        </p>
       </div>
     </div>
   )
