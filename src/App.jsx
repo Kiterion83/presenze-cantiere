@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { I18nProvider } from './contexts/I18nContext'
 
 // Pages
 import LoginPage from './pages/LoginPage'
@@ -20,7 +21,7 @@ import MenuPage from './pages/MenuPage'
 // NUOVE PAGINE CONSTRUCTION
 import ActivitiesPage from './pages/ActivitiesPage'
 import WarehousePage from './pages/WarehousePage'
-import ComponentiPage from './pages/ComponentiPage'
+import MaterialiPage from './pages/MaterialiPage'  // Rinominato da ComponentiPage
 import PianificazionePage from './pages/PianificazionePage'
 import ForemanPage from './pages/ForemanPage'
 import OreComponentiPage from './pages/OreComponentiPage'
@@ -109,7 +110,8 @@ function AppRoutes() {
       {/* NUOVE ROUTES - Construction Module */}
       <Route path="/activities" element={<ProtectedRoute requiredAccess="activities"><ActivitiesPage /></ProtectedRoute>} />
       <Route path="/warehouse" element={<ProtectedRoute requiredAccess="warehouse"><WarehousePage /></ProtectedRoute>} />
-      <Route path="/componenti" element={<ProtectedRoute requiredAccess="componenti"><ComponentiPage /></ProtectedRoute>} />
+      <Route path="/materiali" element={<ProtectedRoute requiredAccess="componenti"><MaterialiPage /></ProtectedRoute>} />
+      <Route path="/componenti" element={<Navigate to="/materiali" replace />} /> {/* Redirect per backward compatibility */}
       <Route path="/pianificazione" element={<ProtectedRoute requiredAccess="pianificazione"><PianificazionePage /></ProtectedRoute>} />
       <Route path="/foreman" element={<ProtectedRoute requiredAccess="foreman"><ForemanPage /></ProtectedRoute>} />
       <Route path="/ore-componenti" element={<ProtectedRoute requiredAccess="ore-componenti"><OreComponentiPage /></ProtectedRoute>} />
@@ -131,9 +133,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <Router>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </I18nProvider>
     </Router>
   )
 }
