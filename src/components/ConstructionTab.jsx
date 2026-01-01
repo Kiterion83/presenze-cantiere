@@ -574,12 +574,11 @@ function CategorieSection({ progettoId }) {
               <input
                 type="text"
                 value={form.prefisso_codice}
-                onChange={e => setForm({ ...form, prefisso_codice: e.target.value.toUpperCase() })}
-                placeholder={language === 'it' ? 'es. SP' : 'e.g. SP'}
-                maxLength={10}
-                className="w-full px-3 py-2 border rounded-lg font-mono"
+                onChange={e => setForm({ ...form, prefisso_codice: e.target.value.toUpperCase().slice(0, 3) })}
+                placeholder={language === 'it' ? 'es. SPL' : 'e.g. SPL'}
+                maxLength={3}
+                className="w-full px-3 py-2 border rounded-lg font-mono text-center text-lg tracking-wider"
               />
-              <p className="text-xs text-gray-500 mt-1">{language === 'it' ? 'I codici saranno: SP-0001, SP-0002...' : 'Codes will be: SP-0001, SP-0002...'}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{language === 'it' ? 'Unità di Misura' : 'Unit of Measure'}</label>
@@ -697,8 +696,9 @@ function CategorieSection({ progettoId }) {
   )
 }
 
+
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPONENTI SECTION (nuova!)
+// COMPONENTI SECTION
 // ═══════════════════════════════════════════════════════════════════════════
 function ComponentiSection({ progettoId }) {
   const { language } = useI18n()
@@ -709,12 +709,16 @@ function ComponentiSection({ progettoId }) {
   const [selectedCategoria, setSelectedCategoria] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [importQuantity, setImportQuantity] = useState(10)
+  const [importText, setImportText] = useState('')
   const [importing, setImporting] = useState(false)
   const [message, setMessage] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [sortOrder, setSortOrder] = useState('asc')
+  const [editingComp, setEditingComp] = useState(null)
+  const [editValue, setEditValue] = useState('')
+  const [dragOver, setDragOver] = useState(false)
 
-  // Icone SVG stilizzate (stesse di CategorieSection)
+  // Icone SVG stilizzate
   const IconaSupporto = () => (
     <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
       <circle cx="12" cy="8" r="6" fill="#60A5FA" stroke="#3B82F6" strokeWidth="1"/>
@@ -768,8 +772,6 @@ function ComponentiSection({ progettoId }) {
       <rect x="6" y="4" width="12" height="16" rx="2" fill="#E0F2FE" stroke="#0EA5E9" strokeWidth="1.5"/>
       <rect x="8" y="6" width="8" height="6" fill="white" stroke="#0EA5E9" strokeWidth="1"/>
       <circle cx="12" cy="16" r="2" fill="#0EA5E9"/>
-      <line x1="10" y1="9" x2="14" y2="9" stroke="#0EA5E9" strokeWidth="0.5"/>
-      <line x1="12" y1="7" x2="12" y2="11" stroke="#0EA5E9" strokeWidth="0.5"/>
     </svg>
   )
   const iconeCategorie = {
@@ -791,9 +793,7 @@ function ComponentiSection({ progettoId }) {
         .eq('attivo', true)
         .order('ordine')
       setDiscipline(data || [])
-      if (data?.length > 0) {
-        setSelectedDisciplina(data[0].id)
-      }
+      if (data?.length > 0) setSelectedDisciplina(data[0].id)
       setLoading(false)
     }
     loadDiscipline()
@@ -808,21 +808,15 @@ function ComponentiSection({ progettoId }) {
         .eq('disciplina_id', selectedDisciplina)
         .order('nome')
       setCategorie(data || [])
-      if (data?.length > 0) {
-        setSelectedCategoria(data[0].id)
-      } else {
-        setSelectedCategoria(null)
-      }
+      if (data?.length > 0) setSelectedCategoria(data[0].id)
+      else setSelectedCategoria(null)
     }
     loadCategorie()
   }, [selectedDisciplina])
 
   useEffect(() => {
     const loadComponenti = async () => {
-      if (!selectedCategoria) {
-        setComponenti([])
-        return
-      }
+      if (!selectedCategoria) { setComponenti([]); return }
       const { data } = await supabase
         .from('componenti')
         .select('*')
@@ -833,114 +827,118 @@ function ComponentiSection({ progettoId }) {
     loadComponenti()
   }, [selectedCategoria])
 
-  const getNextCode = async (prefisso) => {
-    // Trova il numero più alto per questo prefisso
-    const { data } = await supabase
-      .from('componenti')
-      .select('codice')
-      .eq('tipo_componente_id', selectedCategoria)
-      .order('codice', { ascending: false })
-      .limit(1)
-    
-    if (!data || data.length === 0) {
-      return `${prefisso}-0001`
-    }
-    
-    const lastCode = data[0].codice
-    const match = lastCode.match(/-(\d+)$/)
-    const nextNum = match ? parseInt(match[1]) + 1 : 1
-    return `${prefisso}-${String(nextNum).padStart(4, '0')}`
+  // Drag & Drop handlers
+  const handleDragOver = (e) => { e.preventDefault(); setDragOver(true) }
+  const handleDragLeave = () => setDragOver(false)
+  const handleDrop = async (e) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) setImportText(await file.text())
+  }
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0]
+    if (file) setImportText(await file.text())
   }
 
+  // Import componenti
   const handleImport = async () => {
-    if (!selectedCategoria || importQuantity < 1) return
-    
+    if (!selectedCategoria || !importText.trim()) return
     setImporting(true)
     setMessage(null)
-    
     try {
-      const categoria = categorie.find(c => c.id === selectedCategoria)
-      if (!categoria?.prefisso_codice) {
-        setMessage({ type: 'error', text: language === 'it' ? 'La categoria non ha un prefisso codice!' : 'Category has no code prefix!' })
+      const codici = importText.split('\n').map(c => c.trim()).filter(c => c.length > 0)
+      if (codici.length === 0) {
+        setMessage({ type: 'error', text: language === 'it' ? 'Nessun codice valido' : 'No valid codes' })
         setImporting(false)
         return
       }
-      
-      // Trova ultimo codice esistente
-      const { data: lastComp } = await supabase
+      // Check duplicati
+      const { data: existing } = await supabase
         .from('componenti')
         .select('codice')
         .eq('tipo_componente_id', selectedCategoria)
-        .order('codice', { ascending: false })
-        .limit(1)
-      
-      let startNum = 1
-      if (lastComp && lastComp.length > 0) {
-        const match = lastComp[0].codice.match(/-(\d+)$/)
-        startNum = match ? parseInt(match[1]) + 1 : 1
+        .in('codice', codici)
+      const existingSet = new Set(existing?.map(e => e.codice) || [])
+      const newCodici = codici.filter(c => !existingSet.has(c))
+      const duplicati = codici.length - newCodici.length
+      if (newCodici.length === 0) {
+        setMessage({ type: 'error', text: language === 'it' ? 'Tutti i codici esistono già!' : 'All codes already exist!' })
+        setImporting(false)
+        return
       }
-      
-      // Crea i nuovi componenti
-      const newComponents = []
-      for (let i = 0; i < importQuantity; i++) {
-        const num = startNum + i
-        newComponents.push({
-          tipo_componente_id: selectedCategoria,
-          codice: `${categoria.prefisso_codice}-${String(num).padStart(4, '0')}`,
-          stato: 'nuovo',
-          progetto_id: progettoId
-        })
-      }
-      
+      // Insert
+      const newComponents = newCodici.map(codice => ({
+        tipo_componente_id: selectedCategoria,
+        disciplina_id: selectedDisciplina,
+        codice,
+        stato: 'nuovo',
+        progetto_id: progettoId
+      }))
       const { error } = await supabase.from('componenti').insert(newComponents)
       if (error) throw error
-      
-      setMessage({ 
-        type: 'success', 
-        text: language === 'it' 
-          ? `✅ Creati ${importQuantity} componenti (${categoria.prefisso_codice}-${String(startNum).padStart(4, '0')} → ${categoria.prefisso_codice}-${String(startNum + importQuantity - 1).padStart(4, '0')})`
-          : `✅ Created ${importQuantity} components (${categoria.prefisso_codice}-${String(startNum).padStart(4, '0')} → ${categoria.prefisso_codice}-${String(startNum + importQuantity - 1).padStart(4, '0')})`
-      })
-      
+      let msg = language === 'it' ? `✅ Importati ${newCodici.length} componenti` : `✅ Imported ${newCodici.length} components`
+      if (duplicati > 0) msg += language === 'it' ? ` (${duplicati} duplicati ignorati)` : ` (${duplicati} duplicates ignored)`
+      setMessage({ type: 'success', text: msg })
       setShowImportModal(false)
-      
+      setImportText('')
       // Reload
-      const { data } = await supabase
-        .from('componenti')
-        .select('*')
-        .eq('tipo_componente_id', selectedCategoria)
-        .order('codice')
+      const { data } = await supabase.from('componenti').select('*').eq('tipo_componente_id', selectedCategoria).order('codice')
       setComponenti(data || [])
-      
     } catch (error) {
-      console.error('Errore import:', error)
       setMessage({ type: 'error', text: error.message })
     } finally {
       setImporting(false)
     }
   }
 
-  const handleDeleteComponent = async (comp) => {
-    const msg = language === 'it' 
-      ? `Eliminare il componente "${comp.codice}"?`
-      : `Delete component "${comp.codice}"?`
-    if (!confirm(msg)) return
+  // Modifica componente
+  const handleSaveEdit = async () => {
+    if (!editingComp || !editValue.trim()) return
     try {
-      const { error } = await supabase.from('componenti').delete().eq('id', comp.id)
+      const { data: existing } = await supabase
+        .from('componenti')
+        .select('id')
+        .eq('tipo_componente_id', selectedCategoria)
+        .eq('codice', editValue.trim())
+        .neq('id', editingComp.id)
+        .limit(1)
+      if (existing?.length > 0) {
+        setMessage({ type: 'error', text: language === 'it' ? 'Codice già esistente!' : 'Code already exists!' })
+        return
+      }
+      const { error } = await supabase.from('componenti').update({ codice: editValue.trim() }).eq('id', editingComp.id)
       if (error) throw error
-      setComponenti(componenti.filter(c => c.id !== comp.id))
+      setComponenti(componenti.map(c => c.id === editingComp.id ? { ...c, codice: editValue.trim() } : c))
+      setEditingComp(null)
+      setEditValue('')
     } catch (error) {
-      console.error('Errore:', error)
+      setMessage({ type: 'error', text: error.message })
     }
   }
 
-  const filteredComponenti = componenti.filter(c => 
-    c.codice.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-  if (loading) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+  // Elimina componente
+  const handleDelete = async (comp) => {
+    if (!confirm(language === 'it' ? `Eliminare "${comp.codice}"?` : `Delete "${comp.codice}"?`)) return
+    try {
+      await supabase.from('componenti').delete().eq('id', comp.id)
+      setComponenti(componenti.filter(c => c.id !== comp.id))
+    } catch (error) {
+      console.error(error)
+    }
   }
+
+  // Filtra e ordina
+  const filtered = componenti
+    .filter(c => c.codice.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => {
+      const cmp = a.codice.localeCompare(b.codice, undefined, { numeric: true })
+      return sortOrder === 'asc' ? cmp : -cmp
+    })
+
+  const selectedCat = categorie.find(c => c.id === selectedCategoria)
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
 
   if (discipline.length === 0) {
     return (
@@ -951,46 +949,27 @@ function ComponentiSection({ progettoId }) {
     )
   }
 
-  const selectedCat = categorie.find(c => c.id === selectedCategoria)
-
   return (
     <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+      {/* Header */}
       <div className="p-4 border-b bg-gray-50">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h3 className="font-semibold text-gray-800">🔧 {language === 'it' ? 'Componenti' : 'Components'}</h3>
-            <p className="text-sm text-gray-500">{language === 'it' ? 'Gestisci i singoli componenti con codice identificativo' : 'Manage individual components with identification code'}</p>
+            <p className="text-sm text-gray-500">{language === 'it' ? 'Gestisci i componenti con codici parlanti' : 'Manage components with engineering codes'}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={selectedDisciplina || ''}
-              onChange={e => setSelectedDisciplina(e.target.value)}
-              className="px-3 py-2 border rounded-lg bg-white"
-            >
-              {discipline.map(d => (
-                <option key={d.id} value={d.id}>{d.icona} {d.nome}</option>
-              ))}
+            <select value={selectedDisciplina || ''} onChange={e => setSelectedDisciplina(e.target.value)} className="px-3 py-2 border rounded-lg bg-white">
+              {discipline.map(d => <option key={d.id} value={d.id}>{d.icona} {d.nome}</option>)}
             </select>
-            <select
-              value={selectedCategoria || ''}
-              onChange={e => setSelectedCategoria(e.target.value)}
-              className="px-3 py-2 border rounded-lg bg-white"
-              disabled={categorie.length === 0}
-            >
-              {categorie.length === 0 ? (
-                <option value="">{language === 'it' ? 'Nessuna categoria' : 'No categories'}</option>
-              ) : (
-                categorie.map(c => (
-                  <option key={c.id} value={c.id}>{c.icona} {c.nome}</option>
-                ))
-              )}
+            <select value={selectedCategoria || ''} onChange={e => setSelectedCategoria(e.target.value)} className="px-3 py-2 border rounded-lg bg-white" disabled={!categorie.length}>
+              {categorie.length === 0 
+                ? <option value="">{language === 'it' ? 'Nessuna categoria' : 'No categories'}</option>
+                : categorie.map(c => <option key={c.id} value={c.id}>{c.prefisso_codice} - {c.nome}</option>)
+              }
             </select>
-            <button
-              onClick={() => setShowImportModal(true)}
-              disabled={!selectedCategoria}
-              className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-            >
-              + {language === 'it' ? 'Import Massivo' : 'Bulk Import'}
+            <button onClick={() => { setShowImportModal(true); setImportText('') }} disabled={!selectedCategoria} className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:bg-gray-300">
+              + Import
             </button>
           </div>
         </div>
@@ -1003,73 +982,87 @@ function ComponentiSection({ progettoId }) {
         </div>
       )}
 
-      {/* Info Categoria */}
+      {/* Info + Ricerca + Ordinamento */}
       {selectedCat && (
         <div className="p-4 bg-blue-50 border-b">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-sm">
-              {iconeCategorie[selectedCat.icona] || <span className="text-2xl">{selectedCat.icona}</span>}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                {iconeCategorie[selectedCat.icona] || <span className="text-2xl">{selectedCat.icona}</span>}
+              </div>
+              <div>
+                <p className="font-medium">{selectedCat.nome}</p>
+                <p className="text-sm text-gray-600">
+                  <span className="font-mono font-bold text-purple-700">{selectedCat.prefisso_codice}</span>
+                  {' • '}{componenti.length} {language === 'it' ? 'componenti' : 'components'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-medium">{selectedCat.nome}</p>
-              <p className="text-sm text-gray-600">
-                {language === 'it' ? 'Prefisso' : 'Prefix'}: <span className="font-mono font-bold text-purple-700">{selectedCat.prefisso_codice}</span>
-                {' • '}{componenti.length} {language === 'it' ? 'componenti' : 'components'}
-              </p>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <input
+                type="text"
+                placeholder={language === 'it' ? '🔍 Cerca codice...' : '🔍 Search code...'}
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="flex-1 sm:w-64 px-4 py-2 border rounded-lg"
+              />
+              <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className="px-3 py-2 border rounded-lg bg-white hover:bg-gray-50">
+                {sortOrder === 'asc' ? '⬆️ A-Z' : '⬇️ Z-A'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Ricerca */}
-      {componenti.length > 0 && (
-        <div className="p-4 border-b">
-          <input
-            type="text"
-            placeholder={language === 'it' ? 'Cerca per codice...' : 'Search by code...'}
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 border rounded-lg"
-          />
-        </div>
-      )}
-
       {/* Lista Componenti */}
-      <div className="max-h-96 overflow-y-auto">
+      <div className="max-h-[500px] overflow-y-auto">
         {!selectedCategoria ? (
           <div className="p-8 text-center text-gray-500">
             <p className="text-4xl mb-2">📦</p>
             <p>{language === 'it' ? 'Seleziona una categoria' : 'Select a category'}</p>
           </div>
-        ) : filteredComponenti.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             <p className="text-4xl mb-2">🔧</p>
-            <p>{language === 'it' ? 'Nessun componente' : 'No components'}</p>
-            <p className="text-sm mt-1">{language === 'it' ? 'Usa "Import Massivo" per creare componenti' : 'Use "Bulk Import" to create components'}</p>
+            <p>{searchTerm ? (language === 'it' ? 'Nessun risultato' : 'No results') : (language === 'it' ? 'Nessun componente' : 'No components')}</p>
+            {!searchTerm && <p className="text-sm mt-1">{language === 'it' ? 'Usa "Import" per caricare i codici' : 'Use "Import" to load codes'}</p>}
           </div>
         ) : (
           <div className="divide-y">
-            {filteredComponenti.map(comp => (
-              <div key={comp.id} className="p-3 flex items-center gap-3 hover:bg-gray-50">
-                <span className="font-mono font-medium text-blue-700 bg-blue-50 px-3 py-1 rounded">{comp.codice}</span>
-                <span className={`px-2 py-0.5 rounded text-xs ${
-                  comp.stato === 'completato' ? 'bg-green-100 text-green-700' :
-                  comp.stato === 'in_progress' ? 'bg-amber-100 text-amber-700' :
-                  'bg-gray-100 text-gray-600'
-                }`}>{comp.stato || 'nuovo'}</span>
-                <div className="flex-1" />
-                <button onClick={() => handleDeleteComponent(comp)} className="p-1 text-red-600 hover:bg-red-50 rounded">🗑️</button>
+            {filtered.map(comp => (
+              <div key={comp.id} className="p-3 flex items-center gap-3 hover:bg-gray-50 group">
+                {editingComp?.id === comp.id ? (
+                  <>
+                    <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveEdit()} className="flex-1 font-mono px-3 py-1 border-2 border-blue-500 rounded" autoFocus />
+                    <button onClick={handleSaveEdit} className="p-1 text-green-600 hover:bg-green-50 rounded">✅</button>
+                    <button onClick={() => { setEditingComp(null); setEditValue('') }} className="p-1 text-gray-600 hover:bg-gray-100 rounded">❌</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-mono font-medium text-blue-700 bg-blue-50 px-3 py-1 rounded flex-1">{comp.codice}</span>
+                    <span className={`px-2 py-0.5 rounded text-xs ${comp.stato === 'completato' ? 'bg-green-100 text-green-700' : comp.stato === 'in_progress' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>{comp.stato || 'nuovo'}</span>
+                    <button onClick={() => { setEditingComp(comp); setEditValue(comp.codice) }} className="p-1 text-blue-600 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100">✏️</button>
+                    <button onClick={() => handleDelete(comp)} className="p-1 text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100">🗑️</button>
+                  </>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
 
+      {/* Conteggio */}
+      {searchTerm && filtered.length > 0 && (
+        <div className="p-3 bg-gray-50 border-t text-sm text-gray-500 text-center">
+          {filtered.length} {language === 'it' ? 'risultati' : 'results'}
+        </div>
+      )}
+
       {/* Modal Import */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">📥 {language === 'it' ? 'Import Massivo Componenti' : 'Bulk Import Components'}</h3>
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4">📥 {language === 'it' ? 'Import Componenti' : 'Import Components'}</h3>
             
             {selectedCat && (
               <div className="p-3 bg-blue-50 rounded-lg mb-4 flex items-center gap-3">
@@ -1077,45 +1070,45 @@ function ComponentiSection({ progettoId }) {
                   {iconeCategorie[selectedCat.icona] || <span className="text-xl">{selectedCat.icona}</span>}
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">{language === 'it' ? 'Categoria:' : 'Category:'} <strong>{selectedCat.nome}</strong></p>
-                  <p className="text-sm text-gray-600">{language === 'it' ? 'Prefisso:' : 'Prefix:'} <strong className="font-mono">{selectedCat.prefisso_codice}</strong></p>
+                  <p className="font-medium">{selectedCat.nome}</p>
+                  <p className="text-sm text-gray-600 font-mono">{selectedCat.prefisso_codice}</p>
                 </div>
               </div>
             )}
             
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">{language === 'it' ? 'Quanti componenti creare?' : 'How many components to create?'}</label>
-              <input
-                type="number"
-                value={importQuantity}
-                onChange={e => setImportQuantity(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
-                min={1}
-                max={1000}
-                className="w-full px-4 py-3 border rounded-xl text-center text-2xl font-bold"
-              />
-              <p className="text-xs text-gray-500 mt-1 text-center">{language === 'it' ? 'Max 1000 alla volta' : 'Max 1000 at a time'}</p>
+            {/* Drag & Drop */}
+            <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-xl p-6 text-center mb-4 transition-colors ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}>
+              <p className="text-4xl mb-2">📄</p>
+              <p className="text-gray-600 mb-2">{language === 'it' ? 'Trascina un file CSV o TXT' : 'Drag a CSV or TXT file'}</p>
+              <p className="text-gray-400 text-sm mb-3">{language === 'it' ? 'oppure' : 'or'}</p>
+              <label className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-200">
+                {language === 'it' ? 'Seleziona file' : 'Select file'}
+                <input type="file" accept=".csv,.txt" onChange={handleFileSelect} className="hidden" />
+              </label>
             </div>
             
-            <div className="p-3 bg-gray-50 rounded-lg mb-4">
-              <p className="text-sm text-gray-600">{language === 'it' ? 'Verranno creati codici:' : 'Codes will be created:'}</p>
-              <p className="font-mono font-medium text-blue-700">
-                {selectedCat?.prefisso_codice}-{String(componenti.length + 1).padStart(4, '0')} → {selectedCat?.prefisso_codice}-{String(componenti.length + importQuantity).padStart(4, '0')}
-              </p>
+            {/* Textarea */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">{language === 'it' ? 'Oppure incolla i codici (uno per riga):' : 'Or paste codes (one per line):'}</label>
+              <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="ABC-123-456&#10;DEF-789-012&#10;GHI-345-678" rows={8} className="w-full px-3 py-2 border rounded-lg font-mono text-sm resize-none" />
             </div>
+            
+            {/* Preview */}
+            {importText && (
+              <div className="p-3 bg-gray-50 rounded-lg mb-4">
+                <p className="text-sm text-gray-600">
+                  {language === 'it' ? 'Codici trovati:' : 'Codes found:'} <strong>{importText.split('\n').filter(c => c.trim()).length}</strong>
+                </p>
+              </div>
+            )}
             
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-200 rounded-xl"
-              >
+              <button onClick={() => { setShowImportModal(false); setImportText('') }} className="flex-1 px-4 py-2 bg-gray-200 rounded-xl">
                 {language === 'it' ? 'Annulla' : 'Cancel'}
               </button>
-              <button
-                onClick={handleImport}
-                disabled={importing}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-xl disabled:bg-gray-300"
-              >
-                {importing ? (language === 'it' ? 'Creazione...' : 'Creating...') : (language === 'it' ? `Crea ${importQuantity} Componenti` : `Create ${importQuantity} Components`)}
+              <button onClick={handleImport} disabled={importing || !importText.trim()} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-xl disabled:bg-gray-300">
+                {importing ? '...' : (language === 'it' ? 'Importa' : 'Import')}
               </button>
             </div>
           </div>
@@ -1124,7 +1117,6 @@ function ComponentiSection({ progettoId }) {
     </div>
   )
 }
-
 // ═══════════════════════════════════════════════════════════════════════════
 // FASI WORKFLOW SECTION
 // ═══════════════════════════════════════════════════════════════════════════
