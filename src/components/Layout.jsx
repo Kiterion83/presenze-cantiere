@@ -72,6 +72,8 @@ export default function Layout({ children }) {
       items: [
         { path: '/trasferimenti', labelKey: 'transfers', emoji: '🔄', minRole: 'foreman' },
         { path: '/statistiche', labelKey: 'statistics', emoji: '📊', minRole: 'supervisor' },
+        { path: '/gantt', labelKey: 'gantt', emoji: '📅', minRole: 'supervisor' },
+        { path: '/ai-insights', labelKey: 'aiInsights', emoji: '🤖', minRole: 'supervisor' },
         { path: '/dashboard', labelKey: 'dashboard', emoji: '📈', minRole: 'supervisor' },
         { path: '/impostazioni', labelKey: 'settings', emoji: '⚙️', minRole: 'admin' },
       ]
