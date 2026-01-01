@@ -223,19 +223,20 @@ function ProgettoTab() {
       type: 'checkin_checkout'
     })
     
-    // Usa API esterna per generare QR (più affidabile)
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}`
+    // Usa API esterna per generare QR (più affidabile) - dimensione grande per stampa
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qrData)}`
     
     const html = `<!DOCTYPE html><html><head><title>QR Code - ${area.nome}</title>
     <style>
-      body{font-family:Arial,sans-serif;text-align:center;padding:40px}
-      .qr-container{display:inline-block;padding:30px;border:3px solid #333;border-radius:20px;margin:20px}
-      .title{font-size:24px;font-weight:bold;margin-bottom:5px}
-      .subtitle{font-size:14px;color:#666;margin-bottom:15px}
-      .code{font-family:monospace;font-size:18px;background:#f0f0f0;padding:10px;border-radius:8px;margin-top:15px}
-      .project{color:#666;margin-top:10px;font-size:12px}
-      .instructions{margin-top:15px;padding:10px;background:#e8f5e9;border-radius:8px;font-size:12px;color:#2e7d32}
-      .qr-img{display:block;margin:0 auto;width:200px;height:200px}
+      @page { size: A4; margin: 20mm; }
+      body{font-family:Arial,sans-serif;text-align:center;padding:20px;margin:0}
+      .qr-container{display:inline-block;padding:40px 60px;border:4px solid #333;border-radius:30px;margin:20px auto}
+      .title{font-size:36px;font-weight:bold;margin-bottom:8px}
+      .subtitle{font-size:18px;color:#666;margin-bottom:25px}
+      .code{font-family:monospace;font-size:28px;background:#f0f0f0;padding:15px 30px;border-radius:12px;margin-top:25px;letter-spacing:2px}
+      .project{color:#666;margin-top:20px;font-size:16px}
+      .instructions{margin-top:20px;padding:15px 25px;background:#e8f5e9;border-radius:12px;font-size:18px;color:#2e7d32;font-weight:500}
+      .qr-img{display:block;margin:0 auto;width:400px;height:400px}
     </style></head>
     <body>
       <div class="qr-container">
@@ -398,7 +399,6 @@ function ProgettoTab() {
                           <button onClick={() => handleToggleQR(qr)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title={qr.attivo ? t('deactivateQR') : t('activateQR')}>
                             {qr.attivo ? '⏸️' : '▶️'}
                           </button>
-                          <button onClick={() => handleDeleteQR(qr)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title={t('delete')}>🗑️</button>
                         </>
                       )}
                       <button onClick={() => handleEditArea(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title={t('edit')}>✏️</button>
