@@ -280,6 +280,15 @@ const translations = {
     gpsAcquired: 'Coordinate GPS acquisite!',
     geolocationNotSupported: 'Geolocalizzazione non supportata',
     
+    // Delete Project
+    deleteProject: 'Elimina progetto',
+    deleteProjectTitle: 'Eliminare questo progetto?',
+    deleteProjectWarning: 'Questa azione è irreversibile. Verranno eliminati tutti i dati associati: presenze, assegnazioni, aree di lavoro, QR codes, flussi, dipartimenti e centri di costo.',
+    typeProjectNameToConfirm: 'Digita il nome del progetto per confermare:',
+    confirmDelete: 'Elimina Definitivamente',
+    deleting: 'Eliminazione...',
+    projectDeleted: 'Progetto eliminato con successo!',
+    
     // People Tab
     peopleTitle: 'Persone',
     addPerson: 'Aggiungi',
@@ -641,6 +650,15 @@ const translations = {
     projectCreated: 'Project created!',
     gpsAcquired: 'GPS coordinates acquired!',
     geolocationNotSupported: 'Geolocation not supported',
+    
+    // Delete Project
+    deleteProject: 'Delete project',
+    deleteProjectTitle: 'Delete this project?',
+    deleteProjectWarning: 'This action is irreversible. All associated data will be deleted: attendance, assignments, work areas, QR codes, flows, departments and cost centers.',
+    typeProjectNameToConfirm: 'Type the project name to confirm:',
+    confirmDelete: 'Delete Permanently',
+    deleting: 'Deleting...',
+    projectDeleted: 'Project deleted successfully!',
     
     // People Tab
     peopleTitle: 'People',
