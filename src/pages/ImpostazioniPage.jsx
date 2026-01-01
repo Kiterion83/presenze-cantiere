@@ -217,8 +217,14 @@ function ProgettoTab() {
   }
 
   const printQR = (area, qr) => {
+    const qrData = JSON.stringify({
+      code: qr.codice,
+      project: assegnazione.progetto_id,
+      area: area.id,
+      type: 'checkin_checkout'
+    }).replace(/"/g, '&quot;')
+    
     const html = `<!DOCTYPE html><html><head><title>QR Code - ${area.nome}</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"><\/script>
     <style>
       body{font-family:Arial,sans-serif;text-align:center;padding:40px}
       .qr-container{display:inline-block;padding:30px;border:3px solid #333;border-radius:20px;margin:20px}
@@ -227,6 +233,7 @@ function ProgettoTab() {
       .code{font-family:monospace;font-size:18px;background:#f0f0f0;padding:10px;border-radius:8px;margin-top:15px}
       .project{color:#666;margin-top:10px;font-size:12px}
       .instructions{margin-top:15px;padding:10px;background:#e8f5e9;border-radius:8px;font-size:12px;color:#2e7d32}
+      #qr{display:block;margin:0 auto}
     </style></head>
     <body>
       <div class="qr-container">
@@ -237,12 +244,22 @@ function ProgettoTab() {
         <div class="instructions">✅ Scansiona per Check-in / Check-out</div>
         <div class="project">${progetto?.nome}</div>
       </div>
-      <script>QRCode.toCanvas(document.getElementById('qr'),JSON.stringify({code:'${qr.codice}',project:'${assegnazione.progetto_id}',area:'${area.id}',type:'checkin_checkout'}),{width:200,margin:2})<\/script>
+      <script>
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+        script.onload = function() {
+          var data = "${qrData}".replace(/&quot;/g, '"');
+          QRCode.toCanvas(document.getElementById('qr'), data, {width:200,margin:2}, function(error) {
+            if (error) console.error(error);
+            setTimeout(function() { window.print(); }, 500);
+          });
+        };
+        document.head.appendChild(script);
+      <\/script>
     </body></html>`
     const win = window.open('', '_blank')
     win.document.write(html)
     win.document.close()
-    setTimeout(() => win.print(), 500)
   }
 
   return (
