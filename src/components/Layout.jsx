@@ -156,6 +156,10 @@ export default function Layout({ children }) {
     return colors[role] || 'bg-gray-100 text-gray-700 border-gray-200'
   }
 
+  // FIX: Ruolo REALE dell'utente (senza override) per decidere se mostrare Test Ruolo
+  const realUserRole = assegnazione?.ruolo || 'helper'
+  const isRealAdmin = realUserRole === 'admin'
+
   // Chiudi dropdown quando clicchi fuori
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -232,43 +236,39 @@ export default function Layout({ children }) {
 
   return (
     <>
-      {/* Banner Notifiche - Completamente fuori dal layout flex */}
+      {/* FIX: Banner Notifiche - Più discreto e carino */}
       {showNotificationBanner && notificationPermission === 'default' && (
         <div 
-          className="fixed inset-x-0 bg-white border-b-2 border-blue-200 shadow-xl"
+          className="fixed bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg"
           style={{ 
             top: isMobile ? '72px' : '0px',
+            left: isMobile ? '0' : `${sidebarWidth}px`,
+            right: '0',
             zIndex: 9999
           }}
         >
-          <div className="p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-3xl">🔔</span>
+          <div className="px-4 py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🔔</span>
               <div>
-                <p className="font-bold text-gray-800">{t('enableNotifications')}</p>
-                <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
+                <p className="font-medium text-sm">{t('enableNotifications')}</p>
+                <p className="text-xs text-blue-100 hidden sm:block">{t('notificationDescription')}</p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 disabled={notificationLoading}
-                onClick={() => {
-                  console.log('Non ora clicked')
-                  handleDismissNotificationBanner()
-                }}
-                className="flex-1 px-4 py-4 text-gray-700 bg-gray-200 rounded-xl font-semibold text-base active:bg-gray-300 disabled:opacity-50"
+                onClick={handleDismissNotificationBanner}
+                className="px-3 py-1.5 text-sm text-blue-100 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               >
                 {t('notNow')}
               </button>
               <button
                 type="button"
                 disabled={notificationLoading}
-                onClick={() => {
-                  console.log('Attiva clicked')
-                  handleEnableNotifications()
-                }}
-                className="flex-1 px-4 py-4 bg-blue-600 text-white rounded-xl font-semibold text-base active:bg-blue-700 disabled:opacity-50"
+                onClick={handleEnableNotifications}
+                className="px-4 py-1.5 bg-white text-blue-600 rounded-lg font-medium text-sm hover:bg-blue-50 transition-colors disabled:opacity-50"
               >
                 {notificationLoading ? '...' : t('enable')}
               </button>
@@ -462,8 +462,8 @@ export default function Layout({ children }) {
 
         {/* Footer */}
         <div className={`p-4 border-t border-gray-100 ${isCollapsed ? 'p-2' : ''}`}>
-          {/* Test Ruolo - Solo per Admin e non collapsed */}
-          {ruolo === 'admin' && !isCollapsed && (
+          {/* FIX: Test Ruolo - Usa ruolo REALE per decidere se mostrare, non il ruolo con override */}
+          {isRealAdmin && !isCollapsed && (
             <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
               <label className="block text-xs font-medium text-amber-700 mb-1">🧪 {t('testRole')}</label>
               <select
@@ -539,7 +539,7 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : ''} ${showNotificationBanner && notificationPermission === 'default' ? 'pt-40' : ''}`}>
+      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : ''} ${showNotificationBanner && notificationPermission === 'default' ? 'pt-14' : ''}`}>
         {children}
       </main>
     </div>
