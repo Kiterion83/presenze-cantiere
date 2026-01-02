@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
@@ -6,13 +6,15 @@ import { getPosizione, calcolaDistanza } from '../lib/gps'
 
 export default function CheckinPage() {
   const { persona, progetto, assegnazione } = useAuth()
-  const { t, language } = useI18n()
+  const { t } = useI18n()
   
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [presenza, setPresenza] = useState(null)
   const [posizione, setPosizione] = useState(null)
   const [posizioneError, setPosizioneError] = useState(null)
+  const [areaLavoro, setAreaLavoro] = useState(null)
+  const [areeDisponibili, setAreeDisponibili] = useState([])
   const [meteo, setMeteo] = useState(null)
   const [note, setNote] = useState('')
   const [modalita, setModalita] = useState('gps') // 'gps' o 'qr'
@@ -20,29 +22,29 @@ export default function CheckinPage() {
   const [storicoPresenze, setStoricoPresenze] = useState([])
   const [showStorico, setShowStorico] = useState(false)
   
-  // Nuovi state per aree di lavoro
-  const [aree, setAree] = useState([])
-  const [selectedAreaId, setSelectedAreaId] = useState('')
-  const [selectedArea, setSelectedArea] = useState(null)
+  // QR Scanner states
+  const [showQrScanner, setShowQrScanner] = useState(false)
+  const [qrError, setQrError] = useState(null)
+  const [cameraStream, setCameraStream] = useState(null)
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const scanIntervalRef = useRef(null)
 
   const oggi = new Date().toISOString().split('T')[0]
 
-  // Carica dati
+  // Carica presenza odierna e area lavoro
   useEffect(() => {
     if (persona?.id && progetto?.id) {
       loadData()
     }
   }, [persona?.id, progetto?.id])
-
-  // Aggiorna selectedArea quando cambia selectedAreaId
+  
+  // Cleanup camera on unmount
   useEffect(() => {
-    if (selectedAreaId && aree.length > 0) {
-      const area = aree.find(a => a.id === selectedAreaId)
-      setSelectedArea(area || null)
-    } else {
-      setSelectedArea(null)
+    return () => {
+      stopQrScanner()
     }
-  }, [selectedAreaId, aree])
+  }, [])
 
   const loadData = async () => {
     setLoading(true)
@@ -57,25 +59,26 @@ export default function CheckinPage() {
         .maybeSingle()
       
       setPresenza(presenzaData)
-      
-      // Se c'è una presenza con area, preselezionala
-      if (presenzaData?.area_lavoro_id) {
-        setSelectedAreaId(presenzaData.area_lavoro_id)
-      }
 
-      // Carica TUTTE le aree di lavoro del progetto
+      // Carica area lavoro dell'assegnazione
+      if (assegnazione?.area_lavoro_id) {
+        const { data: areaData } = await supabase
+          .from('aree_lavoro')
+          .select('*')
+          .eq('id', assegnazione.area_lavoro_id)
+          .single()
+        
+        setAreaLavoro(areaData)
+      }
+      
+      // Carica tutte le aree disponibili per il progetto (per QR)
       const { data: areeData } = await supabase
         .from('aree_lavoro')
         .select('*')
         .eq('progetto_id', progetto.id)
-        .order('nome')
+        .eq('attiva', true)
       
-      setAree(areeData || [])
-      
-      // Se c'è solo un'area, selezionala automaticamente
-      if (areeData?.length === 1 && !presenzaData?.area_lavoro_id) {
-        setSelectedAreaId(areeData[0].id)
-      }
+      setAreeDisponibili(areeData || [])
 
       // Carica storico presenze (ultimi 7 giorni)
       const settimanafa = new Date()
@@ -83,7 +86,7 @@ export default function CheckinPage() {
       
       const { data: storicoData } = await supabase
         .from('presenze')
-        .select('*, area:aree_lavoro(nome)')
+        .select('*')
         .eq('persona_id', persona.id)
         .eq('progetto_id', progetto.id)
         .gte('data', settimanafa.toISOString().split('T')[0])
@@ -112,7 +115,7 @@ export default function CheckinPage() {
       // Carica meteo
       await caricaMeteo(pos.lat, pos.lng)
     } catch (error) {
-      setPosizioneError(error.message || t('gpsError'))
+      setPosizioneError(error.message || 'Impossibile ottenere la posizione')
     }
   }
 
@@ -123,7 +126,7 @@ export default function CheckinPage() {
       if (!apiKey) return
       
       const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric&lang=${language}`
+        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric&lang=it`
       )
       const data = await response.json()
       
@@ -132,39 +135,212 @@ export default function CheckinPage() {
         descrizione: data.weather[0].description,
         icona: data.weather[0].icon,
         umidita: data.main.humidity,
-        vento: Math.round(data.wind.speed * 3.6) // m/s to km/h
+        vento: Math.round(data.wind.speed * 3.6)
       })
     } catch (error) {
       console.error('Errore caricamento meteo:', error)
     }
   }
 
-  // Verifica distanza da area lavoro selezionata
+  // Verifica distanza da area lavoro
   const verificaDistanza = () => {
-    if (!posizione || !selectedArea) return null
+    if (!posizione || !areaLavoro) return null
     
     const distanza = calcolaDistanza(
       posizione.lat,
       posizione.lng,
-      selectedArea.latitudine,
-      selectedArea.longitudine
+      areaLavoro.latitudine,
+      areaLavoro.longitudine
     )
     
     return {
       distanza: Math.round(distanza),
-      dentroArea: distanza <= (selectedArea.raggio_metri || 100)
+      dentroArea: distanza <= (areaLavoro.raggio || 100)
     }
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // QR SCANNER FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════
+  
+  // Avvia scanner QR con fotocamera
+  const startQrScanner = async () => {
+    setQrError(null)
+    setShowQrScanner(true)
+    
+    try {
+      // Richiedi accesso alla fotocamera posteriore
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      })
+      
+      setCameraStream(stream)
+      
+      // Collega lo stream al video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.play()
+        
+        // Inizia la scansione dopo un breve delay
+        setTimeout(() => {
+          startScanning()
+        }, 500)
+      }
+    } catch (error) {
+      console.error('Errore accesso fotocamera:', error)
+      if (error.name === 'NotAllowedError') {
+        setQrError('Permesso fotocamera negato. Consenti l\'accesso alla fotocamera nelle impostazioni del browser.')
+      } else if (error.name === 'NotFoundError') {
+        setQrError('Nessuna fotocamera trovata sul dispositivo.')
+      } else {
+        setQrError('Impossibile accedere alla fotocamera: ' + error.message)
+      }
+      setShowQrScanner(false)
+    }
+  }
+  
+  // Scansione periodica del video per QR code
+  const startScanning = () => {
+    if (!videoRef.current || !canvasRef.current) return
+    
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    
+    const scan = async () => {
+      if (!video.videoWidth || !video.videoHeight) return
+      
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      // Prova a usare jsQR se disponibile (globale)
+      if (typeof window.jsQR !== 'undefined') {
+        const code = window.jsQR(imageData.data, imageData.width, imageData.height)
+        if (code) {
+          handleQrCodeDetected(code.data)
+          return
+        }
+      }
+    }
+    
+    // Scansiona ogni 200ms
+    scanIntervalRef.current = setInterval(scan, 200)
+  }
+  
+  // Stop scanner
+  const stopQrScanner = () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current)
+      scanIntervalRef.current = null
+    }
+    
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop())
+      setCameraStream(null)
+    }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    
+    setShowQrScanner(false)
+  }
+  
+  // Gestisci QR code rilevato
+  const handleQrCodeDetected = (code) => {
+    console.log('QR Code rilevato:', code)
+    stopQrScanner()
+    setQrCode(code)
+    setQrError(null)
+    
+    // Verifica se il codice corrisponde a un'area
+    const areaMatch = areeDisponibili.find(a => 
+      a.qr_code === code || 
+      a.codice === code ||
+      a.nome.toLowerCase() === code.toLowerCase()
+    )
+    
+    if (areaMatch) {
+      setAreaLavoro(areaMatch)
+      // Ottieni posizione per il checkin
+      ottieniPosizione()
+    }
+  }
+  
+  // Input manuale QR code
+  const handleManualQrSubmit = () => {
+    if (!qrCode.trim()) {
+      setQrError('Inserisci un codice')
+      return
+    }
+    handleQrCodeDetected(qrCode.trim())
+  }
+  
+  // Fallback: usa input file per scattare foto
+  const handleFileInput = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setQrError(null)
+    
+    try {
+      // Crea un'immagine dal file
+      const img = new Image()
+      img.src = URL.createObjectURL(file)
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = reject
+      })
+      
+      // Disegna su canvas per analisi
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      // Prova jsQR se disponibile
+      if (typeof window.jsQR !== 'undefined') {
+        const code = window.jsQR(imageData.data, imageData.width, imageData.height)
+        if (code) {
+          handleQrCodeDetected(code.data)
+          URL.revokeObjectURL(img.src)
+          return
+        }
+      }
+      
+      // Fallback: mostra errore
+      setQrError('QR code non rilevato nella foto. Riprova o inserisci il codice manualmente.')
+      
+      URL.revokeObjectURL(img.src)
+    } catch (error) {
+      console.error('Errore analisi immagine:', error)
+      setQrError('Errore durante l\'analisi dell\'immagine')
+    }
+    
+    // Reset input
+    e.target.value = ''
   }
 
   // Registra entrata
   const registraEntrata = async () => {
     if (!posizione && modalita === 'gps') {
-      alert(t('getPositionFirst'))
+      alert('Ottieni prima la posizione GPS')
       return
     }
     
-    if (!selectedAreaId) {
-      alert(t('selectAreaFirst'))
+    if (modalita === 'qr' && !qrCode && !areaLavoro) {
+      alert('Scansiona o inserisci un codice QR')
       return
     }
 
@@ -177,7 +353,6 @@ export default function CheckinPage() {
         .insert({
           persona_id: persona.id,
           progetto_id: progetto.id,
-          area_lavoro_id: selectedAreaId,
           data: oggi,
           ora_entrata: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
           latitudine_entrata: posizione?.lat,
@@ -194,9 +369,10 @@ export default function CheckinPage() {
       
       setPresenza(data)
       setNote('')
+      setQrCode('')
     } catch (error) {
       console.error('Errore registrazione entrata:', error)
-      alert(t('registrationError'))
+      alert('Errore durante la registrazione')
     } finally {
       setSubmitting(false)
     }
@@ -239,18 +415,13 @@ export default function CheckinPage() {
       setNote('')
     } catch (error) {
       console.error('Errore registrazione uscita:', error)
-      alert(t('registrationError'))
+      alert('Errore durante la registrazione')
     } finally {
       setSubmitting(false)
     }
   }
 
   const distanzaInfo = verificaDistanza()
-
-  // Formatta data in base alla lingua
-  const formatDate = (date, options) => {
-    return new Date(date).toLocaleDateString(language === 'it' ? 'it-IT' : 'en-GB', options)
-  }
 
   if (loading) {
     return (
@@ -268,14 +439,14 @@ export default function CheckinPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl lg:text-3xl font-bold text-gray-800 flex items-center gap-2">
-          📍 {t('checkinCheckout')}
+          📍 Check-in / Check-out
         </h1>
         <p className="text-gray-500 mt-1">
-          {formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
+          {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
       </div>
 
-      {/* Layout Grid - Responsive */}
+      {/* Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Colonna Principale */}
@@ -296,38 +467,37 @@ export default function CheckinPage() {
               <div className="text-center sm:text-left flex-1">
                 <h2 className="text-xl font-bold text-gray-800">
                   {!presenza 
-                    ? t('readyToStart')
+                    ? 'Pronto per iniziare?' 
                     : presenza.ora_uscita 
-                      ? t('dayCompleted')
-                      : t('atWork')}
+                      ? 'Giornata completata!'
+                      : 'Sei al lavoro'}
                 </h2>
                 <p className="text-gray-600 mt-1">
                   {!presenza 
-                    ? t('registerEntryToStart')
+                    ? 'Registra la tua entrata per iniziare'
                     : presenza.ora_uscita 
-                      ? `${t('youWorked')} ${presenza.ore_lavorate || '-'} ${t('hours')}`
-                      : `${t('entryAt')} ${presenza.ora_entrata}`}
+                      ? `Hai lavorato ${presenza.ore_lavorate || '-'} ore`
+                      : `Entrata alle ${presenza.ora_entrata}`}
                 </p>
                 {presenza && !presenza.ora_uscita && (
                   <div className="mt-3">
                     <span className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
                       <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
-                      {t('inProgressSince')} {presenza.ora_entrata}
+                      In corso da {presenza.ora_entrata}
                     </span>
                   </div>
                 )}
               </div>
               
-              {/* Orari su desktop */}
               {presenza && (
                 <div className="hidden sm:flex gap-4 text-center">
                   <div className="bg-white/80 rounded-xl px-4 py-2">
-                    <p className="text-xs text-gray-500 uppercase">{t('entry')}</p>
+                    <p className="text-xs text-gray-500 uppercase">Entrata</p>
                     <p className="text-lg font-bold text-green-600">{presenza.ora_entrata}</p>
                   </div>
                   {presenza.ora_uscita && (
                     <div className="bg-white/80 rounded-xl px-4 py-2">
-                      <p className="text-xs text-gray-500 uppercase">{t('exit')}</p>
+                      <p className="text-xs text-gray-500 uppercase">Uscita</p>
                       <p className="text-lg font-bold text-red-600">{presenza.ora_uscita}</p>
                     </div>
                   )}
@@ -336,89 +506,37 @@ export default function CheckinPage() {
             </div>
           </div>
 
-          {/* Se giornata completata, mostra solo riepilogo */}
+          {/* Se giornata completata */}
           {presenza?.ora_uscita ? (
             <div className="bg-white rounded-2xl p-6 border shadow-sm">
               <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                📋 {t('daySummary')}
+                📋 Riepilogo Giornata
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="bg-gray-50 rounded-xl p-4 text-center">
                   <p className="text-2xl font-bold text-gray-800">{presenza.ora_entrata}</p>
-                  <p className="text-xs text-gray-500 uppercase mt-1">{t('entry')}</p>
+                  <p className="text-xs text-gray-500 uppercase mt-1">Entrata</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 text-center">
                   <p className="text-2xl font-bold text-gray-800">{presenza.ora_uscita}</p>
-                  <p className="text-xs text-gray-500 uppercase mt-1">{t('exit')}</p>
+                  <p className="text-xs text-gray-500 uppercase mt-1">Uscita</p>
                 </div>
                 <div className="bg-blue-50 rounded-xl p-4 text-center">
                   <p className="text-2xl font-bold text-blue-600">{presenza.ore_lavorate}h</p>
-                  <p className="text-xs text-gray-500 uppercase mt-1">{t('total')}</p>
+                  <p className="text-xs text-gray-500 uppercase mt-1">Totale</p>
                 </div>
                 <div className="bg-green-50 rounded-xl p-4 text-center">
                   <p className="text-2xl">✅</p>
-                  <p className="text-xs text-gray-500 uppercase mt-1">{t('completed')}</p>
+                  <p className="text-xs text-gray-500 uppercase mt-1">Completato</p>
                 </div>
               </div>
             </div>
           ) : (
             <>
-              {/* ============ SELEZIONE AREA DI LAVORO ============ */}
-              <div className="bg-white rounded-2xl p-6 border shadow-sm">
-                <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  📍 {t('selectWorkArea')}
-                </h3>
-                
-                {aree.length === 0 ? (
-                  <div className="text-center py-6 text-gray-400">
-                    <p className="text-4xl mb-2">📍</p>
-                    <p>{t('noAreasConfigured')}</p>
-                    <p className="text-sm">{t('contactAdminForAreas')}</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {aree.map(area => (
-                      <button
-                        key={area.id}
-                        onClick={() => setSelectedAreaId(area.id)}
-                        disabled={presenza}
-                        className={`p-4 rounded-xl border-2 transition-all text-left ${
-                          selectedAreaId === area.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-blue-200 hover:bg-blue-50/50'
-                        } ${presenza ? 'opacity-60 cursor-not-allowed' : ''}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div 
-                            className="w-4 h-4 rounded-full flex-shrink-0" 
-                            style={{ backgroundColor: area.colore || '#3B82F6' }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-800 truncate">{area.nome}</p>
-                            {area.descrizione && (
-                              <p className="text-xs text-gray-500 truncate">{area.descrizione}</p>
-                            )}
-                          </div>
-                          {selectedAreaId === area.id && (
-                            <span className="text-blue-600 text-xl">✓</span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {!selectedAreaId && aree.length > 0 && (
-                  <p className="mt-3 text-sm text-amber-600 flex items-center gap-2">
-                    ⚠️ {t('pleaseSelectArea')}
-                  </p>
-                )}
-              </div>
-
               {/* Modalità Check-in */}
               <div className="bg-white rounded-2xl p-6 border shadow-sm">
                 <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  🎯 {t('checkinMode')}
+                  🎯 Modalità Check-in
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <button
@@ -431,28 +549,28 @@ export default function CheckinPage() {
                   >
                     <div className="text-3xl mb-2">📍</div>
                     <p className="font-medium">GPS</p>
-                    <p className="text-xs text-gray-500 mt-1">{t('automaticPosition')}</p>
+                    <p className="text-xs text-gray-500 mt-1">Posizione automatica</p>
                   </button>
                   <button
                     onClick={() => setModalita('qr')}
                     className={`p-4 rounded-xl border-2 transition-all ${
                       modalita === 'qr'
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 hover:border-blue-200 hover:bg-blue-50/50'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-gray-200 hover:border-purple-200 hover:bg-purple-50/50'
                     }`}
                   >
                     <div className="text-3xl mb-2">📱</div>
                     <p className="font-medium">QR Code</p>
-                    <p className="text-xs text-gray-500 mt-1">{t('scanCode')}</p>
+                    <p className="text-xs text-gray-500 mt-1">Scansiona codice</p>
                   </button>
                 </div>
               </div>
 
-              {/* Posizione GPS */}
+              {/* GPS */}
               {modalita === 'gps' && (
                 <div className="bg-white rounded-2xl p-6 border shadow-sm">
                   <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    🛰️ {t('gpsPosition')}
+                    📍 Posizione GPS
                   </h3>
                   
                   {posizione ? (
@@ -460,59 +578,51 @@ export default function CheckinPage() {
                       <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl">
                         <span className="text-2xl">✅</span>
                         <div>
-                          <p className="font-medium text-green-700">{t('positionAcquired')}</p>
+                          <p className="font-medium text-green-800">Posizione ottenuta</p>
                           <p className="text-sm text-green-600">
-                            {t('accuracy')}: ±{Math.round(posizione.accuracy)}m
+                            {posizione.lat.toFixed(6)}, {posizione.lng.toFixed(6)}
+                          </p>
+                          <p className="text-xs text-green-500">
+                            Precisione: ±{posizione.accuracy?.toFixed(0) || '?'}m
                           </p>
                         </div>
                       </div>
                       
-                      {distanzaInfo && selectedArea && (
-                        <div className={`flex items-center gap-3 p-4 rounded-xl ${
+                      {distanzaInfo && (
+                        <div className={`p-4 rounded-xl ${
                           distanzaInfo.dentroArea 
-                            ? 'bg-green-50' 
-                            : 'bg-amber-50'
+                            ? 'bg-green-50 border border-green-200' 
+                            : 'bg-orange-50 border border-orange-200'
                         }`}>
-                          <span className="text-2xl">
-                            {distanzaInfo.dentroArea ? '📍' : '⚠️'}
-                          </span>
-                          <div>
-                            <p className={`font-medium ${
-                              distanzaInfo.dentroArea ? 'text-green-700' : 'text-amber-700'
-                            }`}>
-                              {distanzaInfo.dentroArea 
-                                ? t('insideWorkArea')
-                                : t('outsideWorkArea')}
-                            </p>
-                            <p className={`text-sm ${
-                              distanzaInfo.dentroArea ? 'text-green-600' : 'text-amber-600'
-                            }`}>
-                              {t('distance')}: {distanzaInfo.distanza}m 
-                              {` (${t('radius')}: ${selectedArea.raggio_metri || 100}m)`}
-                            </p>
-                          </div>
+                          <p className={`font-medium ${distanzaInfo.dentroArea ? 'text-green-800' : 'text-orange-800'}`}>
+                            {distanzaInfo.dentroArea ? '✅ Dentro l\'area di lavoro' : '⚠️ Fuori dall\'area di lavoro'}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            Distanza: {distanzaInfo.distanza}m
+                          </p>
                         </div>
                       )}
-
+                      
                       <button
                         onClick={ottieniPosizione}
-                        className="w-full py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                        className="w-full py-3 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-xl font-medium transition-colors"
                       >
-                        🔄 {t('refreshPosition')}
+                        🔄 Aggiorna posizione
                       </button>
                     </div>
                   ) : (
-                    <div>
+                    <div className="space-y-4">
                       {posizioneError && (
-                        <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-xl">
-                          ⚠️ {posizioneError}
+                        <div className="p-4 bg-red-50 text-red-700 rounded-xl">
+                          <p className="font-medium">❌ Errore</p>
+                          <p className="text-sm">{posizioneError}</p>
                         </div>
                       )}
                       <button
                         onClick={ottieniPosizione}
-                        className="w-full py-4 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                       >
-                        📍 {t('getPosition')}
+                        📍 Ottieni posizione
                       </button>
                     </div>
                   )}
@@ -523,22 +633,113 @@ export default function CheckinPage() {
               {modalita === 'qr' && (
                 <div className="bg-white rounded-2xl p-6 border shadow-sm">
                   <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    📱 {t('qrCodeScan')}
+                    📱 Scansione QR Code
                   </h3>
+                  
                   <div className="space-y-4">
                     <p className="text-gray-500 text-sm">
-                      {t('enterCodeManually')}
+                      Scansiona il QR dell'area di lavoro o inserisci il codice manualmente
                     </p>
-                    <input
-                      type="text"
-                      value={qrCode}
-                      onChange={(e) => setQrCode(e.target.value)}
-                      placeholder={t('enterCode')}
-                      className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <button className="w-full py-4 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
-                      📷 {t('openCamera')}
-                    </button>
+                    
+                    {/* Errori */}
+                    {qrError && (
+                      <div className="p-4 bg-red-50 text-red-700 rounded-xl">
+                        <p className="text-sm">{qrError}</p>
+                      </div>
+                    )}
+                    
+                    {/* QR Code rilevato */}
+                    {qrCode && (
+                      <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                        <p className="font-medium text-green-800">✅ Codice rilevato</p>
+                        <p className="text-sm text-green-600 font-mono">{qrCode}</p>
+                        {areaLavoro && (
+                          <p className="text-sm text-green-700 mt-1">
+                            Area: {areaLavoro.nome}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Scanner Video (se attivo) */}
+                    {showQrScanner && (
+                      <div className="relative bg-black rounded-xl overflow-hidden">
+                        <video 
+                          ref={videoRef}
+                          className="w-full h-64 object-cover"
+                          playsInline
+                          muted
+                          autoPlay
+                        />
+                        <canvas ref={canvasRef} className="hidden" />
+                        
+                        {/* Overlay con mirino */}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="w-48 h-48 border-2 border-white rounded-xl opacity-50"></div>
+                        </div>
+                        
+                        {/* Pulsante chiudi */}
+                        <button
+                          onClick={stopQrScanner}
+                          className="absolute top-2 right-2 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg"
+                        >
+                          ✕
+                        </button>
+                        
+                        <p className="absolute bottom-2 left-0 right-0 text-center text-white text-sm bg-black/50 py-1">
+                          Inquadra il QR code
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Input manuale */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={qrCode}
+                        onChange={(e) => setQrCode(e.target.value)}
+                        placeholder="Inserisci codice manualmente..."
+                        className="flex-1 px-4 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      />
+                      <button
+                        onClick={handleManualQrSubmit}
+                        className="px-4 py-3 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors"
+                      >
+                        ✓
+                      </button>
+                    </div>
+                    
+                    {/* Pulsanti fotocamera */}
+                    {!showQrScanner && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Pulsante camera live */}
+                        <button 
+                          onClick={startQrScanner}
+                          type="button"
+                          className="py-4 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 active:bg-purple-300"
+                        >
+                          📷 Apri fotocamera
+                        </button>
+                        
+                        {/* Pulsante scatta foto (fallback) */}
+                        <label className="py-4 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer active:bg-indigo-300">
+                          📸 Scatta foto
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleFileInput}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    )}
+                    
+                    {/* Info */}
+                    <div className="text-xs text-gray-400 text-center space-y-1">
+                      <p>💡 "Apri fotocamera" per scansione live</p>
+                      <p>📸 "Scatta foto" apre direttamente la fotocamera del telefono</p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -546,12 +747,12 @@ export default function CheckinPage() {
               {/* Note */}
               <div className="bg-white rounded-2xl p-6 border shadow-sm">
                 <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  📝 {t('notes')}
+                  📝 Note
                 </h3>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder={t('optionalNotes')}
+                  placeholder="Note opzionali..."
                   rows={3}
                   className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                 />
@@ -560,25 +761,26 @@ export default function CheckinPage() {
               {/* Pulsante Azione Principale */}
               <button
                 onClick={presenza ? registraUscita : registraEntrata}
-                disabled={submitting || (modalita === 'gps' && !posizione) || (!presenza && !selectedAreaId)}
+                disabled={submitting || (modalita === 'gps' && !posizione) || (modalita === 'qr' && !qrCode && !areaLavoro)}
+                type="button"
                 className={`w-full py-5 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${
                   presenza
-                    ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl'
-                    : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl'
+                    ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl active:from-red-700 active:to-red-800'
+                    : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl active:from-green-700 active:to-green-800'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {submitting ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    {t('registering')}
+                    Registrazione...
                   </>
                 ) : presenza ? (
                   <>
-                    🚪 {t('registerExit')}
+                    🚪 Registra Uscita
                   </>
                 ) : (
                   <>
-                    ✅ {t('registerEntry')}
+                    ✅ Registra Entrata
                   </>
                 )}
               </button>
@@ -586,14 +788,14 @@ export default function CheckinPage() {
           )}
         </div>
 
-        {/* Colonna Laterale - Info e Storico */}
+        {/* Colonna Laterale */}
         <div className="space-y-6">
           
           {/* Card Meteo */}
           {meteo && (
             <div className="bg-gradient-to-br from-sky-50 to-blue-50 rounded-2xl p-6 border border-sky-200">
               <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                🌤️ {t('currentWeather')}
+                🌤️ Meteo Attuale
               </h3>
               <div className="flex items-center gap-4">
                 <img 
@@ -608,37 +810,31 @@ export default function CheckinPage() {
               </div>
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div className="bg-white/60 rounded-lg p-3 text-center">
-                  <p className="text-xs text-gray-500">{t('humidity')}</p>
+                  <p className="text-xs text-gray-500">Umidità</p>
                   <p className="font-semibold">{meteo.umidita}%</p>
                 </div>
                 <div className="bg-white/60 rounded-lg p-3 text-center">
-                  <p className="text-xs text-gray-500">{t('wind')}</p>
+                  <p className="text-xs text-gray-500">Vento</p>
                   <p className="font-semibold">{meteo.vento} km/h</p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Card Area Selezionata */}
-          {selectedArea && (
+          {/* Card Area Lavoro */}
+          {areaLavoro && (
             <div className="bg-white rounded-2xl p-6 border shadow-sm">
               <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                🏗️ {t('selectedArea')}
+                🏗️ Area di Lavoro
               </h3>
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-4 h-4 rounded-full" 
-                    style={{ backgroundColor: selectedArea.colore || '#3B82F6' }}
-                  />
-                  <p className="font-medium text-gray-800">{selectedArea.nome}</p>
-                </div>
-                {selectedArea.descrizione && (
-                  <p className="text-sm text-gray-500">{selectedArea.descrizione}</p>
+                <p className="font-medium text-gray-800">{areaLavoro.nome}</p>
+                {areaLavoro.descrizione && (
+                  <p className="text-sm text-gray-500">{areaLavoro.descrizione}</p>
                 )}
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <span>📍</span>
-                  <span>{t('radius')}: {selectedArea.raggio_metri || 100}m</span>
+                  <span>Raggio: {areaLavoro.raggio || 100}m</span>
                 </div>
               </div>
             </div>
@@ -648,10 +844,11 @@ export default function CheckinPage() {
           <div className="bg-white rounded-2xl p-6 border shadow-sm">
             <button
               onClick={() => setShowStorico(!showStorico)}
+              type="button"
               className="w-full flex items-center justify-between"
             >
               <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                📅 {t('recentHistory')}
+                📅 Storico Recente
               </h3>
               <span className={`transition-transform ${showStorico ? 'rotate-180' : ''}`}>
                 ▼
@@ -662,7 +859,7 @@ export default function CheckinPage() {
               <div className="mt-4 space-y-3">
                 {storicoPresenze.length === 0 ? (
                   <p className="text-gray-500 text-sm text-center py-4">
-                    {t('noAttendanceRecorded')}
+                    Nessuna presenza registrata
                   </p>
                 ) : (
                   storicoPresenze.slice(0, 7).map((p) => (
@@ -674,11 +871,14 @@ export default function CheckinPage() {
                     >
                       <div>
                         <p className="font-medium text-sm">
-                          {formatDate(p.data, { weekday: 'short', day: 'numeric', month: 'short' })}
+                          {new Date(p.data).toLocaleDateString('it-IT', { 
+                            weekday: 'short', 
+                            day: 'numeric', 
+                            month: 'short' 
+                          })}
                         </p>
                         <p className="text-xs text-gray-500">
                           {p.ora_entrata} - {p.ora_uscita || '...'}
-                          {p.area?.nome && <span className="ml-1 text-blue-600">• {p.area.nome}</span>}
                         </p>
                       </div>
                       <div className="text-right">
@@ -688,7 +888,7 @@ export default function CheckinPage() {
                           </span>
                         ) : (
                           <span className="text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded">
-                            {t('inProgress')}
+                            In corso
                           </span>
                         )}
                       </div>
@@ -702,7 +902,7 @@ export default function CheckinPage() {
           {/* Info Progetto */}
           <div className="bg-gray-50 rounded-2xl p-6">
             <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              📁 {t('project')}
+              📁 Progetto
             </h3>
             <div className="space-y-2">
               <p className="font-medium text-gray-800">{progetto?.nome}</p>
