@@ -461,40 +461,50 @@ export default function Layout({ children }) {
         )}
       </aside>
 
-      {/* Main Content */}
-      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : ''}`}>
-        {/* Banner Notifiche - posizionato sotto l'hamburger su mobile */}
-        {showNotificationBanner && notificationPermission === 'default' && (
-          <div className={`bg-white border-b shadow-sm ${isMobile ? 'pt-2' : ''}`}>
-            <div className="max-w-4xl mx-auto p-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🔔</span>
-                  <div>
-                    <p className="font-medium text-gray-800">{t('enableNotifications')}</p>
-                    <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
-                  </div>
+      {/* Banner Notifiche - FUORI dal main per essere sempre cliccabile */}
+      {showNotificationBanner && notificationPermission === 'default' && (
+        <div className={`fixed ${isMobile ? 'top-20 left-0 right-0' : 'top-0 left-0 right-0'} bg-white border-b shadow-lg z-40`}
+             style={!isMobile ? { marginLeft: sidebarWidth } : {}}>
+          <div className="max-w-4xl mx-auto p-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🔔</span>
+                <div>
+                  <p className="font-medium text-gray-800">{t('enableNotifications')}</p>
+                  <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={handleDismissNotificationBanner}
-                    className="flex-1 sm:flex-none px-4 py-3 sm:py-2 text-gray-600 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors text-center"
-                  >
-                    {t('notNow')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEnableNotifications}
-                    className="flex-1 sm:flex-none px-4 py-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors text-center"
-                  >
-                    {t('enable')}
-                  </button>
-                </div>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleDismissNotificationBanner()
+                  }}
+                  className="flex-1 sm:flex-none px-6 py-4 sm:py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-xl transition-colors text-center font-medium min-h-[48px] touch-manipulation cursor-pointer select-none"
+                >
+                  {t('notNow')}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleEnableNotifications()
+                  }}
+                  className="flex-1 sm:flex-none px-6 py-4 sm:py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors text-center font-medium min-h-[48px] touch-manipulation cursor-pointer select-none"
+                >
+                  {t('enable')}
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Main Content */}
+      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : ''} ${showNotificationBanner && notificationPermission === 'default' ? (isMobile ? 'pt-44' : 'pt-20') : ''}`}>
         {children}
       </main>
     </div>
