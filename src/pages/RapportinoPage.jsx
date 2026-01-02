@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import FirmaDigitale from '../components/FirmaDigitale'
+import ImpedimentoModal from '../components/ImpedimentoModal'
 
 export default function RapportinoPage() {
   const { persona, assegnazione, progetto, isAtLeast } = useAuth()
@@ -24,6 +25,9 @@ export default function RapportinoPage() {
   const [wpComponenti, setWpComponenti] = useState({}) // { wpId: [componenti] }
   const [loadingWP, setLoadingWP] = useState(false)
   const [showWPSection, setShowWPSection] = useState(true)
+  
+  // Stato per modal impedimento
+  const [showImpedimento, setShowImpedimento] = useState(null) // { pianCompId, compCodice, wpCodice }
 
   // Helper settimana
   function getWeekNumber(date) {
@@ -113,6 +117,8 @@ export default function RapportinoPage() {
               id,
               completato,
               completato_at,
+              bloccato,
+              impedimento_id,
               componente:componenti(id, codice),
               pianificazione:work_package_pianificazione(
                 id,
@@ -280,12 +286,13 @@ export default function RapportinoPage() {
 
   // NUOVO: Conta componenti per WP
   const countWPStats = () => {
-    let totale = 0, completati = 0
+    let totale = 0, completati = 0, bloccati = 0
     Object.values(wpComponenti).forEach(({ componenti }) => {
       totale += componenti.length
       completati += componenti.filter(c => c.completato).length
+      bloccati += componenti.filter(c => c.bloccato).length
     })
-    return { totale, completati }
+    return { totale, completati, bloccati }
   }
   const wpStats = countWPStats()
 
@@ -540,6 +547,11 @@ export default function RapportinoPage() {
                       <span className="text-xs font-normal bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
                         CW{String(currentWeek).padStart(2, '0')}
                       </span>
+                      {wpStats.bloccati > 0 && (
+                        <span className="text-xs font-normal bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                          🚫 {wpStats.bloccati} bloccati
+                        </span>
+                      )}
                     </h3>
                     <p className="text-sm text-gray-500">
                       {wpStats.completati}/{wpStats.totale} componenti completati questa settimana
@@ -607,18 +619,43 @@ export default function RapportinoPage() {
                                 </div>
                                 <div className="flex flex-wrap gap-2 ml-6">
                                   {faseComp.map(comp => (
-                                    <button
-                                      key={comp.id}
-                                      onClick={() => handleToggleComponente(comp.id, comp.completato)}
-                                      className={`px-3 py-1.5 rounded-lg text-sm font-mono transition-all ${
-                                        comp.completato
-                                          ? 'bg-green-100 text-green-700 ring-2 ring-green-500'
-                                          : 'bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600'
-                                      }`}
-                                    >
-                                      {comp.completato && <span className="mr-1">✓</span>}
-                                      {comp.componente?.codice || '???'}
-                                    </button>
+                                    <div key={comp.id} className="flex items-center gap-1">
+                                      {/* Pulsante principale componente */}
+                                      <button
+                                        onClick={() => !comp.bloccato && handleToggleComponente(comp.id, comp.completato)}
+                                        disabled={comp.bloccato}
+                                        className={`px-3 py-1.5 rounded-lg text-sm font-mono transition-all ${
+                                          comp.bloccato
+                                            ? 'bg-red-100 text-red-700 ring-2 ring-red-400 cursor-not-allowed'
+                                            : comp.completato
+                                              ? 'bg-green-100 text-green-700 ring-2 ring-green-500'
+                                              : 'bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600'
+                                        }`}
+                                      >
+                                        {comp.bloccato && <span className="mr-1">🚫</span>}
+                                        {comp.completato && !comp.bloccato && <span className="mr-1">✓</span>}
+                                        {comp.componente?.codice || '???'}
+                                      </button>
+                                      
+                                      {/* Pulsante blocca/sblocca */}
+                                      <button
+                                        onClick={() => setShowImpedimento({
+                                          pianCompId: comp.id,
+                                          compCodice: comp.componente?.codice,
+                                          wpCodice: wp.codice,
+                                          bloccato: comp.bloccato,
+                                          impedimentoId: comp.impedimento_id
+                                        })}
+                                        className={`p-1 rounded text-xs transition-all ${
+                                          comp.bloccato 
+                                            ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                                            : 'bg-gray-100 text-gray-400 hover:bg-amber-100 hover:text-amber-600'
+                                        }`}
+                                        title={comp.bloccato ? 'Gestisci blocco' : 'Segnala impedimento'}
+                                      >
+                                        {comp.bloccato ? '⚠️' : '🚫'}
+                                      </button>
+                                    </div>
                                   ))}
                                 </div>
                               </div>
@@ -802,6 +839,20 @@ export default function RapportinoPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Modal Impedimento */}
+      {showImpedimento && (
+        <ImpedimentoModal
+          onClose={() => setShowImpedimento(null)}
+          onSave={async () => {
+            await loadWorkPackages()
+            setShowImpedimento(null)
+          }}
+          pianificazioneComponenteId={showImpedimento.pianCompId}
+          componenteCodice={showImpedimento.compCodice}
+          wpCodice={showImpedimento.wpCodice}
+        />
       )}
     </div>
   )
