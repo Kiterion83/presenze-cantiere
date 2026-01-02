@@ -183,11 +183,21 @@ export default function WorkPackagesPage() {
         wpId = data.id
       }
       
+      // Tabella di join work_package_componenti
       await supabase.from('work_package_componenti').delete().eq('work_package_id', wpId)
       if (selectedComponents.length > 0) {
         const { error } = await supabase.from('work_package_componenti').insert(selectedComponents.map((cId, idx) => ({ work_package_id: wpId, componente_id: cId, ordine: idx })))
         if (error) throw new Error(`Errore componenti: ${error.message}`)
       }
+      
+      // IMPORTANTE: Aggiorna work_package_id nella tabella componenti
+      // Prima rimuovi il riferimento dai componenti che erano in questo WP
+      await supabase.from('componenti').update({ work_package_id: null }).eq('work_package_id', wpId)
+      // Poi aggiungi il riferimento ai componenti selezionati
+      if (selectedComponents.length > 0) {
+        await supabase.from('componenti').update({ work_package_id: wpId }).in('id', selectedComponents)
+      }
+      
       await supabase.from('work_package_fasi').delete().eq('work_package_id', wpId)
       if (selectedFasi.length > 0) {
         const { error } = await supabase.from('work_package_fasi').insert(selectedFasi.map((fId, idx) => ({ work_package_id: wpId, fase_workflow_id: fId, ordine: idx })))
@@ -214,6 +224,8 @@ export default function WorkPackagesPage() {
 
   const handleDeleteWP = async (wp) => {
     if (!confirm(`Eliminare WP "${wp.codice}"?`)) return
+    // Rimuovi il riferimento work_package_id dai componenti
+    await supabase.from('componenti').update({ work_package_id: null }).eq('work_package_id', wp.id)
     await supabase.from('work_packages').delete().eq('id', wp.id)
     setWorkPackages(workPackages.filter(w => w.id !== wp.id))
     setMessage({ type: 'success', text: 'Eliminato!' })
