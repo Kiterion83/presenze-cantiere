@@ -462,37 +462,35 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-16' : ''}`}>
-        {/* Banner Notifiche */}
+      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : ''}`}>
+        {/* Banner Notifiche - posizionato sotto l'hamburger su mobile */}
         {showNotificationBanner && notificationPermission === 'default' && (
-          <div className="bg-white border-b shadow-sm p-4">
-            <div className="max-w-4xl mx-auto flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🔔</span>
-                <div>
-                  <p className="font-medium text-gray-800">{t('enableNotifications')}</p>
-                  <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
+          <div className={`bg-white border-b shadow-sm ${isMobile ? 'pt-2' : ''}`}>
+            <div className="max-w-4xl mx-auto p-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🔔</span>
+                  <div>
+                    <p className="font-medium text-gray-800">{t('enableNotifications')}</p>
+                    <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleDismissNotificationBanner}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  {t('notNow')}
-                </button>
-                <button
-                  onClick={handleEnableNotifications}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  {t('enable')}
-                </button>
-                <button
-                  onClick={handleDismissNotificationBanner}
-                  className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={handleDismissNotificationBanner}
+                    className="flex-1 sm:flex-none px-4 py-3 sm:py-2 text-gray-600 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors text-center"
+                  >
+                    {t('notNow')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEnableNotifications}
+                    className="flex-1 sm:flex-none px-4 py-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors text-center"
+                  >
+                    {t('enable')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
