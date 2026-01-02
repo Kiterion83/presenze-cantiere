@@ -167,18 +167,6 @@ export default function WorkPackagesPage() {
     loadComponenti()
   }, [progettoId, filters, showComponentSelector, showAzioneComponentSelector, showForm])
 
-  // Funzione per calcolare numero settimana ISO da una data
-  const getWeekNumber = (dateStr) => {
-    const d = new Date(dateStr)
-    d.setHours(0, 0, 0, 0)
-    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7)
-    const week1 = new Date(d.getFullYear(), 0, 4)
-    return {
-      year: d.getFullYear(),
-      week: 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7)
-    }
-  }
-
   // === SALVA WP ===
   const handleSaveWP = async () => {
     if (!form.codice.trim() || !form.nome.trim()) { setMessage({ type: 'error', text: 'Codice e nome obbligatori' }); return }
@@ -223,7 +211,9 @@ export default function WorkPackagesPage() {
       await supabase.from('pianificazione_cw').delete().eq('work_package_id', wpId).is('componente_id', null)
       
       if (form.data_inizio_pianificata) {
-        const { year, week } = getWeekNumber(form.data_inizio_pianificata)
+        const dataInizio = new Date(form.data_inizio_pianificata)
+        const week = getWeekNumber(dataInizio)
+        const year = dataInizio.getFullYear()
         const pianificazionePayload = {
           progetto_id: progettoId,
           work_package_id: wpId,
