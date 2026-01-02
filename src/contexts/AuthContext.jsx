@@ -215,6 +215,8 @@ export const AuthProvider = ({ children }) => {
       'componenti': ['engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
       // Work Packages: foreman+ può gestire WP, pianificare e segnare completamenti
       'work-packages': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Dashboard Avanzamento: foreman+ può vedere, supervisor+ per report completi
+      'avanzamento': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
       // Pianificazione CW: engineer+ può pianificare, foreman può visualizzare
       'pianificazione': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
       // Foreman mobile view: foreman e superiori
