@@ -25,7 +25,7 @@ import MaterialiPage from './pages/MaterialiPage'  // Rinominato da ComponentiPa
 import PianificazionePage from './pages/PianificazionePage'
 import ForemanPage from './pages/ForemanPage'
 import OreComponentiPage from './pages/OreComponentiPage'
-import WorkPackagesPage from './pages/WorkPackagesPage'  // NUOVO - Work Packages
+import WorkPackagesPage from './components/WorkPackagesPage'  // NUOVO - Work Packages
 import AvanzamentoPage from './pages/AvanzamentoPage'  // NUOVO - Dashboard Avanzamento
 // NUOVE PAGINE - Statistiche e AI
 import GanttPage from './pages/GanttPage'
