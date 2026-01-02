@@ -35,7 +35,7 @@ export default function Layout({ children }) {
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   )
 
-  // Menu items organizzati per sezione - AGGIORNATO con traduzioni
+  // Menu items organizzati per sezione - COMPLETO CON TUTTE LE VOCI
   const menuSections = [
     {
       id: 'core',
@@ -58,6 +58,8 @@ export default function Layout({ children }) {
       emoji: '🏗️',
       items: [
         { path: '/materiali', labelKey: 'materials', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
+        { path: '/work-packages', labelKey: 'workPackages', emoji: '📦', minRole: 'foreman', specialAccess: 'work-packages' },
+        { path: '/avanzamento', labelKey: 'progress', emoji: '📊', minRole: 'foreman', specialAccess: 'avanzamento' },
         { path: '/pianificazione', labelKey: 'planning', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
         { path: '/foreman', labelKey: 'field', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
         { path: '/ore-componenti', labelKey: 'workHours', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
@@ -192,52 +194,45 @@ export default function Layout({ children }) {
     localStorage.setItem('notification_banner_dismissed', 'true')
   }
 
-  // Se non autenticato, mostra solo children
-  if (!persona) {
-    return <>{children}</>
-  }
-
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <aside 
+      <aside
         ref={sidebarRef}
         style={{ width: sidebarWidth }}
-        className="bg-white border-r border-gray-200 flex flex-col relative flex-shrink-0"
+        className="relative bg-white border-r border-gray-200 flex flex-col shadow-sm"
       >
-        {/* Header Logo e Progetto */}
+        {/* Header Logo + Progetto */}
         <div className="p-4 border-b border-gray-100">
-          {/* Logo */}
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg">
-              PTS
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+              <span className="text-white font-bold text-lg">PTS</span>
             </div>
-            <div className="flex-1 min-w-0">
+            <div>
               <h1 className="font-bold text-gray-800">PTS</h1>
-              <p className="text-xs text-gray-500 truncate">{t('projectTrackingSystem')}</p>
+              <p className="text-xs text-gray-500">{t('projectTrackingSystem')}</p>
             </div>
           </div>
-          
-          {/* Selettore Progetti */}
+
+          {/* Progetto Selector - DROPDOWN */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setShowProgettiDropdown(!showProgettiDropdown)}
-              className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 rounded-xl border border-blue-200 transition-all"
+              className="w-full flex items-center gap-3 p-2 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition-all cursor-pointer"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-lg">📁</span>
-                <span className="font-medium text-gray-800 truncate text-sm">
-                  {progetto?.nome || t('selectProject')}
-                </span>
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-sm font-bold">
+                {progetto?.codice?.slice(0, 2) || '??'}
               </div>
-              <span className={`text-gray-400 transition-transform ${showProgettiDropdown ? 'rotate-180' : ''}`}>
-                ▼
-              </span>
+              <div className="flex-1 text-left min-w-0">
+                <p className="font-medium text-gray-800 truncate text-sm">{progetto?.nome || t('selectProject')}</p>
+                <p className="text-xs text-gray-500 truncate">{progetto?.codice}</p>
+              </div>
+              <span className={`text-gray-400 transition-transform ${showProgettiDropdown ? 'rotate-180' : ''}`}>▼</span>
             </button>
 
             {/* Dropdown Lista Progetti */}
-            {showProgettiDropdown && assegnazioni.length > 0 && (
-              <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+            {showProgettiDropdown && (
+              <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                 <div className="p-2 border-b bg-gray-50">
                   <p className="text-xs font-medium text-gray-500 uppercase">
                     {assegnazioni.some(a => a.isVirtual) ? t('allProjects') : t('yourProjects')}
