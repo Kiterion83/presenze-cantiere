@@ -176,17 +176,48 @@ export default function Layout({ children }) {
   }
   
   // Gestione notifiche
+  const [notificationLoading, setNotificationLoading] = useState(false)
+  
   const handleEnableNotifications = async () => {
-    if (typeof Notification !== 'undefined') {
+    console.log('handleEnableNotifications called')
+    setNotificationLoading(true)
+    
+    try {
+      if (typeof Notification === 'undefined') {
+        alert('Le notifiche non sono supportate su questo browser')
+        setShowNotificationBanner(false)
+        return
+      }
+      
       const permission = await Notification.requestPermission()
+      console.log('Notification permission:', permission)
       setNotificationPermission(permission)
+      
       if (permission === 'granted') {
         setShowNotificationBanner(false)
+        // Test notification
+        new Notification('Notifiche attivate!', {
+          body: 'Riceverai avvisi per approvazioni e check-in',
+          icon: '/favicon.ico'
+        })
+      } else if (permission === 'denied') {
+        alert('Permesso notifiche negato. Puoi abilitarlo dalle impostazioni del browser.')
+        setShowNotificationBanner(false)
+      } else {
+        // 'default' - l'utente ha chiuso il popup senza scegliere
+        setShowNotificationBanner(false)
       }
+    } catch (error) {
+      console.error('Errore notifiche:', error)
+      alert('Errore durante l\'attivazione delle notifiche')
+      setShowNotificationBanner(false)
+    } finally {
+      setNotificationLoading(false)
     }
   }
   
   const handleDismissNotificationBanner = () => {
+    console.log('handleDismissNotificationBanner called')
     setShowNotificationBanner(false)
     localStorage.setItem('notification_banner_dismissed', 'true')
   }
@@ -200,7 +231,53 @@ export default function Layout({ children }) {
   const sidebarWidth = isCollapsed ? 72 : 256
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <>
+      {/* Banner Notifiche - Completamente fuori dal layout flex */}
+      {showNotificationBanner && notificationPermission === 'default' && (
+        <div 
+          className="fixed inset-x-0 bg-white border-b-2 border-blue-200 shadow-xl"
+          style={{ 
+            top: isMobile ? '72px' : '0px',
+            zIndex: 9999
+          }}
+        >
+          <div className="p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-3xl">🔔</span>
+              <div>
+                <p className="font-bold text-gray-800">{t('enableNotifications')}</p>
+                <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={notificationLoading}
+                onClick={() => {
+                  console.log('Non ora clicked')
+                  handleDismissNotificationBanner()
+                }}
+                className="flex-1 px-4 py-4 text-gray-700 bg-gray-200 rounded-xl font-semibold text-base active:bg-gray-300 disabled:opacity-50"
+              >
+                {t('notNow')}
+              </button>
+              <button
+                type="button"
+                disabled={notificationLoading}
+                onClick={() => {
+                  console.log('Attiva clicked')
+                  handleEnableNotifications()
+                }}
+                className="flex-1 px-4 py-4 bg-blue-600 text-white rounded-xl font-semibold text-base active:bg-blue-700 disabled:opacity-50"
+              >
+                {notificationLoading ? '...' : t('enable')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="flex h-screen bg-gray-50">
       {/* Mobile Overlay */}
       {isMobile && isMobileOpen && (
         <div 
@@ -461,56 +538,11 @@ export default function Layout({ children }) {
         )}
       </aside>
 
-      {/* Banner Notifiche - Fixed con z-index massimo */}
-      {showNotificationBanner && notificationPermission === 'default' && (
-        <div 
-          className="fixed inset-x-0 bg-white border-b-2 border-blue-200 shadow-xl"
-          style={{ 
-            top: isMobile ? '72px' : '0px',
-            zIndex: 9999,
-            pointerEvents: 'auto'
-          }}
-        >
-          <div className="p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-3xl">🔔</span>
-              <div>
-                <p className="font-bold text-gray-800">{t('enableNotifications')}</p>
-                <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  handleDismissNotificationBanner()
-                }}
-                style={{ WebkitTapHighlightColor: 'rgba(0,0,0,0.1)' }}
-                className="flex-1 px-4 py-4 text-gray-700 bg-gray-200 rounded-xl font-semibold text-base active:bg-gray-300"
-              >
-                {t('notNow')}
-              </button>
-              <button
-                type="button"
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  handleEnableNotifications()
-                }}
-                style={{ WebkitTapHighlightColor: 'rgba(0,0,0,0.1)' }}
-                className="flex-1 px-4 py-4 bg-blue-600 text-white rounded-xl font-semibold text-base active:bg-blue-700"
-              >
-                {t('enable')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main Content */}
       <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : ''} ${showNotificationBanner && notificationPermission === 'default' ? 'pt-40' : ''}`}>
         {children}
       </main>
     </div>
+    </>
   )
 }
