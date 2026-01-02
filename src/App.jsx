@@ -119,7 +119,7 @@ function AppRoutes() {
       <Route path="/pianificazione" element={<ProtectedRoute requiredAccess="pianificazione"><PianificazionePage /></ProtectedRoute>} />
       <Route path="/foreman" element={<ProtectedRoute requiredAccess="foreman"><ForemanPage /></ProtectedRoute>} />
       <Route path="/ore-componenti" element={<ProtectedRoute requiredAccess="ore-componenti"><OreComponentiPage /></ProtectedRoute>} />
-      <Route path="/work-packages" element={<ProtectedRoute requiredAccess="work-packages"><WorkPackagesPage /></ProtectedRoute>} />
+      <Route path="/work-packages" element={<ProtectedRoute minRole="foreman"><WorkPackagesPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Supervisor+ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
