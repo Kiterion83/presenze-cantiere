@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
 
 export default function PianificazionePage() {
   const { progettoId, progetto, persona, isAtLeast, canAccess } = useAuth()
+  const { t, language } = useI18n()
   
   // Dati
   const [pianificazioni, setPianificazioni] = useState([])
@@ -48,13 +50,13 @@ export default function PianificazionePage() {
     squadra_id: ''
   })
   
-  // Stati attività
+  // Stati attività - tradotti
   const statiAttivita = [
-    { value: 'pianificato', label: 'Pianificato', color: 'bg-blue-100 text-blue-700', borderColor: 'border-blue-300' },
-    { value: 'in_corso', label: 'In Corso', color: 'bg-yellow-100 text-yellow-700', borderColor: 'border-yellow-300' },
-    { value: 'completato', label: 'Completato', color: 'bg-green-100 text-green-700', borderColor: 'border-green-300' },
-    { value: 'rimandato', label: 'Rimandato', color: 'bg-orange-100 text-orange-700', borderColor: 'border-orange-300' },
-    { value: 'bloccato', label: 'Bloccato', color: 'bg-red-100 text-red-700', borderColor: 'border-red-300' }
+    { value: 'pianificato', labelKey: 'planned', color: 'bg-blue-100 text-blue-700', borderColor: 'border-blue-300' },
+    { value: 'in_corso', labelKey: 'inProgress', color: 'bg-yellow-100 text-yellow-700', borderColor: 'border-yellow-300' },
+    { value: 'completato', labelKey: 'completed', color: 'bg-green-100 text-green-700', borderColor: 'border-green-300' },
+    { value: 'rimandato', labelKey: 'postponed', color: 'bg-orange-100 text-orange-700', borderColor: 'border-orange-300' },
+    { value: 'bloccato', labelKey: 'blocked', color: 'bg-red-100 text-red-700', borderColor: 'border-red-300' }
   ]
 
   // ══════════════════════════════════════════════════════════════════════
@@ -83,7 +85,8 @@ export default function PianificazionePage() {
   }
   
   function formatDate(date) {
-    return date.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })
+    const locale = language === 'en' ? 'en-GB' : 'it-IT'
+    return date.toLocaleDateString(locale, { day: '2-digit', month: 'short' })
   }
   
   function isCurrentWeek(year, week) {
@@ -173,7 +176,7 @@ export default function PianificazionePage() {
       setFasiWorkflow(fasiData || [])
       setSquadre(squadreData || [])
     } catch (error) {
-      console.error('Errore caricamento:', error)
+      console.error('Error loading:', error)
     } finally {
       setLoading(false)
     }
@@ -294,7 +297,7 @@ export default function PianificazionePage() {
   
   const handleAssign = async () => {
     if (!assignForm.componente_id) {
-      alert('Seleziona un componente')
+      alert(t('selectComponent'))
       return
     }
     
@@ -320,14 +323,14 @@ export default function PianificazionePage() {
       setShowAssignModal(false)
       loadData()
     } catch (error) {
-      console.error('Errore assegnazione:', error)
-      alert('Errore: ' + error.message)
+      console.error('Error assigning:', error)
+      alert(t('error') + ': ' + error.message)
     }
   }
   
   const handleBulkAssign = async () => {
     if (selectedComponentIds.length === 0) {
-      alert('Seleziona almeno un componente')
+      alert(t('selectAtLeastOne'))
       return
     }
     
@@ -354,8 +357,8 @@ export default function PianificazionePage() {
       setShowBulkAssignModal(false)
       loadData()
     } catch (error) {
-      console.error('Errore assegnazione multipla:', error)
-      alert('Errore: ' + error.message)
+      console.error('Error bulk assigning:', error)
+      alert(t('error') + ': ' + error.message)
     }
   }
   
@@ -383,8 +386,8 @@ export default function PianificazionePage() {
       loadData()
       if (showDetailModal) setShowDetailModal(false)
     } catch (error) {
-      console.error('Errore aggiornamento:', error)
-      alert('Errore: ' + error.message)
+      console.error('Error updating:', error)
+      alert(t('error') + ': ' + error.message)
     }
   }
   
@@ -405,8 +408,8 @@ export default function PianificazionePage() {
       loadData()
       setShowDetailModal(false)
     } catch (error) {
-      console.error('Errore segnalazione:', error)
-      alert('Errore: ' + error.message)
+      console.error('Error reporting:', error)
+      alert(t('error') + ': ' + error.message)
     }
   }
   
@@ -425,13 +428,13 @@ export default function PianificazionePage() {
       
       loadData()
     } catch (error) {
-      console.error('Errore risoluzione:', error)
-      alert('Errore: ' + error.message)
+      console.error('Error resolving:', error)
+      alert(t('error') + ': ' + error.message)
     }
   }
   
   const deleteActivity = async (activityId) => {
-    if (!confirm('Rimuovere questa attività dalla pianificazione?')) return
+    if (!confirm(t('confirmRemoveActivity'))) return
     
     try {
       const { error } = await supabase
@@ -444,13 +447,12 @@ export default function PianificazionePage() {
       loadData()
       if (showDetailModal) setShowDetailModal(false)
     } catch (error) {
-      console.error('Errore eliminazione:', error)
-      alert('Errore: ' + error.message)
+      console.error('Error deleting:', error)
+      alert(t('error') + ': ' + error.message)
     }
   }
   
   const postponeActivity = async (activityId) => {
-    // Sposta alla settimana successiva
     try {
       let newWeek = selectedWeek + 1
       let newYear = selectedYear
@@ -473,8 +475,8 @@ export default function PianificazionePage() {
       loadData()
       if (showDetailModal) setShowDetailModal(false)
     } catch (error) {
-      console.error('Errore rinvio:', error)
-      alert('Errore: ' + error.message)
+      console.error('Error postponing:', error)
+      alert(t('error') + ': ' + error.message)
     }
   }
 
@@ -490,7 +492,7 @@ export default function PianificazionePage() {
       <div className="p-4 flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-          <p className="text-gray-500">Caricamento pianificazione...</p>
+          <p className="text-gray-500">{t('loading')}</p>
         </div>
       </div>
     )
@@ -502,7 +504,7 @@ export default function PianificazionePage() {
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">📅 Pianificazione CW</h1>
+            <h1 className="text-2xl font-bold text-gray-900">📅 {t('planningTitle')}</h1>
             <p className="text-gray-600 mt-1">{progetto?.nome}</p>
           </div>
           
@@ -512,13 +514,13 @@ export default function PianificazionePage() {
                 onClick={openBulkAssignModal}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
-                📦 Assegna multipli
+                📦 {t('assignMultiple')}
               </button>
               <button
                 onClick={openAssignModal}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
               >
-                ➕ Assegna a CW
+                ➕ {t('assignToCW')}
               </button>
             </div>
           )}
@@ -557,7 +559,7 @@ export default function PianificazionePage() {
                 onClick={goToCurrentWeek}
                 className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
               >
-                Oggi
+                {t('today')}
               </button>
             )}
           </div>
@@ -569,7 +571,7 @@ export default function PianificazionePage() {
               onChange={e => setSelectedYear(parseInt(e.target.value))}
               className="px-3 py-2 border rounded-lg text-sm"
             >
-              {[2024, 2025, 2026].map(y => (
+              {[2024, 2025, 2026, 2027].map(y => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
@@ -589,16 +591,16 @@ export default function PianificazionePage() {
         <div className="flex items-center gap-4 mt-4 pt-4 border-t">
           {isCurrentWeek(selectedYear, selectedWeek) && (
             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-              ✨ Settimana corrente
+              ✨ {t('currentWeek')}
             </span>
           )}
           {isPastWeek(selectedYear, selectedWeek) && (
             <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
-              📜 Settimana passata
+              📜 {t('pastWeek')}
             </span>
           )}
           <span className="text-sm text-gray-500">
-            {stats.totale} attività pianificate
+            {stats.totale} {t('activitiesPlanned')}
           </span>
         </div>
       </div>
@@ -607,23 +609,23 @@ export default function PianificazionePage() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <div className="bg-white rounded-xl p-4 border shadow-sm">
           <div className="text-3xl font-bold text-gray-900">{stats.totale}</div>
-          <div className="text-sm text-gray-500">Totale</div>
+          <div className="text-sm text-gray-500">{t('total')}</div>
         </div>
         <div className="bg-white rounded-xl p-4 border shadow-sm">
           <div className="text-3xl font-bold text-blue-600">{stats.pianificate}</div>
-          <div className="text-sm text-blue-600">Pianificate</div>
+          <div className="text-sm text-blue-600">{t('planned')}</div>
         </div>
         <div className="bg-white rounded-xl p-4 border shadow-sm">
           <div className="text-3xl font-bold text-yellow-600">{stats.inCorso}</div>
-          <div className="text-sm text-yellow-600">In Corso</div>
+          <div className="text-sm text-yellow-600">{t('inProgress')}</div>
         </div>
         <div className="bg-white rounded-xl p-4 border shadow-sm">
           <div className="text-3xl font-bold text-green-600">{stats.completate}</div>
-          <div className="text-sm text-green-600">Completate</div>
+          <div className="text-sm text-green-600">{t('completed')}</div>
         </div>
         <div className="bg-white rounded-xl p-4 border shadow-sm">
           <div className="text-3xl font-bold text-red-600">{stats.problemi}</div>
-          <div className="text-sm text-red-600">Problemi</div>
+          <div className="text-sm text-red-600">{t('problems')}</div>
         </div>
         <div className="bg-white rounded-xl p-4 border shadow-sm">
           <div className="flex items-center gap-2">
@@ -641,7 +643,7 @@ export default function PianificazionePage() {
       {/* Progress per disciplina */}
       {Object.keys(stats.byDisciplina).length > 0 && (
         <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
-          <h3 className="font-semibold text-gray-700 mb-3">📊 Progress per Disciplina</h3>
+          <h3 className="font-semibold text-gray-700 mb-3">📊 {t('byDiscipline')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {Object.entries(stats.byDisciplina).map(([nome, data]) => {
               const perc = data.totale > 0 ? Math.round((data.completate / data.totale) * 100) : 0
@@ -671,39 +673,39 @@ export default function PianificazionePage() {
       <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Disciplina</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t('discipline')}</label>
             <select
               value={filtri.disciplina}
               onChange={e => setFiltri({...filtri, disciplina: e.target.value})}
               className="w-full px-3 py-2 border rounded-lg text-sm"
             >
-              <option value="">Tutte</option>
+              <option value="">{t('allFemale')}</option>
               {discipline.map(d => (
                 <option key={d.id} value={d.id}>{d.icona} {d.nome}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Stato</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t('status')}</label>
             <select
               value={filtri.stato}
               onChange={e => setFiltri({...filtri, stato: e.target.value})}
               className="w-full px-3 py-2 border rounded-lg text-sm"
             >
-              <option value="">Tutti</option>
+              <option value="">{t('all')}</option>
               {statiAttivita.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
+                <option key={s.value} value={s.value}>{t(s.labelKey)}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Squadra</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t('squad')}</label>
             <select
               value={filtri.squadra}
               onChange={e => setFiltri({...filtri, squadra: e.target.value})}
               className="w-full px-3 py-2 border rounded-lg text-sm"
             >
-              <option value="">Tutte</option>
+              <option value="">{t('allFemale')}</option>
               {squadre.map(s => (
                 <option key={s.id} value={s.id}>{s.nome}</option>
               ))}
@@ -717,7 +719,7 @@ export default function PianificazionePage() {
         {/* Colonna Pianificati */}
         <div className="bg-blue-50 rounded-xl p-3">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-blue-800">📋 Pianificati</h3>
+            <h3 className="font-semibold text-blue-800">📋 {t('planned')}</h3>
             <span className="px-2 py-1 bg-blue-200 text-blue-800 rounded-full text-xs font-medium">
               {attivitaPerStato.pianificato.length}
             </span>
@@ -730,10 +732,11 @@ export default function PianificazionePage() {
                 onClick={() => openDetailModal(activity)}
                 onStatusChange={updateActivityStatus}
                 canEdit={canEdit}
+                t={t}
               />
             ))}
             {attivitaPerStato.pianificato.length === 0 && (
-              <p className="text-sm text-blue-600 text-center py-4">Nessuna attività</p>
+              <p className="text-sm text-blue-600 text-center py-4">{t('noActivity')}</p>
             )}
           </div>
         </div>
@@ -741,7 +744,7 @@ export default function PianificazionePage() {
         {/* Colonna In Corso */}
         <div className="bg-yellow-50 rounded-xl p-3">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-yellow-800">🔄 In Corso</h3>
+            <h3 className="font-semibold text-yellow-800">🔄 {t('inProgress')}</h3>
             <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded-full text-xs font-medium">
               {attivitaPerStato.in_corso.length}
             </span>
@@ -754,10 +757,11 @@ export default function PianificazionePage() {
                 onClick={() => openDetailModal(activity)}
                 onStatusChange={updateActivityStatus}
                 canEdit={canEdit}
+                t={t}
               />
             ))}
             {attivitaPerStato.in_corso.length === 0 && (
-              <p className="text-sm text-yellow-600 text-center py-4">Nessuna attività</p>
+              <p className="text-sm text-yellow-600 text-center py-4">{t('noActivity')}</p>
             )}
           </div>
         </div>
@@ -765,7 +769,7 @@ export default function PianificazionePage() {
         {/* Colonna Completati */}
         <div className="bg-green-50 rounded-xl p-3">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-green-800">✅ Completati</h3>
+            <h3 className="font-semibold text-green-800">✅ {t('completed')}</h3>
             <span className="px-2 py-1 bg-green-200 text-green-800 rounded-full text-xs font-medium">
               {attivitaPerStato.completato.length}
             </span>
@@ -777,10 +781,11 @@ export default function PianificazionePage() {
                 activity={activity} 
                 onClick={() => openDetailModal(activity)}
                 canEdit={canEdit}
+                t={t}
               />
             ))}
             {attivitaPerStato.completato.length === 0 && (
-              <p className="text-sm text-green-600 text-center py-4">Nessuna attività</p>
+              <p className="text-sm text-green-600 text-center py-4">{t('noActivity')}</p>
             )}
           </div>
         </div>
@@ -788,7 +793,7 @@ export default function PianificazionePage() {
         {/* Colonna Problemi */}
         <div className="bg-red-50 rounded-xl p-3">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-red-800">⚠️ Problemi</h3>
+            <h3 className="font-semibold text-red-800">⚠️ {t('problems')}</h3>
             <span className="px-2 py-1 bg-red-200 text-red-800 rounded-full text-xs font-medium">
               {attivitaPerStato.problemi.length}
             </span>
@@ -802,10 +807,11 @@ export default function PianificazionePage() {
                 onResolve={() => resolveProblem(activity.id)}
                 showProblem
                 canEdit={canEdit}
+                t={t}
               />
             ))}
             {attivitaPerStato.problemi.length === 0 && (
-              <p className="text-sm text-red-600 text-center py-4">Nessun problema 🎉</p>
+              <p className="text-sm text-red-600 text-center py-4">{t('noProblem')} 🎉</p>
             )}
           </div>
         </div>
@@ -815,16 +821,16 @@ export default function PianificazionePage() {
       {pianificazioni.length === 0 && (
         <div className="bg-white rounded-xl border shadow-sm p-8 text-center mt-6">
           <div className="text-5xl mb-4">📅</div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Nessuna attività pianificata</h3>
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">{t('noPlannedActivity')}</h3>
           <p className="text-gray-500 mb-4">
-            Questa settimana non ha ancora attività. Assegna componenti per iniziare.
+            {t('thisWeekNoActivity')}
           </p>
           {canEdit && (
             <button
               onClick={openAssignModal}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
-              ➕ Assegna primo componente
+              ➕ {t('assignFirstComponent')}
             </button>
           )}
         </div>
@@ -837,38 +843,38 @@ export default function PianificazionePage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">➕ Assegna a CW {selectedWeek}</h2>
+              <h2 className="text-lg font-semibold">➕ {t('assignToCWTitle')} {selectedWeek}</h2>
               <button onClick={() => setShowAssignModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
             </div>
             
             <div className="p-4 overflow-y-auto max-h-[calc(90vh-140px)] space-y-4">
               {/* Componente */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Componente *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('component')} *</label>
                 <select
                   value={assignForm.componente_id}
                   onChange={e => setAssignForm({...assignForm, componente_id: e.target.value})}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
-                  <option value="">Seleziona componente...</option>
+                  <option value="">{t('selectComponent')}</option>
                   {componentiDisponibili.map(c => (
                     <option key={c.id} value={c.id}>
                       {c.codice} - {c.descrizione || c.tipo?.nome || 'N/D'}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">{componentiDisponibili.length} componenti disponibili</p>
+                <p className="text-xs text-gray-500 mt-1">{componentiDisponibili.length} {t('componentsAvailable')}</p>
               </div>
               
               {/* Fase target */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fase target</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('phase')}</label>
                 <select
                   value={assignForm.fase_target_id}
                   onChange={e => setAssignForm({...assignForm, fase_target_id: e.target.value})}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
-                  <option value="">Seleziona fase...</option>
+                  <option value="">{t('selectPhase')}</option>
                   {fasiWorkflow.map(f => (
                     <option key={f.id} value={f.id}>
                       {f.icona} {f.nome} ({f.disciplina?.nome})
@@ -879,25 +885,25 @@ export default function PianificazionePage() {
               
               {/* Azione */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Azione</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('action')}</label>
                 <input
                   type="text"
                   value={assignForm.azione}
                   onChange={e => setAssignForm({...assignForm, azione: e.target.value})}
                   className="w-full px-3 py-2 border rounded-lg"
-                  placeholder="Es. Erection, Fit-up, Welding..."
+                  placeholder={t('actionPlaceholder')}
                 />
               </div>
               
               {/* Squadra */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Squadra</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('squad')}</label>
                 <select
                   value={assignForm.squadra_id}
                   onChange={e => setAssignForm({...assignForm, squadra_id: e.target.value})}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
-                  <option value="">Nessuna squadra assegnata</option>
+                  <option value="">{t('noSquadAssigned')}</option>
                   {squadre.map(s => (
                     <option key={s.id} value={s.id}>{s.nome}</option>
                   ))}
@@ -906,7 +912,7 @@ export default function PianificazionePage() {
               
               {/* Priorità */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Priorità (ordine esecuzione)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('priority')}</label>
                 <input
                   type="number"
                   value={assignForm.priorita}
@@ -918,13 +924,13 @@ export default function PianificazionePage() {
               
               {/* Istruzioni */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Istruzioni</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('instructions')}</label>
                 <textarea
                   value={assignForm.istruzioni}
                   onChange={e => setAssignForm({...assignForm, istruzioni: e.target.value})}
                   className="w-full px-3 py-2 border rounded-lg"
                   rows="3"
-                  placeholder="Istruzioni specifiche per il campo..."
+                  placeholder={t('instructionsPlaceholder')}
                 />
               </div>
             </div>
@@ -934,13 +940,13 @@ export default function PianificazionePage() {
                 onClick={() => setShowAssignModal(false)}
                 className="px-4 py-2 border rounded-lg hover:bg-gray-100"
               >
-                Annulla
+                {t('cancel')}
               </button>
               <button
                 onClick={handleAssign}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                Assegna
+                {t('assign')}
               </button>
             </div>
           </div>
@@ -954,7 +960,7 @@ export default function PianificazionePage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">📦 Assegna multipli a CW {selectedWeek}</h2>
+              <h2 className="text-lg font-semibold">📦 {t('assignMultiple')} - CW {selectedWeek}</h2>
               <button onClick={() => setShowBulkAssignModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
             </div>
             
@@ -962,36 +968,36 @@ export default function PianificazionePage() {
               {/* Opzioni comuni */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Fase target</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('phase')}</label>
                   <select
                     value={bulkAssignData.fase_target_id}
                     onChange={e => setBulkAssignData({...bulkAssignData, fase_target_id: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                   >
-                    <option value="">Nessuna</option>
+                    <option value="">{t('none')}</option>
                     {fasiWorkflow.map(f => (
                       <option key={f.id} value={f.id}>{f.icona} {f.nome}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Azione</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('action')}</label>
                   <input
                     type="text"
                     value={bulkAssignData.azione}
                     onChange={e => setBulkAssignData({...bulkAssignData, azione: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="Es. Erection"
+                    placeholder={t('actionPlaceholder')}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Squadra</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('squad')}</label>
                   <select
                     value={bulkAssignData.squadra_id}
                     onChange={e => setBulkAssignData({...bulkAssignData, squadra_id: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                   >
-                    <option value="">Nessuna</option>
+                    <option value="">{t('none')}</option>
                     {squadre.map(s => (
                       <option key={s.id} value={s.id}>{s.nome}</option>
                     ))}
@@ -1002,7 +1008,7 @@ export default function PianificazionePage() {
               {/* Lista componenti */}
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-sm text-gray-600">
-                  {selectedComponentIds.length} selezionati di {componentiDisponibili.length}
+                  {selectedComponentIds.length} {t('selectedOf')} {componentiDisponibili.length}
                 </span>
                 <button
                   onClick={() => {
@@ -1014,7 +1020,7 @@ export default function PianificazionePage() {
                   }}
                   className="text-sm text-blue-600 hover:underline"
                 >
-                  {selectedComponentIds.length === componentiDisponibili.length ? 'Deseleziona tutti' : 'Seleziona tutti'}
+                  {selectedComponentIds.length === componentiDisponibili.length ? t('deselectAll') : t('selectAll')}
                 </button>
               </div>
               
@@ -1054,7 +1060,7 @@ export default function PianificazionePage() {
                   </label>
                 ))}
                 {componentiDisponibili.length === 0 && (
-                  <p className="p-4 text-center text-gray-500">Tutti i componenti sono già assegnati</p>
+                  <p className="p-4 text-center text-gray-500">{t('allComponentsAssigned')}</p>
                 )}
               </div>
             </div>
@@ -1064,14 +1070,14 @@ export default function PianificazionePage() {
                 onClick={() => setShowBulkAssignModal(false)}
                 className="px-4 py-2 border rounded-lg hover:bg-gray-100"
               >
-                Annulla
+                {t('cancel')}
               </button>
               <button
                 onClick={handleBulkAssign}
                 disabled={selectedComponentIds.length === 0}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                Assegna {selectedComponentIds.length} componenti
+                {t('assign')} {selectedComponentIds.length} {t('components')}
               </button>
             </div>
           </div>
@@ -1093,6 +1099,8 @@ export default function PianificazionePage() {
           canEdit={canEdit}
           fasiWorkflow={fasiWorkflow}
           squadre={squadre}
+          t={t}
+          language={language}
         />
       )}
     </div>
@@ -1100,36 +1108,35 @@ export default function PianificazionePage() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// COMPONENTI HELPER
+// COMPONENTE: Activity Card
 // ══════════════════════════════════════════════════════════════════════
 
-function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProblem, canEdit }) {
+function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProblem, canEdit, t }) {
   const comp = activity.componente
   
   return (
-    <div 
-      className="bg-white rounded-lg p-3 shadow-sm border cursor-pointer hover:shadow-md transition-shadow"
+    <div
       onClick={onClick}
+      className="bg-white rounded-lg p-3 border shadow-sm hover:shadow-md cursor-pointer transition-all"
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
+      {/* Header */}
+      <div className="flex items-start gap-2 mb-2">
+        <span 
+          className="text-xl w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: (comp?.disciplina?.colore || '#6B7280') + '20' }}
+        >
+          {comp?.disciplina?.icona || '📦'}
+        </span>
         <div className="flex-1 min-w-0">
           <div className="font-mono text-sm font-medium truncate">{comp?.codice}</div>
           <div className="text-xs text-gray-500 truncate">{comp?.descrizione || comp?.tipo?.nome}</div>
         </div>
-        <span 
-          className="text-xs px-2 py-0.5 rounded-full whitespace-nowrap"
-          style={{ 
-            backgroundColor: (comp?.disciplina?.colore || '#6B7280') + '20', 
-            color: comp?.disciplina?.colore || '#6B7280' 
-          }}
-        >
-          {comp?.disciplina?.icona}
-        </span>
       </div>
       
+      {/* Info */}
       {activity.azione && (
-        <div className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded mb-2">
-          {activity.azione}
+        <div className="text-xs text-gray-600 mb-2 truncate">
+          🔧 {activity.azione}
         </div>
       )}
       
@@ -1139,84 +1146,85 @@ function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProble
         </div>
       )}
       
-      {showProblem && activity.problema_descrizione && (
-        <div className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded mb-2">
-          ⚠️ {activity.problema_descrizione}
+      {/* Problema */}
+      {showProblem && activity.ha_problema && (
+        <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-700">
+          ⚠️ {activity.problema_descrizione?.slice(0, 50)}...
+          {canEdit && onResolve && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onResolve(); }}
+              className="block mt-1 text-green-600 hover:underline"
+            >
+              ✅ {t('markResolved')}
+            </button>
+          )}
         </div>
       )}
       
       {/* Quick actions */}
-      {canEdit && activity.stato !== 'completato' && !showProblem && (
-        <div className="flex gap-1 mt-2 pt-2 border-t" onClick={e => e.stopPropagation()}>
-          {activity.stato === 'pianificato' && (
-            <button
-              onClick={() => onStatusChange(activity.id, 'in_corso')}
-              className="flex-1 text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
-            >
-              ▶️ Inizia
-            </button>
-          )}
-          {activity.stato === 'in_corso' && (
-            <button
-              onClick={() => onStatusChange(activity.id, 'completato')}
-              className="flex-1 text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
-            >
-              ✅ Completa
-            </button>
-          )}
-        </div>
+      {canEdit && onStatusChange && activity.stato === 'pianificato' && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onStatusChange(activity.id, 'in_corso'); }}
+          className="mt-2 w-full text-xs py-1.5 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+        >
+          ▶️ {t('start')}
+        </button>
       )}
-      
-      {showProblem && canEdit && (
-        <div className="mt-2 pt-2 border-t" onClick={e => e.stopPropagation()}>
-          <button
-            onClick={onResolve}
-            className="w-full text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
-          >
-            ✅ Problema risolto
-          </button>
-        </div>
+      {canEdit && onStatusChange && activity.stato === 'in_corso' && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onStatusChange(activity.id, 'completato'); }}
+          className="mt-2 w-full text-xs py-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
+        >
+          ✅ {t('complete')}
+        </button>
       )}
     </div>
   )
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// COMPONENTE: Activity Detail Modal
+// ══════════════════════════════════════════════════════════════════════
 
 function ActivityDetailModal({ 
   activity, 
   onClose, 
   onStatusChange, 
   onDelete, 
-  onPostpone,
-  onReportProblem,
+  onPostpone, 
+  onReportProblem, 
   onResolveProblem,
   canEdit,
   fasiWorkflow,
-  squadre
+  squadre,
+  t,
+  language
 }) {
-  const [problemDescription, setProblemDescription] = useState('')
   const [showProblemForm, setShowProblemForm] = useState(false)
+  const [problemDescription, setProblemDescription] = useState('')
+  
   const comp = activity.componente
+  const locale = language === 'en' ? 'en-GB' : 'it-IT'
   
   const handleReportProblem = () => {
-    if (!problemDescription.trim()) {
-      alert('Descrivi il problema')
-      return
-    }
+    if (!problemDescription.trim()) return
     onReportProblem(activity.id, problemDescription)
   }
   
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+        {/* Header */}
         <div className="p-4 border-b flex items-center justify-between">
-          <h2 className="text-lg font-semibold">📋 Dettaglio Attività</h2>
+          <h2 className="text-lg font-semibold">{t('details')}</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
         </div>
         
+        {/* Content */}
         <div className="p-4 overflow-y-auto max-h-[calc(90vh-200px)]">
-          {/* Componente */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <div className="flex items-center gap-3 mb-2">
+          {/* Componente info */}
+          <div className="mb-4 p-4 bg-gray-50 rounded-xl">
+            <div className="flex items-center gap-3 mb-3">
               <span 
                 className="text-2xl w-10 h-10 rounded-lg flex items-center justify-center"
                 style={{ backgroundColor: (comp?.disciplina?.colore || '#6B7280') + '20' }}
@@ -1230,19 +1238,19 @@ function ActivityDetailModal({
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>
-                <span className="text-gray-500">Disciplina:</span>
+                <span className="text-gray-500">{t('discipline')}:</span>
                 <span className="ml-2">{comp?.disciplina?.nome}</span>
               </div>
               <div>
-                <span className="text-gray-500">Tipo:</span>
+                <span className="text-gray-500">{t('type')}:</span>
                 <span className="ml-2">{comp?.tipo?.nome}</span>
               </div>
               <div>
-                <span className="text-gray-500">Quantità:</span>
+                <span className="text-gray-500">{t('quantity')}:</span>
                 <span className="ml-2">{comp?.quantita} {comp?.unita_misura}</span>
               </div>
               <div>
-                <span className="text-gray-500">Stato comp.:</span>
+                <span className="text-gray-500">{t('componentStatus')}:</span>
                 <span className="ml-2">{comp?.stato}</span>
               </div>
             </div>
@@ -1251,7 +1259,7 @@ function ActivityDetailModal({
           {/* Dettagli attività */}
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-gray-500">Stato:</span>
+              <span className="text-gray-500">{t('status')}:</span>
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                 activity.stato === 'completato' ? 'bg-green-100 text-green-700' :
                 activity.stato === 'in_corso' ? 'bg-yellow-100 text-yellow-700' :
@@ -1264,33 +1272,33 @@ function ActivityDetailModal({
             
             {activity.azione && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Azione:</span>
+                <span className="text-gray-500">{t('action')}:</span>
                 <span>{activity.azione}</span>
               </div>
             )}
             
             {activity.fase && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Fase target:</span>
+                <span className="text-gray-500">{t('phase')}:</span>
                 <span>{activity.fase.icona} {activity.fase.nome}</span>
               </div>
             )}
             
             {activity.squadra && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Squadra:</span>
+                <span className="text-gray-500">{t('squad')}:</span>
                 <span>👥 {activity.squadra.nome}</span>
               </div>
             )}
             
             <div className="flex justify-between">
-              <span className="text-gray-500">Priorità:</span>
+              <span className="text-gray-500">{t('priority')}:</span>
               <span>#{activity.priorita}</span>
             </div>
             
             {activity.istruzioni && (
               <div>
-                <span className="text-gray-500 block mb-1">Istruzioni:</span>
+                <span className="text-gray-500 block mb-1">{t('instructions')}:</span>
                 <div className="bg-blue-50 text-blue-800 p-3 rounded-lg text-sm">
                   {activity.istruzioni}
                 </div>
@@ -1299,14 +1307,14 @@ function ActivityDetailModal({
             
             {activity.completato_il && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Completato:</span>
-                <span>{new Date(activity.completato_il).toLocaleString('it-IT')}</span>
+                <span className="text-gray-500">{t('completed')}:</span>
+                <span>{new Date(activity.completato_il).toLocaleString(locale)}</span>
               </div>
             )}
             
             {activity.completato_da_persona && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Completato da:</span>
+                <span className="text-gray-500">{t('completedBy')}:</span>
                 <span>{activity.completato_da_persona.nome} {activity.completato_da_persona.cognome}</span>
               </div>
             )}
@@ -1317,13 +1325,13 @@ function ActivityDetailModal({
             <div className={`mt-4 p-4 rounded-lg ${activity.problema_risolto ? 'bg-green-50' : 'bg-red-50'}`}>
               <div className="flex items-center justify-between mb-2">
                 <span className={`font-medium ${activity.problema_risolto ? 'text-green-700' : 'text-red-700'}`}>
-                  {activity.problema_risolto ? '✅ Problema risolto' : '⚠️ Problema segnalato'}
+                  {activity.problema_risolto ? `✅ ${t('problemResolved')}` : `⚠️ ${t('problemReported')}`}
                 </span>
               </div>
               <p className="text-sm text-gray-700">{activity.problema_descrizione}</p>
               {activity.problema_segnalato_il && (
                 <p className="text-xs text-gray-500 mt-2">
-                  Segnalato: {new Date(activity.problema_segnalato_il).toLocaleString('it-IT')}
+                  {t('reportedAt')}: {new Date(activity.problema_segnalato_il).toLocaleString(locale)}
                 </p>
               )}
               {!activity.problema_risolto && canEdit && (
@@ -1331,7 +1339,7 @@ function ActivityDetailModal({
                   onClick={() => onResolveProblem(activity.id)}
                   className="mt-2 w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
                 >
-                  ✅ Segna come risolto
+                  ✅ {t('markAsResolved')}
                 </button>
               )}
             </div>
@@ -1340,26 +1348,26 @@ function ActivityDetailModal({
           {/* Form segnalazione problema */}
           {showProblemForm && (
             <div className="mt-4 p-4 bg-red-50 rounded-lg">
-              <h4 className="font-medium text-red-800 mb-2">⚠️ Segnala problema</h4>
+              <h4 className="font-medium text-red-800 mb-2">⚠️ {t('reportProblem')}</h4>
               <textarea
                 value={problemDescription}
                 onChange={e => setProblemDescription(e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg text-sm"
                 rows="3"
-                placeholder="Descrivi il problema..."
+                placeholder={t('describeProblem')}
               />
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => setShowProblemForm(false)}
                   className="flex-1 px-3 py-2 border rounded-lg hover:bg-white text-sm"
                 >
-                  Annulla
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={handleReportProblem}
                   className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
                 >
-                  Segnala
+                  {t('report')}
                 </button>
               </div>
             </div>
@@ -1375,7 +1383,7 @@ function ActivityDetailModal({
                   onClick={() => onStatusChange(activity.id, 'in_corso')}
                   className="px-3 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-sm"
                 >
-                  ▶️ Inizia
+                  ▶️ {t('start')}
                 </button>
               )}
               {activity.stato === 'in_corso' && (
@@ -1383,7 +1391,7 @@ function ActivityDetailModal({
                   onClick={() => onStatusChange(activity.id, 'completato')}
                   className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
                 >
-                  ✅ Completa
+                  ✅ {t('complete')}
                 </button>
               )}
               {activity.stato !== 'completato' && (
@@ -1391,7 +1399,7 @@ function ActivityDetailModal({
                   onClick={() => onPostpone(activity.id)}
                   className="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm"
                 >
-                  📅 Rimanda a CW+1
+                  📅 {t('postponeToCW1')}
                 </button>
               )}
               {!activity.ha_problema && activity.stato !== 'completato' && (
@@ -1399,7 +1407,7 @@ function ActivityDetailModal({
                   onClick={() => setShowProblemForm(true)}
                   className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm"
                 >
-                  ⚠️ Segnala problema
+                  ⚠️ {t('reportProblem')}
                 </button>
               )}
             </div>
@@ -1408,13 +1416,13 @@ function ActivityDetailModal({
                 onClick={() => onDelete(activity.id)}
                 className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm"
               >
-                🗑️ Rimuovi
+                🗑️ {t('remove')}
               </button>
               <button
                 onClick={onClose}
                 className="px-4 py-2 border rounded-lg hover:bg-gray-100 text-sm"
               >
-                Chiudi
+                {t('close')}
               </button>
             </div>
           </div>
