@@ -303,7 +303,7 @@ const translations = {
     pendingRequests: 'Richieste in Attesa',
     approvedRequests: 'Richieste Approvate',
     vacationType: 'Tipo',
-    vacation: 'Ferie',
+    // vacation già definito sopra nel menu
     permit: 'Permesso',
     sickLeave: 'Malattia',
     
@@ -386,7 +386,7 @@ const translations = {
     remove: 'Rimuovi',
     componentStatus: 'Stato comp.',
     completedBy: 'Completato da',
-    assignToCWTitle: 'Assegna a CW',
+    // assignToCWTitle già definito sopra
 
     // ==========================================
     // IMPEDIMENTS / BLOCCHI (IT)
@@ -757,7 +757,7 @@ const translations = {
     pendingRequests: 'Pending Requests',
     approvedRequests: 'Approved Requests',
     vacationType: 'Type',
-    vacation: 'Vacation',
+    // vacation già definito sopra nel menu
     permit: 'Leave',
     sickLeave: 'Sick Leave',
     
@@ -840,7 +840,7 @@ const translations = {
     remove: 'Remove',
     componentStatus: 'Comp. status',
     completedBy: 'Completed by',
-    assignToCWTitle: 'Assign to CW',
+    // assignToCWTitle già definito sopra
 
     // ==========================================
     // IMPEDIMENTS / BLOCCHI (EN)
