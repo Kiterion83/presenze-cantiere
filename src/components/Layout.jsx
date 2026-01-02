@@ -58,6 +58,7 @@ export default function Layout({ children }) {
       emoji: '🏗️',
       items: [
         { path: '/materiali', labelKey: 'materials', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
+        { path: '/work-packages', labelKey: 'workPackages', emoji: '📋', minRole: 'foreman', specialAccess: 'work-packages' },
         { path: '/pianificazione', labelKey: 'planning', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
         { path: '/foreman', labelKey: 'field', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
         { path: '/ore-componenti', labelKey: 'workHours', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
