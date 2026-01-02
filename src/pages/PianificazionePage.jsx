@@ -1104,7 +1104,7 @@ export default function PianificazionePage() {
                   <option value="">{t('selectComponent')}</option>
                   {componentiDisponibili.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.codice} - {c.descrizione || c.tipo?.nome}
+                      {c.codice}{c.descrizione ? ` - ${c.descrizione}` : ''}
                     </option>
                   ))}
                 </select>
@@ -1573,7 +1573,7 @@ export default function PianificazionePage() {
                     />
                     <div className="flex-1 min-w-0">
                       <div className="font-mono text-sm font-medium truncate">{c.codice}</div>
-                      <div className="text-xs text-gray-500 truncate">{c.descrizione || c.tipo?.nome}</div>
+                      {c.descrizione && <div className="text-xs text-gray-500 truncate">{c.descrizione}</div>}
                     </div>
                     <span 
                       className="text-xs px-2 py-1 rounded-full whitespace-nowrap"
@@ -1670,7 +1670,7 @@ function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProble
             {item?.codice}
           </div>
           <div className="text-xs text-gray-500 truncate">
-            {isWP ? item?.nome : (item?.descrizione || item?.tipo?.nome)}
+            {isWP ? item?.nome : item?.descrizione}
           </div>
         </div>
       </div>
@@ -1822,7 +1822,7 @@ function ActivityDetailModal({
                   {item?.codice}
                 </div>
                 <div className="text-sm text-gray-500">
-                  {isWP ? item?.nome : (item?.descrizione || item?.tipo?.nome)}
+                  {isWP ? item?.nome : item?.descrizione}
                 </div>
               </div>
             </div>
