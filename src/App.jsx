@@ -26,6 +26,7 @@ import PianificazionePage from './pages/PianificazionePage'
 import ForemanPage from './pages/ForemanPage'
 import OreComponentiPage from './pages/OreComponentiPage'
 import WorkPackagesPage from './pages/WorkPackagesPage'  // NUOVO - Work Packages
+import AvanzamentoPage from './pages/AvanzamentoPage'  // NUOVO - Dashboard Avanzamento
 // NUOVE PAGINE - Statistiche e AI
 import GanttPage from './pages/GanttPage'
 import AIInsightsPage from './pages/AIInsightsPage'
@@ -119,7 +120,8 @@ function AppRoutes() {
       <Route path="/pianificazione" element={<ProtectedRoute requiredAccess="pianificazione"><PianificazionePage /></ProtectedRoute>} />
       <Route path="/foreman" element={<ProtectedRoute requiredAccess="foreman"><ForemanPage /></ProtectedRoute>} />
       <Route path="/ore-componenti" element={<ProtectedRoute requiredAccess="ore-componenti"><OreComponentiPage /></ProtectedRoute>} />
-      <Route path="/work-packages" element={<ProtectedRoute minRole="foreman"><WorkPackagesPage /></ProtectedRoute>} />
+      <Route path="/work-packages" element={<ProtectedRoute requiredAccess="work-packages"><WorkPackagesPage /></ProtectedRoute>} />
+      <Route path="/avanzamento" element={<ProtectedRoute requiredAccess="avanzamento"><AvanzamentoPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Supervisor+ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
