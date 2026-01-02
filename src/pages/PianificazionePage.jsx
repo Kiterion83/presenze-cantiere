@@ -10,6 +10,7 @@ export default function PianificazionePage() {
   // Dati
   const [pianificazioni, setPianificazioni] = useState([])
   const [componenti, setComponenti] = useState([])
+  const [workPackages, setWorkPackages] = useState([]) // NUOVO: WP
   const [discipline, setDiscipline] = useState([])
   const [fasiWorkflow, setFasiWorkflow] = useState([])
   const [squadre, setSquadre] = useState([])
@@ -31,10 +32,21 @@ export default function PianificazionePage() {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedActivity, setSelectedActivity] = useState(null)
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
+  const [showWPAssignModal, setShowWPAssignModal] = useState(false) // NUOVO: modale WP
   
-  // Form assegnazione
+  // Form assegnazione componente singolo
   const [assignForm, setAssignForm] = useState({
     componente_id: '',
+    fase_target_id: '',
+    azione: '',
+    priorita: 1,
+    squadra_id: '',
+    istruzioni: ''
+  })
+  
+  // Form assegnazione WP
+  const [wpAssignForm, setWpAssignForm] = useState({
+    work_package_id: '',
     fase_target_id: '',
     azione: '',
     priorita: 1,
@@ -115,19 +127,25 @@ export default function PianificazionePage() {
       const [
         { data: pianData },
         { data: compData },
+        { data: wpData },
         { data: discData },
         { data: fasiData },
         { data: squadreData }
       ] = await Promise.all([
-        // Pianificazioni della CW selezionata
+        // Pianificazioni della CW selezionata (include sia componenti che WP)
         supabase
           .from('pianificazione_cw')
           .select(`
             *,
             componente:componenti(
               id, codice, descrizione, stato, quantita, unita_misura,
+              work_package_id,
               disciplina:discipline(id, nome, codice, icona, colore),
               tipo:tipi_componente(id, nome, icona)
+            ),
+            work_package:work_packages(
+              id, codice, nome, descrizione,
+              disciplina:discipline(id, nome, codice, icona, colore)
             ),
             fase:fasi_workflow(id, nome, icona, colore),
             squadra:squadre(id, nome),
@@ -137,17 +155,30 @@ export default function PianificazionePage() {
           .eq('anno', selectedYear)
           .eq('settimana', selectedWeek)
           .order('priorita'),
-        // Tutti i componenti non completati (per assegnazione)
+        // Tutti i componenti non completati (per assegnazione singola)
+        // INCLUDE work_package_id per filtro
         supabase
           .from('componenti')
           .select(`
             id, codice, descrizione, stato, quantita, unita_misura,
+            work_package_id,
             cw_lavoro_anno, cw_lavoro_settimana,
             disciplina:discipline(id, nome, codice, icona, colore),
             tipo:tipi_componente(id, nome, icona)
           `)
           .eq('progetto_id', progettoId)
           .neq('stato', 'completato')
+          .order('codice'),
+        // Work Packages attivi
+        supabase
+          .from('work_packages')
+          .select(`
+            id, codice, nome, descrizione,
+            disciplina:discipline(id, nome, codice, icona, colore),
+            componenti:componenti(count)
+          `)
+          .eq('progetto_id', progettoId)
+          .eq('attivo', true)
           .order('codice'),
         // Discipline
         supabase
@@ -172,6 +203,7 @@ export default function PianificazionePage() {
       
       setPianificazioni(pianData || [])
       setComponenti(compData || [])
+      setWorkPackages(wpData || [])
       setDiscipline(discData || [])
       setFasiWorkflow(fasiData || [])
       setSquadre(squadreData || [])
@@ -194,26 +226,32 @@ export default function PianificazionePage() {
     const problemi = pianificazioni.filter(p => p.ha_problema && !p.problema_risolto).length
     const bloccate = pianificazioni.filter(p => p.stato === 'bloccato').length
     
+    // Conta WP vs Componenti singoli
+    const wpCount = pianificazioni.filter(p => p.work_package_id).length
+    const compCount = pianificazioni.filter(p => p.componente_id && !p.work_package_id).length
+    
     const percentuale = totale > 0 ? Math.round((completate / totale) * 100) : 0
     
-    // Per disciplina
+    // Per disciplina (considera sia componenti che WP)
     const byDisciplina = {}
     pianificazioni.forEach(p => {
-      const discNome = p.componente?.disciplina?.nome || 'N/D'
+      const discNome = p.componente?.disciplina?.nome || p.work_package?.disciplina?.nome || 'N/D'
+      const colore = p.componente?.disciplina?.colore || p.work_package?.disciplina?.colore || '#6B7280'
       if (!byDisciplina[discNome]) {
-        byDisciplina[discNome] = { totale: 0, completate: 0, colore: p.componente?.disciplina?.colore || '#6B7280' }
+        byDisciplina[discNome] = { totale: 0, completate: 0, colore }
       }
       byDisciplina[discNome].totale++
       if (p.stato === 'completato') byDisciplina[discNome].completate++
     })
     
-    return { totale, completate, inCorso, pianificate, problemi, bloccate, percentuale, byDisciplina }
+    return { totale, completate, inCorso, pianificate, problemi, bloccate, percentuale, byDisciplina, wpCount, compCount }
   }, [pianificazioni])
   
   // Filtra attività
   const attivitaFiltrate = useMemo(() => {
     return pianificazioni.filter(p => {
-      if (filtri.disciplina && p.componente?.disciplina?.id !== filtri.disciplina) return false
+      const disc = p.componente?.disciplina || p.work_package?.disciplina
+      if (filtri.disciplina && disc?.id !== filtri.disciplina) return false
       if (filtri.stato && p.stato !== filtri.stato) return false
       if (filtri.squadra && p.squadra_id !== filtri.squadra) return false
       return true
@@ -242,11 +280,22 @@ export default function PianificazionePage() {
     return grouped
   }, [attivitaFiltrate])
   
-  // Componenti non ancora assegnati a questa CW
+  // Componenti disponibili per assegnazione singola
+  // ESCLUDE: componenti già assegnati in questa CW E componenti che fanno parte di un WP
   const componentiDisponibili = useMemo(() => {
-    const assegnatiIds = new Set(pianificazioni.map(p => p.componente_id))
-    return componenti.filter(c => !assegnatiIds.has(c.id))
+    const assegnatiIds = new Set(pianificazioni.filter(p => p.componente_id).map(p => p.componente_id))
+    return componenti.filter(c => 
+      !assegnatiIds.has(c.id) && 
+      !c.work_package_id // ESCLUDE componenti già in un WP
+    )
   }, [componenti, pianificazioni])
+  
+  // Work Package disponibili per assegnazione
+  // ESCLUDE: WP già assegnati in questa CW
+  const wpDisponibili = useMemo(() => {
+    const wpAssegnatiIds = new Set(pianificazioni.filter(p => p.work_package_id).map(p => p.work_package_id))
+    return workPackages.filter(wp => !wpAssegnatiIds.has(wp.id))
+  }, [workPackages, pianificazioni])
 
   // ══════════════════════════════════════════════════════════════════════
   // AZIONI
@@ -285,6 +334,18 @@ export default function PianificazionePage() {
     setShowAssignModal(true)
   }
   
+  const openWPAssignModal = () => {
+    setWpAssignForm({
+      work_package_id: '',
+      fase_target_id: '',
+      azione: '',
+      priorita: pianificazioni.length + 1,
+      squadra_id: '',
+      istruzioni: ''
+    })
+    setShowWPAssignModal(true)
+  }
+  
   const openBulkAssignModal = () => {
     setSelectedComponentIds([])
     setBulkAssignData({
@@ -295,6 +356,7 @@ export default function PianificazionePage() {
     setShowBulkAssignModal(true)
   }
   
+  // Assegna componente singolo
   const handleAssign = async () => {
     if (!assignForm.componente_id) {
       alert(t('selectComponent'))
@@ -307,6 +369,7 @@ export default function PianificazionePage() {
         .insert({
           progetto_id: progettoId,
           componente_id: assignForm.componente_id,
+          work_package_id: null, // esplicito: è un componente singolo
           anno: selectedYear,
           settimana: selectedWeek,
           fase_target_id: assignForm.fase_target_id || null,
@@ -328,6 +391,41 @@ export default function PianificazionePage() {
     }
   }
   
+  // Assegna Work Package
+  const handleWPAssign = async () => {
+    if (!wpAssignForm.work_package_id) {
+      alert(t('selectWorkPackage') || 'Seleziona un Work Package')
+      return
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('pianificazione_cw')
+        .insert({
+          progetto_id: progettoId,
+          componente_id: null, // esplicito: è un WP, non un componente
+          work_package_id: wpAssignForm.work_package_id,
+          anno: selectedYear,
+          settimana: selectedWeek,
+          fase_target_id: wpAssignForm.fase_target_id || null,
+          azione: wpAssignForm.azione || null,
+          priorita: wpAssignForm.priorita,
+          squadra_id: wpAssignForm.squadra_id || null,
+          istruzioni: wpAssignForm.istruzioni || null,
+          stato: 'pianificato',
+          created_by: persona?.id
+        })
+      
+      if (error) throw error
+      
+      setShowWPAssignModal(false)
+      loadData()
+    } catch (error) {
+      console.error('Error assigning WP:', error)
+      alert(t('error') + ': ' + error.message)
+    }
+  }
+  
   const handleBulkAssign = async () => {
     if (selectedComponentIds.length === 0) {
       alert(t('selectAtLeastOne'))
@@ -338,6 +436,7 @@ export default function PianificazionePage() {
       const inserts = selectedComponentIds.map((compId, index) => ({
         progetto_id: progettoId,
         componente_id: compId,
+        work_package_id: null,
         anno: selectedYear,
         settimana: selectedWeek,
         fase_target_id: bulkAssignData.fase_target_id || null,
@@ -509,12 +608,18 @@ export default function PianificazionePage() {
           </div>
           
           {canEdit && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={openWPAssignModal}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+              >
+                📦 {t('assignWP') || 'Assegna WP'}
+              </button>
               <button
                 onClick={openBulkAssignModal}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
-                📦 {t('assignMultiple')}
+                📋 {t('assignMultiple')}
               </button>
               <button
                 onClick={openAssignModal}
@@ -588,7 +693,7 @@ export default function PianificazionePage() {
         </div>
         
         {/* Indicatori */}
-        <div className="flex items-center gap-4 mt-4 pt-4 border-t">
+        <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t">
           {isCurrentWeek(selectedYear, selectedWeek) && (
             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
               ✨ {t('currentWeek')}
@@ -602,6 +707,16 @@ export default function PianificazionePage() {
           <span className="text-sm text-gray-500">
             {stats.totale} {t('activitiesPlanned')}
           </span>
+          {stats.wpCount > 0 && (
+            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
+              📦 {stats.wpCount} WP
+            </span>
+          )}
+          {stats.compCount > 0 && (
+            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+              🔧 {stats.compCount} {t('components')}
+            </span>
+          )}
         </div>
       </div>
       
@@ -648,20 +763,19 @@ export default function PianificazionePage() {
             {Object.entries(stats.byDisciplina).map(([nome, data]) => {
               const perc = data.totale > 0 ? Math.round((data.completate / data.totale) * 100) : 0
               return (
-                <div key={nome} className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="font-medium">{nome}</span>
-                      <span className="text-gray-500">{data.completate}/{data.totale}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="h-2 rounded-full transition-all" 
-                        style={{ width: `${perc}%`, backgroundColor: data.colore }}
-                      ></div>
-                    </div>
+                <div key={nome} className="p-3 border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-sm">{nome}</span>
+                    <span className="text-xs text-gray-500">
+                      {data.completate}/{data.totale} ({perc}%)
+                    </span>
                   </div>
-                  <span className="text-sm font-medium w-12 text-right">{perc}%</span>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="h-2 rounded-full transition-all" 
+                      style={{ width: `${perc}%`, backgroundColor: data.colore }}
+                    ></div>
+                  </div>
                 </div>
               )
             })}
@@ -671,184 +785,157 @@ export default function PianificazionePage() {
       
       {/* Filtri */}
       <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">{t('discipline')}</label>
-            <select
-              value={filtri.disciplina}
-              onChange={e => setFiltri({...filtri, disciplina: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            >
-              <option value="">{t('allFemale')}</option>
-              {discipline.map(d => (
-                <option key={d.id} value={d.id}>{d.icona} {d.nome}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">{t('status')}</label>
-            <select
-              value={filtri.stato}
-              onChange={e => setFiltri({...filtri, stato: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            >
-              <option value="">{t('all')}</option>
-              {statiAttivita.map(s => (
-                <option key={s.value} value={s.value}>{t(s.labelKey)}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">{t('squad')}</label>
-            <select
-              value={filtri.squadra}
-              onChange={e => setFiltri({...filtri, squadra: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            >
-              <option value="">{t('allFemale')}</option>
-              {squadre.map(s => (
-                <option key={s.id} value={s.id}>{s.nome}</option>
-              ))}
-            </select>
-          </div>
+        <div className="flex flex-wrap gap-3">
+          <select
+            value={filtri.disciplina}
+            onChange={e => setFiltri({...filtri, disciplina: e.target.value})}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="">{t('allDisciplines')}</option>
+            {discipline.map(d => (
+              <option key={d.id} value={d.id}>{d.icona} {d.nome}</option>
+            ))}
+          </select>
+          <select
+            value={filtri.stato}
+            onChange={e => setFiltri({...filtri, stato: e.target.value})}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="">{t('allStatuses')}</option>
+            {statiAttivita.map(s => (
+              <option key={s.value} value={s.value}>{t(s.labelKey)}</option>
+            ))}
+          </select>
+          <select
+            value={filtri.squadra}
+            onChange={e => setFiltri({...filtri, squadra: e.target.value})}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="">{t('allSquads')}</option>
+            {squadre.map(s => (
+              <option key={s.id} value={s.id}>{s.nome}</option>
+            ))}
+          </select>
         </div>
       </div>
       
       {/* Kanban Board */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Colonna Pianificati */}
+        {/* Colonna: Pianificato */}
         <div className="bg-blue-50 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-blue-800">📋 {t('planned')}</h3>
-            <span className="px-2 py-1 bg-blue-200 text-blue-800 rounded-full text-xs font-medium">
-              {attivitaPerStato.pianificato.length}
-            </span>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+            <h3 className="font-semibold text-blue-700">{t('planned')}</h3>
+            <span className="ml-auto text-sm text-blue-600">{attivitaPerStato.pianificato.length}</span>
           </div>
-          <div className="space-y-2 max-h-[500px] overflow-y-auto">
-            {attivitaPerStato.pianificato.map(activity => (
-              <ActivityCard 
-                key={activity.id} 
-                activity={activity} 
-                onClick={() => openDetailModal(activity)}
+          <div className="space-y-2">
+            {attivitaPerStato.pianificato.map(a => (
+              <ActivityCard
+                key={a.id}
+                activity={a}
+                onClick={() => openDetailModal(a)}
                 onStatusChange={updateActivityStatus}
                 canEdit={canEdit}
                 t={t}
               />
             ))}
             {attivitaPerStato.pianificato.length === 0 && (
-              <p className="text-sm text-blue-600 text-center py-4">{t('noActivity')}</p>
+              <p className="text-center text-gray-400 py-4 text-sm">{t('noActivities')}</p>
             )}
           </div>
         </div>
         
-        {/* Colonna In Corso */}
+        {/* Colonna: In Corso */}
         <div className="bg-yellow-50 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-yellow-800">🔄 {t('inProgress')}</h3>
-            <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded-full text-xs font-medium">
-              {attivitaPerStato.in_corso.length}
-            </span>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
+            <h3 className="font-semibold text-yellow-700">{t('inProgress')}</h3>
+            <span className="ml-auto text-sm text-yellow-600">{attivitaPerStato.in_corso.length}</span>
           </div>
-          <div className="space-y-2 max-h-[500px] overflow-y-auto">
-            {attivitaPerStato.in_corso.map(activity => (
-              <ActivityCard 
-                key={activity.id} 
-                activity={activity} 
-                onClick={() => openDetailModal(activity)}
+          <div className="space-y-2">
+            {attivitaPerStato.in_corso.map(a => (
+              <ActivityCard
+                key={a.id}
+                activity={a}
+                onClick={() => openDetailModal(a)}
                 onStatusChange={updateActivityStatus}
                 canEdit={canEdit}
                 t={t}
               />
             ))}
             {attivitaPerStato.in_corso.length === 0 && (
-              <p className="text-sm text-yellow-600 text-center py-4">{t('noActivity')}</p>
+              <p className="text-center text-gray-400 py-4 text-sm">{t('noActivities')}</p>
             )}
           </div>
         </div>
         
-        {/* Colonna Completati */}
+        {/* Colonna: Completato */}
         <div className="bg-green-50 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-green-800">✅ {t('completed')}</h3>
-            <span className="px-2 py-1 bg-green-200 text-green-800 rounded-full text-xs font-medium">
-              {attivitaPerStato.completato.length}
-            </span>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-3 h-3 rounded-full bg-green-500"></span>
+            <h3 className="font-semibold text-green-700">{t('completed')}</h3>
+            <span className="ml-auto text-sm text-green-600">{attivitaPerStato.completato.length}</span>
           </div>
-          <div className="space-y-2 max-h-[500px] overflow-y-auto">
-            {attivitaPerStato.completato.map(activity => (
-              <ActivityCard 
-                key={activity.id} 
-                activity={activity} 
-                onClick={() => openDetailModal(activity)}
+          <div className="space-y-2">
+            {attivitaPerStato.completato.map(a => (
+              <ActivityCard
+                key={a.id}
+                activity={a}
+                onClick={() => openDetailModal(a)}
                 canEdit={canEdit}
                 t={t}
               />
             ))}
             {attivitaPerStato.completato.length === 0 && (
-              <p className="text-sm text-green-600 text-center py-4">{t('noActivity')}</p>
+              <p className="text-center text-gray-400 py-4 text-sm">{t('noActivities')}</p>
             )}
           </div>
         </div>
         
-        {/* Colonna Problemi */}
+        {/* Colonna: Problemi */}
         <div className="bg-red-50 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-red-800">⚠️ {t('problems')}</h3>
-            <span className="px-2 py-1 bg-red-200 text-red-800 rounded-full text-xs font-medium">
-              {attivitaPerStato.problemi.length}
-            </span>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-3 h-3 rounded-full bg-red-500"></span>
+            <h3 className="font-semibold text-red-700">⚠️ {t('problems')}</h3>
+            <span className="ml-auto text-sm text-red-600">{attivitaPerStato.problemi.length}</span>
           </div>
-          <div className="space-y-2 max-h-[500px] overflow-y-auto">
-            {attivitaPerStato.problemi.map(activity => (
-              <ActivityCard 
-                key={activity.id} 
-                activity={activity} 
-                onClick={() => openDetailModal(activity)}
-                onResolve={() => resolveProblem(activity.id)}
+          <div className="space-y-2">
+            {attivitaPerStato.problemi.map(a => (
+              <ActivityCard
+                key={a.id}
+                activity={a}
+                onClick={() => openDetailModal(a)}
+                onResolve={() => resolveProblem(a.id)}
                 showProblem
                 canEdit={canEdit}
                 t={t}
               />
             ))}
             {attivitaPerStato.problemi.length === 0 && (
-              <p className="text-sm text-red-600 text-center py-4">{t('noProblem')} 🎉</p>
+              <p className="text-center text-gray-400 py-4 text-sm">👍 {t('noProblems')}</p>
             )}
           </div>
         </div>
       </div>
       
-      {/* Lista vuota */}
-      {pianificazioni.length === 0 && (
-        <div className="bg-white rounded-xl border shadow-sm p-8 text-center mt-6">
-          <div className="text-5xl mb-4">📅</div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">{t('noPlannedActivity')}</h3>
-          <p className="text-gray-500 mb-4">
-            {t('thisWeekNoActivity')}
-          </p>
-          {canEdit && (
-            <button
-              onClick={openAssignModal}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              ➕ {t('assignFirstComponent')}
-            </button>
-          )}
-        </div>
-      )}
-      
       {/* ══════════════════════════════════════════════════════════════════════
-          MODAL: Assegna singolo
+          MODAL: Assegna componente singolo
           ══════════════════════════════════════════════════════════════════════ */}
       {showAssignModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">➕ {t('assignToCWTitle')} {selectedWeek}</h2>
+              <h2 className="text-lg font-semibold">🔧 {t('assignComponent')} - CW {selectedWeek}</h2>
               <button onClick={() => setShowAssignModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
             </div>
             
-            <div className="p-4 overflow-y-auto max-h-[calc(90vh-140px)] space-y-4">
-              {/* Componente */}
+            <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-150px)]">
+              {/* Info: solo componenti senza WP */}
+              <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+                ℹ️ {t('onlyComponentsWithoutWP') || 'Solo componenti non appartenenti a Work Package'}
+              </div>
+              
+              {/* Selezione componente */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('component')} *</label>
                 <select
@@ -859,11 +946,15 @@ export default function PianificazionePage() {
                   <option value="">{t('selectComponent')}</option>
                   {componentiDisponibili.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.codice} - {c.descrizione || c.tipo?.nome || 'N/D'}
+                      {c.codice} - {c.descrizione || c.tipo?.nome}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">{componentiDisponibili.length} {t('componentsAvailable')}</p>
+                {componentiDisponibili.length === 0 && (
+                  <p className="mt-1 text-xs text-orange-600">
+                    {t('noAvailableComponents') || 'Nessun componente disponibile (tutti assegnati o in WP)'}
+                  </p>
+                )}
               </div>
               
               {/* Fase target */}
@@ -874,11 +965,9 @@ export default function PianificazionePage() {
                   onChange={e => setAssignForm({...assignForm, fase_target_id: e.target.value})}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
-                  <option value="">{t('selectPhase')}</option>
+                  <option value="">{t('noSpecificPhase')}</option>
                   {fasiWorkflow.map(f => (
-                    <option key={f.id} value={f.id}>
-                      {f.icona} {f.nome} ({f.disciplina?.nome})
-                    </option>
+                    <option key={f.id} value={f.id}>{f.icona} {f.nome}</option>
                   ))}
                 </select>
               </div>
@@ -944,7 +1033,8 @@ export default function PianificazionePage() {
               </button>
               <button
                 onClick={handleAssign}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                disabled={!assignForm.componente_id}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
                 {t('assign')}
               </button>
@@ -954,17 +1044,161 @@ export default function PianificazionePage() {
       )}
       
       {/* ══════════════════════════════════════════════════════════════════════
-          MODAL: Assegna multipli
+          MODAL: Assegna Work Package
+          ══════════════════════════════════════════════════════════════════════ */}
+      {showWPAssignModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between bg-purple-50">
+              <h2 className="text-lg font-semibold text-purple-900">📦 {t('assignWP') || 'Assegna Work Package'} - CW {selectedWeek}</h2>
+              <button onClick={() => setShowWPAssignModal(false)} className="p-2 hover:bg-purple-100 rounded-lg">✕</button>
+            </div>
+            
+            <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-150px)]">
+              {/* Selezione WP */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Work Package *</label>
+                <select
+                  value={wpAssignForm.work_package_id}
+                  onChange={e => setWpAssignForm({...wpAssignForm, work_package_id: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="">{t('selectWorkPackage') || 'Seleziona Work Package'}</option>
+                  {wpDisponibili.map(wp => (
+                    <option key={wp.id} value={wp.id}>
+                      {wp.codice} - {wp.nome} ({wp.componenti?.[0]?.count || 0} comp.)
+                    </option>
+                  ))}
+                </select>
+                {wpDisponibili.length === 0 && (
+                  <p className="mt-1 text-xs text-orange-600">
+                    {t('allWPAssigned') || 'Tutti i Work Package sono già assegnati a questa CW'}
+                  </p>
+                )}
+              </div>
+              
+              {/* Preview WP selezionato */}
+              {wpAssignForm.work_package_id && (
+                <div className="p-3 bg-purple-50 rounded-lg">
+                  {(() => {
+                    const wp = workPackages.find(w => w.id === wpAssignForm.work_package_id)
+                    return wp ? (
+                      <div>
+                        <div className="font-semibold text-purple-900">{wp.codice}</div>
+                        <div className="text-sm text-purple-700">{wp.nome}</div>
+                        {wp.descrizione && <div className="text-xs text-purple-600 mt-1">{wp.descrizione}</div>}
+                        <div className="mt-2 text-xs text-purple-600">
+                          📦 {wp.componenti?.[0]?.count || 0} {t('components')}
+                        </div>
+                      </div>
+                    ) : null
+                  })()}
+                </div>
+              )}
+              
+              {/* Fase target */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('phase')}</label>
+                <select
+                  value={wpAssignForm.fase_target_id}
+                  onChange={e => setWpAssignForm({...wpAssignForm, fase_target_id: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="">{t('noSpecificPhase')}</option>
+                  {fasiWorkflow.map(f => (
+                    <option key={f.id} value={f.id}>{f.icona} {f.nome}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Azione */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('action')}</label>
+                <input
+                  type="text"
+                  value={wpAssignForm.azione}
+                  onChange={e => setWpAssignForm({...wpAssignForm, azione: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder={t('actionPlaceholder')}
+                />
+              </div>
+              
+              {/* Squadra */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('squad')}</label>
+                <select
+                  value={wpAssignForm.squadra_id}
+                  onChange={e => setWpAssignForm({...wpAssignForm, squadra_id: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="">{t('noSquadAssigned')}</option>
+                  {squadre.map(s => (
+                    <option key={s.id} value={s.id}>{s.nome}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Priorità */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('priority')}</label>
+                <input
+                  type="number"
+                  value={wpAssignForm.priorita}
+                  onChange={e => setWpAssignForm({...wpAssignForm, priorita: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  min="1"
+                />
+              </div>
+              
+              {/* Istruzioni */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('instructions')}</label>
+                <textarea
+                  value={wpAssignForm.istruzioni}
+                  onChange={e => setWpAssignForm({...wpAssignForm, istruzioni: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows="3"
+                  placeholder={t('instructionsPlaceholder')}
+                />
+              </div>
+            </div>
+            
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowWPAssignModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleWPAssign}
+                disabled={!wpAssignForm.work_package_id}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                {t('assign')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: Assegna multipli (solo componenti senza WP)
           ══════════════════════════════════════════════════════════════════════ */}
       {showBulkAssignModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">📦 {t('assignMultiple')} - CW {selectedWeek}</h2>
+              <h2 className="text-lg font-semibold">📋 {t('assignMultiple')} - CW {selectedWeek}</h2>
               <button onClick={() => setShowBulkAssignModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
             </div>
             
             <div className="p-4 overflow-y-auto max-h-[calc(90vh-200px)]">
+              {/* Info */}
+              <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700 mb-4">
+                ℹ️ {t('onlyComponentsWithoutWP') || 'Solo componenti non appartenenti a Work Package'}
+              </div>
+              
               {/* Opzioni comuni */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
                 <div>
@@ -1108,28 +1342,37 @@ export default function PianificazionePage() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// COMPONENTE: Activity Card
+// COMPONENTE: Activity Card (supporta sia Componenti che WP)
 // ══════════════════════════════════════════════════════════════════════
 
 function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProblem, canEdit, t }) {
-  const comp = activity.componente
+  const isWP = !!activity.work_package_id && !activity.componente_id
+  const item = isWP ? activity.work_package : activity.componente
+  const disc = item?.disciplina
   
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-lg p-3 border shadow-sm hover:shadow-md cursor-pointer transition-all"
+      className={`bg-white rounded-lg p-3 border shadow-sm hover:shadow-md cursor-pointer transition-all ${
+        isWP ? 'border-l-4 border-l-purple-500' : ''
+      }`}
     >
       {/* Header */}
       <div className="flex items-start gap-2 mb-2">
         <span 
           className="text-xl w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: (comp?.disciplina?.colore || '#6B7280') + '20' }}
+          style={{ backgroundColor: (disc?.colore || '#6B7280') + '20' }}
         >
-          {comp?.disciplina?.icona || '📦'}
+          {isWP ? '📦' : (disc?.icona || '🔧')}
         </span>
         <div className="flex-1 min-w-0">
-          <div className="font-mono text-sm font-medium truncate">{comp?.codice}</div>
-          <div className="text-xs text-gray-500 truncate">{comp?.descrizione || comp?.tipo?.nome}</div>
+          <div className="font-mono text-sm font-medium truncate">
+            {isWP && <span className="text-purple-600 mr-1">[WP]</span>}
+            {item?.codice}
+          </div>
+          <div className="text-xs text-gray-500 truncate">
+            {isWP ? item?.nome : (item?.descrizione || item?.tipo?.nome)}
+          </div>
         </div>
       </div>
       
@@ -1143,6 +1386,13 @@ function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProble
       {activity.squadra && (
         <div className="text-xs text-gray-500 mb-2">
           👥 {activity.squadra.nome}
+        </div>
+      )}
+      
+      {/* Badge WP con conteggio componenti */}
+      {isWP && activity.work_package?.componenti && (
+        <div className="text-xs text-purple-600 mb-2">
+          📦 {activity.work_package.componenti[0]?.count || 0} componenti
         </div>
       )}
       
@@ -1183,7 +1433,7 @@ function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProble
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// COMPONENTE: Activity Detail Modal
+// COMPONENTE: Activity Detail Modal (supporta sia Componenti che WP)
 // ══════════════════════════════════════════════════════════════════════
 
 function ActivityDetailModal({ 
@@ -1203,7 +1453,9 @@ function ActivityDetailModal({
   const [showProblemForm, setShowProblemForm] = useState(false)
   const [problemDescription, setProblemDescription] = useState('')
   
-  const comp = activity.componente
+  const isWP = !!activity.work_package_id && !activity.componente_id
+  const item = isWP ? activity.work_package : activity.componente
+  const disc = item?.disciplina
   const locale = language === 'en' ? 'en-GB' : 'it-IT'
   
   const handleReportProblem = () => {
@@ -1215,45 +1467,76 @@ function ActivityDetailModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="p-4 border-b flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{t('details')}</h2>
+        <div className={`p-4 border-b flex items-center justify-between ${isWP ? 'bg-purple-50' : ''}`}>
+          <h2 className="text-lg font-semibold">
+            {isWP ? '📦 Work Package' : t('details')}
+          </h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
         </div>
         
         {/* Content */}
         <div className="p-4 overflow-y-auto max-h-[calc(90vh-200px)]">
-          {/* Componente info */}
-          <div className="mb-4 p-4 bg-gray-50 rounded-xl">
+          {/* Item info */}
+          <div className={`mb-4 p-4 rounded-xl ${isWP ? 'bg-purple-50' : 'bg-gray-50'}`}>
             <div className="flex items-center gap-3 mb-3">
               <span 
                 className="text-2xl w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: (comp?.disciplina?.colore || '#6B7280') + '20' }}
+                style={{ backgroundColor: (disc?.colore || '#6B7280') + '20' }}
               >
-                {comp?.disciplina?.icona || '📦'}
+                {isWP ? '📦' : (disc?.icona || '🔧')}
               </span>
               <div>
-                <div className="font-mono font-bold">{comp?.codice}</div>
-                <div className="text-sm text-gray-500">{comp?.descrizione || comp?.tipo?.nome}</div>
+                <div className="font-mono font-bold">
+                  {isWP && <span className="text-purple-600 mr-1">[WP]</span>}
+                  {item?.codice}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {isWP ? item?.nome : (item?.descrizione || item?.tipo?.nome)}
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <span className="text-gray-500">{t('discipline')}:</span>
-                <span className="ml-2">{comp?.disciplina?.nome}</span>
+            
+            {isWP ? (
+              // Info WP
+              <div className="space-y-2 text-sm">
+                {item?.descrizione && (
+                  <div>
+                    <span className="text-gray-500">{t('description')}:</span>
+                    <span className="ml-2">{item.descrizione}</span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-gray-500">{t('discipline')}:</span>
+                  <span className="ml-2">{disc?.nome || 'N/D'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">{t('components')}:</span>
+                  <span className="ml-2 font-semibold text-purple-600">
+                    {item?.componenti?.[0]?.count || 0}
+                  </span>
+                </div>
               </div>
-              <div>
-                <span className="text-gray-500">{t('type')}:</span>
-                <span className="ml-2">{comp?.tipo?.nome}</span>
+            ) : (
+              // Info Componente
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-gray-500">{t('discipline')}:</span>
+                  <span className="ml-2">{disc?.nome}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">{t('type')}:</span>
+                  <span className="ml-2">{item?.tipo?.nome}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">{t('quantity')}:</span>
+                  <span className="ml-2">{item?.quantita} {item?.unita_misura}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">{t('componentStatus')}:</span>
+                  <span className="ml-2">{item?.stato}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-gray-500">{t('quantity')}:</span>
-                <span className="ml-2">{comp?.quantita} {comp?.unita_misura}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">{t('componentStatus')}:</span>
-                <span className="ml-2">{comp?.stato}</span>
-              </div>
-            </div>
+            )}
           </div>
           
           {/* Dettagli attività */}
@@ -1299,89 +1582,85 @@ function ActivityDetailModal({
             {activity.istruzioni && (
               <div>
                 <span className="text-gray-500 block mb-1">{t('instructions')}:</span>
-                <div className="bg-blue-50 text-blue-800 p-3 rounded-lg text-sm">
-                  {activity.istruzioni}
-                </div>
+                <p className="text-sm bg-gray-50 p-2 rounded">{activity.istruzioni}</p>
               </div>
             )}
             
             {activity.completato_il && (
               <div className="flex justify-between">
-                <span className="text-gray-500">{t('completed')}:</span>
-                <span>{new Date(activity.completato_il).toLocaleString(locale)}</span>
-              </div>
-            )}
-            
-            {activity.completato_da_persona && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">{t('completedBy')}:</span>
-                <span>{activity.completato_da_persona.nome} {activity.completato_da_persona.cognome}</span>
+                <span className="text-gray-500">{t('completedAt')}:</span>
+                <span>{new Date(activity.completato_il).toLocaleDateString(locale)}</span>
               </div>
             )}
           </div>
           
           {/* Problema */}
           {activity.ha_problema && (
-            <div className={`mt-4 p-4 rounded-lg ${activity.problema_risolto ? 'bg-green-50' : 'bg-red-50'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className={`font-medium ${activity.problema_risolto ? 'text-green-700' : 'text-red-700'}`}>
-                  {activity.problema_risolto ? `✅ ${t('problemResolved')}` : `⚠️ ${t('problemReported')}`}
-                </span>
-              </div>
-              <p className="text-sm text-gray-700">{activity.problema_descrizione}</p>
-              {activity.problema_segnalato_il && (
-                <p className="text-xs text-gray-500 mt-2">
-                  {t('reportedAt')}: {new Date(activity.problema_segnalato_il).toLocaleString(locale)}
+            <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
+              <h4 className="font-semibold text-red-700 mb-1">⚠️ {t('problem')}</h4>
+              <p className="text-sm text-red-600">{activity.problema_descrizione}</p>
+              {activity.problema_risolto ? (
+                <p className="text-xs text-green-600 mt-2">
+                  ✅ {t('resolved')} {activity.problema_risolto_il && new Date(activity.problema_risolto_il).toLocaleDateString(locale)}
                 </p>
-              )}
-              {!activity.problema_risolto && canEdit && (
+              ) : canEdit && (
                 <button
                   onClick={() => onResolveProblem(activity.id)}
-                  className="mt-2 w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                  className="mt-2 text-sm text-green-600 hover:underline"
                 >
-                  ✅ {t('markAsResolved')}
+                  ✅ {t('markResolved')}
                 </button>
               )}
             </div>
           )}
           
-          {/* Form segnalazione problema */}
-          {showProblemForm && (
-            <div className="mt-4 p-4 bg-red-50 rounded-lg">
-              <h4 className="font-medium text-red-800 mb-2">⚠️ {t('reportProblem')}</h4>
-              <textarea
-                value={problemDescription}
-                onChange={e => setProblemDescription(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg text-sm"
-                rows="3"
-                placeholder={t('describeProblem')}
-              />
-              <div className="flex gap-2 mt-2">
+          {/* Form segnala problema */}
+          {canEdit && !activity.ha_problema && (
+            <div className="mt-4">
+              {showProblemForm ? (
+                <div className="p-3 bg-orange-50 rounded-lg">
+                  <textarea
+                    value={problemDescription}
+                    onChange={e => setProblemDescription(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    rows="2"
+                    placeholder={t('describeProblem')}
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => setShowProblemForm(false)}
+                      className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+                    >
+                      {t('cancel')}
+                    </button>
+                    <button
+                      onClick={handleReportProblem}
+                      className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                    >
+                      {t('report')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <button
-                  onClick={() => setShowProblemForm(false)}
-                  className="flex-1 px-3 py-2 border rounded-lg hover:bg-white text-sm"
+                  onClick={() => setShowProblemForm(true)}
+                  className="text-sm text-orange-600 hover:underline"
                 >
-                  {t('cancel')}
+                  ⚠️ {t('reportProblem')}
                 </button>
-                <button
-                  onClick={handleReportProblem}
-                  className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
-                >
-                  {t('report')}
-                </button>
-              </div>
+              )}
             </div>
           )}
         </div>
         
-        {/* Azioni */}
+        {/* Actions */}
         {canEdit && (
           <div className="p-4 border-t bg-gray-50">
-            <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="flex flex-wrap gap-2">
               {activity.stato === 'pianificato' && (
                 <button
                   onClick={() => onStatusChange(activity.id, 'in_corso')}
-                  className="px-3 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-sm"
+                  className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"
                 >
                   ▶️ {t('start')}
                 </button>
@@ -1389,7 +1668,7 @@ function ActivityDetailModal({
               {activity.stato === 'in_corso' && (
                 <button
                   onClick={() => onStatusChange(activity.id, 'completato')}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
                 >
                   ✅ {t('complete')}
                 </button>
@@ -1397,32 +1676,16 @@ function ActivityDetailModal({
               {activity.stato !== 'completato' && (
                 <button
                   onClick={() => onPostpone(activity.id)}
-                  className="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm"
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
                 >
-                  📅 {t('postponeToCW1')}
+                  ⏭️ {t('postpone')}
                 </button>
               )}
-              {!activity.ha_problema && activity.stato !== 'completato' && (
-                <button
-                  onClick={() => setShowProblemForm(true)}
-                  className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm"
-                >
-                  ⚠️ {t('reportProblem')}
-                </button>
-              )}
-            </div>
-            <div className="flex justify-between">
               <button
                 onClick={() => onDelete(activity.id)}
-                className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm"
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 ml-auto"
               >
                 🗑️ {t('remove')}
-              </button>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-100 text-sm"
-              >
-                {t('close')}
               </button>
             </div>
           </div>
