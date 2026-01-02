@@ -15,11 +15,27 @@ export default function RapportinoPage() {
   const [message, setMessage] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [showFirma, setShowFirma] = useState(false)
-  const [tipoFirma, setTipoFirma] = useState(null) // 'caposquadra' o 'supervisore'
+  const [tipoFirma, setTipoFirma] = useState(null)
   const [formData, setFormData] = useState({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', note: '' })
-  
-  // NUOVO: Centro costo selezionato per mostrare unità di misura
   const [centroCostoSelezionato, setCentroCostoSelezionato] = useState(null)
+
+  // NUOVO: Stati per Work Packages e Componenti
+  const [workPackages, setWorkPackages] = useState([])
+  const [wpComponenti, setWpComponenti] = useState({}) // { wpId: [componenti] }
+  const [loadingWP, setLoadingWP] = useState(false)
+  const [showWPSection, setShowWPSection] = useState(true)
+
+  // Helper settimana
+  function getWeekNumber(date) {
+    const d = new Date(date)
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7))
+    const yearStart = new Date(d.getFullYear(), 0, 1)
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
+  }
+
+  const currentWeek = getWeekNumber(new Date(selectedDate))
+  const currentYear = new Date(selectedDate).getFullYear()
 
   useEffect(() => {
     if (assegnazione?.progetto_id) loadData()
@@ -27,7 +43,6 @@ export default function RapportinoPage() {
 
   const loadData = async () => {
     setLoading(true)
-    // AGGIORNATO: Carica anche unità di misura con il centro costo
     const { data: cc } = await supabase
       .from('centri_costo')
       .select('*, unita_misura:unita_misura(id, codice, nome)')
@@ -55,7 +70,97 @@ export default function RapportinoPage() {
       .eq('progetto_id', assegnazione.progetto_id)
       .eq('data', selectedDate)
     setPresenze(pres || [])
+    
+    // NUOVO: Carica Work Packages
+    await loadWorkPackages()
+    
     setLoading(false)
+  }
+
+  // NUOVO: Carica Work Packages assegnati al foreman
+  const loadWorkPackages = async () => {
+    if (!persona?.id || !assegnazione?.progetto_id) return
+    setLoadingWP(true)
+    
+    try {
+      // Carica WP dove il foreman è assegnato o della sua squadra
+      const { data: wpData } = await supabase
+        .from('work_packages')
+        .select('*, squadra:squadre(id, nome)')
+        .eq('progetto_id', assegnazione.progetto_id)
+        .in('stato', ['pianificato', 'in_corso'])
+        .or(`foreman_id.eq.${persona.id}`)
+      
+      // Per ogni WP, carica i componenti pianificati per questa settimana
+      const wpWithComponents = {}
+      
+      for (const wp of (wpData || [])) {
+        // Trova pianificazioni per questa settimana
+        const { data: pianificazioni } = await supabase
+          .from('work_package_pianificazione')
+          .select('id')
+          .eq('work_package_id', wp.id)
+          .eq('anno', currentYear)
+          .eq('settimana', currentWeek)
+        
+        if (pianificazioni && pianificazioni.length > 0) {
+          const pianIds = pianificazioni.map(p => p.id)
+          
+          // Carica componenti pianificati
+          const { data: pianComp } = await supabase
+            .from('work_package_pianificazione_componenti')
+            .select(`
+              id,
+              completato,
+              completato_at,
+              componente:componenti(id, codice),
+              pianificazione:work_package_pianificazione(
+                id,
+                fase:fasi_workflow(id, nome, icona, colore)
+              )
+            `)
+            .in('pianificazione_id', pianIds)
+            .order('created_at')
+          
+          if (pianComp && pianComp.length > 0) {
+            wpWithComponents[wp.id] = {
+              wp,
+              componenti: pianComp
+            }
+          }
+        }
+      }
+      
+      setWorkPackages(wpData || [])
+      setWpComponenti(wpWithComponents)
+    } catch (error) {
+      console.error('Errore caricamento WP:', error)
+    } finally {
+      setLoadingWP(false)
+    }
+  }
+
+  // NUOVO: Toggle completamento componente
+  const handleToggleComponente = async (pianCompId, currentValue) => {
+    try {
+      const { error } = await supabase
+        .from('work_package_pianificazione_componenti')
+        .update({ 
+          completato: !currentValue,
+          completato_at: !currentValue ? new Date().toISOString() : null
+        })
+        .eq('id', pianCompId)
+      
+      if (error) throw error
+      
+      // Ricarica WP
+      await loadWorkPackages()
+      setMessage({ type: 'success', text: !currentValue ? 'Componente completato!' : 'Completamento rimosso' })
+      setTimeout(() => setMessage(null), 2000)
+    } catch (error) {
+      console.error('Errore:', error)
+      setMessage({ type: 'error', text: error.message })
+    }
   }
 
   const getOrCreateRapportino = async () => {
@@ -66,25 +171,20 @@ export default function RapportinoPage() {
     return data
   }
 
-  // NUOVO: Gestione selezione centro costo
   const handleCentroCostoChange = (ccId) => {
     setFormData({ ...formData, centro_costo_id: ccId })
     const cc = centriCosto.find(c => c.id === ccId)
     setCentroCostoSelezionato(cc)
   }
 
-  // NUOVO: Calcolo resa
   const calcolaResa = () => {
     const ore = parseFloat(formData.ore) || 0
     const qty = parseFloat(formData.quantita) || 0
-    if (ore > 0 && qty > 0) {
-      return (qty / ore).toFixed(2)
-    }
+    if (ore > 0 && qty > 0) return (qty / ore).toFixed(2)
     return null
   }
 
   const handleAddAttivita = async () => {
-    // AGGIORNATO: Solo descrizione e ore sono obbligatorie, quantità è opzionale
     if (!formData.descrizione || !formData.ore) { 
       setMessage({ type: 'error', text: 'Descrizione e ore obbligatorie' })
       return 
@@ -93,8 +193,6 @@ export default function RapportinoPage() {
     setMessage(null)
     try {
       const rap = await getOrCreateRapportino()
-      
-      // AGGIORNATO: unita_misura viene dal centro costo, non dal form
       const unitaMisura = centroCostoSelezionato?.unita_misura?.codice || null
       
       await supabase.from('attivita_rapportino').insert({ 
@@ -102,9 +200,7 @@ export default function RapportinoPage() {
         centro_costo_id: formData.centro_costo_id || null, 
         descrizione: formData.descrizione, 
         ore: parseFloat(formData.ore), 
-        // AGGIORNATO: quantità può essere null per lavori in economia
         quantita: formData.quantita ? parseFloat(formData.quantita) : null, 
-        // AGGIORNATO: unità di misura dal centro costo
         unita_misura: unitaMisura, 
         note: formData.note || null 
       })
@@ -133,7 +229,6 @@ export default function RapportinoPage() {
     loadData()
   }
 
-  // Gestione firma
   const handleOpenFirma = (tipo) => {
     setTipoFirma(tipo)
     setShowFirma(true)
@@ -168,12 +263,10 @@ export default function RapportinoPage() {
 
   const totaleOre = attivita.reduce((s, a) => s + (parseFloat(a.ore) || 0), 0)
   
-  // AGGIORNATO: Calcolo ore presenze più robusto
   const calcolaOrePresenza = (p) => {
     if (p.ore_ordinarie || p.ore_straordinarie) {
       return (parseFloat(p.ore_ordinarie || 0) + parseFloat(p.ore_straordinarie || 0))
     }
-    // Fallback: calcola da ora_checkin/ora_checkout
     if (p.ora_checkin && p.ora_checkout) {
       const checkin = new Date(`2000-01-01T${p.ora_checkin}`)
       const checkout = new Date(`2000-01-01T${p.ora_checkout}`)
@@ -184,6 +277,17 @@ export default function RapportinoPage() {
   const totaleOrePresenze = presenze.reduce((s, p) => s + calcolaOrePresenza(p), 0)
 
   const statoColors = { bozza: 'bg-gray-100 text-gray-700', inviato: 'bg-blue-100 text-blue-700', approvato: 'bg-green-100 text-green-700', rifiutato: 'bg-red-100 text-red-700' }
+
+  // NUOVO: Conta componenti per WP
+  const countWPStats = () => {
+    let totale = 0, completati = 0
+    Object.values(wpComponenti).forEach(({ componenti }) => {
+      totale += componenti.length
+      completati += componenti.filter(c => c.completato).length
+    })
+    return { totale, completati }
+  }
+  const wpStats = countWPStats()
 
   return (
     <div className="p-4 lg:p-8">
@@ -214,13 +318,12 @@ export default function RapportinoPage() {
       ) : (
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* Form Attività - AGGIORNATO */}
+            {/* Form Attività */}
             {(!rapportino || rapportino.stato === 'bozza') && (
               showForm ? (
                 <div className="bg-white rounded-xl p-6 shadow-sm border">
                   <h3 className="font-semibold text-gray-700 mb-4">➕ Nuova Attività</h3>
                   <div className="grid gap-4">
-                    {/* Centro di costo */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Centro di Costo</label>
                       <select 
@@ -237,7 +340,6 @@ export default function RapportinoPage() {
                       </select>
                     </div>
                     
-                    {/* NUOVO: Info centro costo selezionato con unità di misura */}
                     {centroCostoSelezionato && (
                       <div className="p-3 bg-blue-50 rounded-xl text-sm">
                         <p className="text-blue-700">
@@ -256,7 +358,6 @@ export default function RapportinoPage() {
                       </div>
                     )}
                     
-                    {/* Descrizione */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Descrizione *</label>
                       <input 
@@ -268,7 +369,6 @@ export default function RapportinoPage() {
                       />
                     </div>
                     
-                    {/* Ore e Quantità */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Ore *</label>
@@ -304,7 +404,6 @@ export default function RapportinoPage() {
                       </div>
                     </div>
                     
-                    {/* NUOVO: Resa calcolata */}
                     {calcolaResa() && (
                       <div className="p-3 bg-green-50 rounded-xl">
                         <p className="text-sm text-green-700">
@@ -319,7 +418,6 @@ export default function RapportinoPage() {
                       </div>
                     )}
                     
-                    {/* NUOVO: Indicatore lavoro in economia */}
                     {!formData.quantita && formData.ore && (
                       <div className="p-3 bg-amber-50 rounded-xl">
                         <p className="text-sm text-amber-700">
@@ -329,7 +427,6 @@ export default function RapportinoPage() {
                       </div>
                     )}
                     
-                    {/* Note */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
                       <textarea 
@@ -341,7 +438,6 @@ export default function RapportinoPage() {
                       />
                     </div>
                     
-                    {/* Azioni */}
                     <div className="flex gap-2 pt-2">
                       <button 
                         onClick={() => { setShowForm(false); setCentroCostoSelezionato(null); setFormData({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', note: '' }) }} 
@@ -369,7 +465,7 @@ export default function RapportinoPage() {
               )
             )}
 
-            {/* Lista Attività - AGGIORNATO */}
+            {/* Lista Attività */}
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
@@ -425,15 +521,130 @@ export default function RapportinoPage() {
                     <span>Totale Ore</span>
                     <span>{totaleOre}h</span>
                   </div>
-                  {attivita.some(a => a.quantita) && (
-                    <div className="flex justify-between text-sm text-gray-600 mt-1">
-                      <span>Attività con quantità</span>
-                      <span>{attivita.filter(a => a.quantita).length} / {attivita.length}</span>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* NUOVA SEZIONE: Completamento Componenti Work Packages */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {Object.keys(wpComponenti).length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                <div 
+                  className="p-4 border-b flex items-center justify-between cursor-pointer hover:bg-gray-50"
+                  onClick={() => setShowWPSection(!showWPSection)}
+                >
+                  <div>
+                    <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                      📦 Completamento Componenti
+                      <span className="text-xs font-normal bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                        CW{String(currentWeek).padStart(2, '0')}
+                      </span>
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {wpStats.completati}/{wpStats.totale} componenti completati questa settimana
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {/* Progress mini */}
+                    <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-green-500 transition-all" 
+                        style={{ width: `${wpStats.totale > 0 ? (wpStats.completati / wpStats.totale) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-lg">{showWPSection ? '▼' : '▶'}</span>
+                  </div>
+                </div>
+                
+                {showWPSection && (
+                  <div className="divide-y">
+                    {Object.entries(wpComponenti).map(([wpId, { wp, componenti }]) => {
+                      const wpCompletati = componenti.filter(c => c.completato).length
+                      const wpTotale = componenti.length
+                      
+                      // Raggruppa per fase
+                      const perFase = {}
+                      componenti.forEach(c => {
+                        const faseNome = c.pianificazione?.fase?.nome || 'Senza fase'
+                        const faseIcona = c.pianificazione?.fase?.icona || '📦'
+                        const faseColore = c.pianificazione?.fase?.colore || '#9CA3AF'
+                        if (!perFase[faseNome]) {
+                          perFase[faseNome] = { icona: faseIcona, colore: faseColore, componenti: [] }
+                        }
+                        perFase[faseNome].componenti.push(c)
+                      })
+                      
+                      return (
+                        <div key={wpId} className="p-4">
+                          {/* Header WP */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-10 rounded" style={{ backgroundColor: wp.colore || '#3B82F6' }} />
+                              <div>
+                                <span className="font-mono font-bold text-blue-700">{wp.codice}</span>
+                                <span className="ml-2 text-gray-700">{wp.nome}</span>
+                              </div>
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              <span className={`font-medium ${wpCompletati === wpTotale ? 'text-green-600' : ''}`}>
+                                {wpCompletati}/{wpTotale}
+                              </span>
+                              {wpCompletati === wpTotale && <span className="ml-1">✅</span>}
+                            </div>
+                          </div>
+                          
+                          {/* Componenti per fase */}
+                          <div className="space-y-3 ml-5">
+                            {Object.entries(perFase).map(([faseNome, { icona, colore, componenti: faseComp }]) => (
+                              <div key={faseNome}>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span>{icona}</span>
+                                  <span className="text-sm font-medium text-gray-600">{faseNome}</span>
+                                  <span className="text-xs text-gray-400">
+                                    ({faseComp.filter(c => c.completato).length}/{faseComp.length})
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-2 ml-6">
+                                  {faseComp.map(comp => (
+                                    <button
+                                      key={comp.id}
+                                      onClick={() => handleToggleComponente(comp.id, comp.completato)}
+                                      className={`px-3 py-1.5 rounded-lg text-sm font-mono transition-all ${
+                                        comp.completato
+                                          ? 'bg-green-100 text-green-700 ring-2 ring-green-500'
+                                          : 'bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600'
+                                      }`}
+                                    >
+                                      {comp.completato && <span className="mr-1">✓</span>}
+                                      {comp.componente?.codice || '???'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                
+                {/* Footer con info */}
+                <div className="p-3 bg-purple-50 border-t text-xs text-purple-600 flex items-center gap-2">
+                  <span>💡</span>
+                  <span>Clicca sui componenti per segnarli come completati. I dati vengono salvati automaticamente.</span>
+                </div>
+              </div>
+            )}
+
+            {/* Messaggio se non ci sono WP pianificati questa settimana */}
+            {Object.keys(wpComponenti).length === 0 && !loadingWP && workPackages.length > 0 && (
+              <div className="bg-gray-50 rounded-xl border border-dashed p-6 text-center text-gray-500">
+                <p className="text-lg mb-1">📦 Nessun componente pianificato</p>
+                <p className="text-sm">Non ci sono componenti pianificati per la settimana CW{String(currentWeek).padStart(2, '0')}</p>
+              </div>
+            )}
 
             {/* Sezione Firme */}
             {rapportino && attivita.length > 0 && (
@@ -543,14 +754,14 @@ export default function RapportinoPage() {
                     <span className="text-gray-500">Ore presenze</span>
                     <span className="font-medium">{totaleOrePresenze.toFixed(1)}h</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Con quantità</span>
-                    <span className="font-medium">{attivita.filter(a => a.quantita).length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">In economia</span>
-                    <span className="font-medium text-amber-600">{attivita.filter(a => !a.quantita).length}</span>
-                  </div>
+                  {wpStats.totale > 0 && (
+                    <>
+                      <div className="flex justify-between pt-2 border-t">
+                        <span className="text-gray-500">Componenti WP</span>
+                        <span className="font-medium text-purple-600">{wpStats.completati}/{wpStats.totale}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between pt-2 border-t">
                     <span className="text-gray-500">Firma CS</span>
                     <span>{rapportino.firma_caposquadra ? '✅' : '⏳'}</span>
@@ -559,6 +770,33 @@ export default function RapportinoPage() {
                     <span className="text-gray-500">Firma Sup.</span>
                     <span>{rapportino.firma_supervisore ? '✅' : '⏳'}</span>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* NUOVO: Mini riepilogo WP */}
+            {wpStats.totale > 0 && (
+              <div className="bg-purple-50 rounded-xl border border-purple-200 mt-4 p-4">
+                <h3 className="font-semibold text-purple-800 mb-2 flex items-center gap-2">
+                  📦 Work Packages
+                  <span className="text-xs bg-purple-200 px-2 py-0.5 rounded">CW{String(currentWeek).padStart(2, '0')}</span>
+                </h3>
+                <div className="space-y-2">
+                  {Object.entries(wpComponenti).map(([wpId, { wp, componenti }]) => {
+                    const done = componenti.filter(c => c.completato).length
+                    const total = componenti.length
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 0
+                    return (
+                      <div key={wpId} className="flex items-center gap-2">
+                        <div className="w-2 h-6 rounded" style={{ backgroundColor: wp.colore || '#3B82F6' }} />
+                        <span className="text-sm font-mono text-purple-700">{wp.codice}</span>
+                        <div className="flex-1 h-2 bg-purple-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-purple-600" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs text-purple-600 font-medium">{pct}%</span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
