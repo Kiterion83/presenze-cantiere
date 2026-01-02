@@ -60,13 +60,25 @@ export default function CheckinPage() {
     }
   }, [])
   
-  // Inizializza BarcodeDetector se disponibile
+  // Carica jsQR dinamicamente
+  useEffect(() => {
+    if (!window.jsQR) {
+      const script = document.createElement('script')
+      script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js'
+      script.async = true
+      script.onload = () => console.log('jsQR loaded')
+      document.head.appendChild(script)
+    }
+  }, [])
+  
+  // Inizializza BarcodeDetector se disponibile (Chrome/Android)
   useEffect(() => {
     if ('BarcodeDetector' in window) {
       try {
         barcodeDetectorRef.current = new window.BarcodeDetector({
           formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8']
         })
+        console.log('BarcodeDetector initialized')
       } catch (e) {
         console.log('BarcodeDetector non supportato:', e)
       }
@@ -239,7 +251,7 @@ export default function CheckinPage() {
     
     const video = videoRef.current
     const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
     
     const scan = async () => {
       if (!video.videoWidth || !video.videoHeight) return
@@ -248,31 +260,41 @@ export default function CheckinPage() {
       canvas.height = video.videoHeight
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
       
-      // Metodo 1: BarcodeDetector API (nativo, supportato su Chrome/Edge/Samsung)
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      // Metodo 1: jsQR (funziona su iOS Safari)
+      if (window.jsQR) {
+        try {
+          const code = window.jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert'
+          })
+          if (code && code.data) {
+            console.log('jsQR found:', code.data)
+            handleQrCodeDetected(code.data)
+            return
+          }
+        } catch (e) {
+          console.log('jsQR error:', e)
+        }
+      }
+      
+      // Metodo 2: BarcodeDetector API (Chrome/Android)
       if (barcodeDetectorRef.current) {
         try {
           const barcodes = await barcodeDetectorRef.current.detect(canvas)
           if (barcodes.length > 0) {
+            console.log('BarcodeDetector found:', barcodes[0].rawValue)
             handleQrCodeDetected(barcodes[0].rawValue)
             return
           }
         } catch (e) {
-          // Ignora errori, prova metodo alternativo
-        }
-      }
-      
-      // Metodo 2: jsQR library (se caricata)
-      if (typeof window.jsQR !== 'undefined') {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const code = window.jsQR(imageData.data, imageData.width, imageData.height)
-        if (code) {
-          handleQrCodeDetected(code.data)
-          return
+          // Ignora errori
         }
       }
     }
     
-    scanIntervalRef.current = setInterval(scan, 300)
+    // Scansiona ogni 150ms per più reattività
+    scanIntervalRef.current = setInterval(scan, 150)
   }
   
   const stopQrScanner = () => {
