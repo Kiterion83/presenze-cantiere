@@ -461,50 +461,54 @@ export default function Layout({ children }) {
         )}
       </aside>
 
-      {/* Banner Notifiche - FUORI dal main per essere sempre cliccabile */}
+      {/* Banner Notifiche - Fixed con z-index massimo */}
       {showNotificationBanner && notificationPermission === 'default' && (
-        <div className={`fixed ${isMobile ? 'top-20 left-0 right-0' : 'top-0 left-0 right-0'} bg-white border-b shadow-lg z-40`}
-             style={!isMobile ? { marginLeft: sidebarWidth } : {}}>
-          <div className="max-w-4xl mx-auto p-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🔔</span>
-                <div>
-                  <p className="font-medium text-gray-800">{t('enableNotifications')}</p>
-                  <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
-                </div>
+        <div 
+          className="fixed inset-x-0 bg-white border-b-2 border-blue-200 shadow-xl"
+          style={{ 
+            top: isMobile ? '72px' : '0px',
+            zIndex: 9999,
+            pointerEvents: 'auto'
+          }}
+        >
+          <div className="p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-3xl">🔔</span>
+              <div>
+                <p className="font-bold text-gray-800">{t('enableNotifications')}</p>
+                <p className="text-sm text-gray-500">{t('notificationDescription')}</p>
               </div>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    handleDismissNotificationBanner()
-                  }}
-                  className="flex-1 sm:flex-none px-6 py-4 sm:py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-xl transition-colors text-center font-medium min-h-[48px] touch-manipulation cursor-pointer select-none"
-                >
-                  {t('notNow')}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    handleEnableNotifications()
-                  }}
-                  className="flex-1 sm:flex-none px-6 py-4 sm:py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors text-center font-medium min-h-[48px] touch-manipulation cursor-pointer select-none"
-                >
-                  {t('enable')}
-                </button>
-              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  handleDismissNotificationBanner()
+                }}
+                style={{ WebkitTapHighlightColor: 'rgba(0,0,0,0.1)' }}
+                className="flex-1 px-4 py-4 text-gray-700 bg-gray-200 rounded-xl font-semibold text-base active:bg-gray-300"
+              >
+                {t('notNow')}
+              </button>
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  handleEnableNotifications()
+                }}
+                style={{ WebkitTapHighlightColor: 'rgba(0,0,0,0.1)' }}
+                className="flex-1 px-4 py-4 bg-blue-600 text-white rounded-xl font-semibold text-base active:bg-blue-700"
+              >
+                {t('enable')}
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* Main Content */}
-      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : ''} ${showNotificationBanner && notificationPermission === 'default' ? (isMobile ? 'pt-44' : 'pt-20') : ''}`}>
+      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-20' : ''} ${showNotificationBanner && notificationPermission === 'default' ? 'pt-40' : ''}`}>
         {children}
       </main>
     </div>
