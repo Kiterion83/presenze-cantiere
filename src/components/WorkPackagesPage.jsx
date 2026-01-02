@@ -192,14 +192,14 @@ export default function WorkPackagesPage() {
           .from('squadre')
           .select('*')
           .eq('progetto_id', progettoId)
-          .eq('attiva', true)
+          .eq('attivo', true)
         setSquadre(sqData || [])
         
+        // Persone: tabella globale, carica tutte le persone attive
         const { data: persData } = await supabase
           .from('persone')
           .select('*')
-          .eq('progetto_id', progettoId)
-          .in('ruolo', ['foreman', 'supervisor', 'admin'])
+          .eq('attivo', true)
           .order('cognome')
         setPersone(persData || [])
         
@@ -207,7 +207,7 @@ export default function WorkPackagesPage() {
           .from('discipline')
           .select('*')
           .eq('progetto_id', progettoId)
-          .eq('attiva', true)
+          .eq('attivo', true)
           .order('ordine')
         setDiscipline(discData || [])
         
