@@ -364,7 +364,32 @@ const translations = {
     theme: 'Tema',
     
     // ==========================================
-    // IMPEDIMENTS / BLOCCHI
+    // PLANNING PAGE - Extra translations
+    // ==========================================
+    postponed: 'Rimandato',
+    blocked: 'Bloccato',
+    start: 'Inizia',
+    complete: 'Completa',
+    markResolved: 'Segna risolto',
+    markAsResolved: 'Segna come risolto',
+    componentsAvailable: 'componenti disponibili',
+    selectedOf: 'selezionati di',
+    allComponentsAssigned: 'Tutti i componenti sono già assegnati',
+    confirmRemoveActivity: 'Rimuovere questa attività dalla pianificazione?',
+    selectAtLeastOne: 'Seleziona almeno un componente',
+    problemResolved: 'Problema risolto',
+    problemReported: 'Problema segnalato',
+    reportedAt: 'Segnalato',
+    describeProblem: 'Descrivi il problema...',
+    report: 'Segnala',
+    postponeToCW1: 'Rimanda a CW+1',
+    remove: 'Rimuovi',
+    componentStatus: 'Stato comp.',
+    completedBy: 'Completato da',
+    assignToCWTitle: 'Assegna a CW',
+
+    // ==========================================
+    // IMPEDIMENTS / BLOCCHI (IT)
     // ==========================================
     impedimentsTitle: 'Impedimenti',
     impedimentsSubtitle: 'Gestione blocchi e problemi',
@@ -793,7 +818,32 @@ const translations = {
     theme: 'Theme',
     
     // ==========================================
-    // IMPEDIMENTS / BLOCCHI
+    // PLANNING PAGE - Extra translations
+    // ==========================================
+    postponed: 'Postponed',
+    blocked: 'Blocked',
+    start: 'Start',
+    complete: 'Complete',
+    markResolved: 'Mark resolved',
+    markAsResolved: 'Mark as resolved',
+    componentsAvailable: 'components available',
+    selectedOf: 'selected of',
+    allComponentsAssigned: 'All components are already assigned',
+    confirmRemoveActivity: 'Remove this activity from planning?',
+    selectAtLeastOne: 'Select at least one component',
+    problemResolved: 'Problem resolved',
+    problemReported: 'Problem reported',
+    reportedAt: 'Reported',
+    describeProblem: 'Describe the problem...',
+    report: 'Report',
+    postponeToCW1: 'Postpone to CW+1',
+    remove: 'Remove',
+    componentStatus: 'Comp. status',
+    completedBy: 'Completed by',
+    assignToCWTitle: 'Assign to CW',
+
+    // ==========================================
+    // IMPEDIMENTS / BLOCCHI (EN)
     // ==========================================
     impedimentsTitle: 'Impediments',
     impedimentsSubtitle: 'Blocks and issues management',
