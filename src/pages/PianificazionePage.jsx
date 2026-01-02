@@ -10,10 +10,12 @@ export default function PianificazionePage() {
   // Dati
   const [pianificazioni, setPianificazioni] = useState([])
   const [componenti, setComponenti] = useState([])
-  const [workPackages, setWorkPackages] = useState([]) // NUOVO: WP
+  const [workPackages, setWorkPackages] = useState([])
   const [discipline, setDiscipline] = useState([])
   const [fasiWorkflow, setFasiWorkflow] = useState([])
   const [squadre, setSquadre] = useState([])
+  const [ditte, setDitte] = useState([]) // NUOVO: ditte esterne
+  const [tipiAzioneCorrettiva, setTipiAzioneCorrettiva] = useState([]) // NUOVO
   const [loading, setLoading] = useState(true)
   
   // Navigazione CW
@@ -24,7 +26,8 @@ export default function PianificazionePage() {
   const [filtri, setFiltri] = useState({
     disciplina: '',
     stato: '',
-    squadra: ''
+    squadra: '',
+    tipo: '' // 'wp', 'componente', 'azione_correttiva'
   })
   
   // Modali
@@ -32,7 +35,8 @@ export default function PianificazionePage() {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedActivity, setSelectedActivity] = useState(null)
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
-  const [showWPAssignModal, setShowWPAssignModal] = useState(false) // NUOVO: modale WP
+  const [showWPAssignModal, setShowWPAssignModal] = useState(false)
+  const [showAzioneCorrettivaModal, setShowAzioneCorrettivaModal] = useState(false) // NUOVO
   
   // Form assegnazione componente singolo
   const [assignForm, setAssignForm] = useState({
@@ -54,6 +58,15 @@ export default function PianificazionePage() {
     istruzioni: ''
   })
   
+  // Form assegnazione azione correttiva
+  const [azioneCorrettivaForm, setAzioneCorrettivaForm] = useState({
+    componente_id: '',
+    fase_target_id: '',
+    priorita: 1,
+    squadra_id: '',
+    istruzioni: ''
+  })
+  
   // Selezione multipla per assegnazione bulk
   const [selectedComponentIds, setSelectedComponentIds] = useState([])
   const [bulkAssignData, setBulkAssignData] = useState({
@@ -62,7 +75,7 @@ export default function PianificazionePage() {
     squadra_id: ''
   })
   
-  // Stati attività - tradotti
+  // Stati attività
   const statiAttivita = [
     { value: 'pianificato', labelKey: 'planned', color: 'bg-blue-100 text-blue-700', borderColor: 'border-blue-300' },
     { value: 'in_corso', labelKey: 'inProgress', color: 'bg-yellow-100 text-yellow-700', borderColor: 'border-yellow-300' },
@@ -130,9 +143,11 @@ export default function PianificazionePage() {
         { data: wpData },
         { data: discData },
         { data: fasiData },
-        { data: squadreData }
+        { data: squadreData },
+        { data: ditteData },
+        { data: tipiAzioneData }
       ] = await Promise.all([
-        // Pianificazioni della CW selezionata (include sia componenti che WP)
+        // Pianificazioni della CW selezionata
         supabase
           .from('pianificazione_cw')
           .select(`
@@ -140,8 +155,19 @@ export default function PianificazionePage() {
             componente:componenti(
               id, codice, descrizione, stato, quantita, unita_misura,
               work_package_id,
+              richiede_azione_correttiva,
+              tipo_azione_correttiva_id,
+              azione_bloccante,
+              motivo_azione_correttiva,
+              azione_assegnato_a_tipo,
+              azione_correttiva_completata,
               disciplina:discipline(id, nome, codice, icona, colore),
-              tipo:tipi_componente(id, nome, icona)
+              tipo:tipi_componente(id, nome, icona),
+              work_package:work_packages(id, codice, nome),
+              tipo_azione:tipi_azione_correttiva(id, codice, nome, icona, colore),
+              squadra_azione:squadre!componenti_azione_assegnato_a_squadra_id_fkey(id, nome),
+              persona_azione:persone!componenti_azione_assegnato_a_persona_id_fkey(id, nome, cognome),
+              ditta_azione:ditte!componenti_azione_assegnato_a_ditta_id_fkey(id, codice, ragione_sociale)
             ),
             work_package:work_packages(
               id, codice, nome, descrizione,
@@ -155,16 +181,29 @@ export default function PianificazionePage() {
           .eq('anno', selectedYear)
           .eq('settimana', selectedWeek)
           .order('priorita'),
-        // Tutti i componenti non completati (per assegnazione singola)
-        // INCLUDE work_package_id per filtro
+        // Tutti i componenti non completati
         supabase
           .from('componenti')
           .select(`
             id, codice, descrizione, stato, quantita, unita_misura,
             work_package_id,
+            richiede_azione_correttiva,
+            tipo_azione_correttiva_id,
+            azione_bloccante,
+            motivo_azione_correttiva,
+            azione_assegnato_a_tipo,
+            azione_assegnato_a_squadra_id,
+            azione_assegnato_a_persona_id,
+            azione_assegnato_a_ditta_id,
+            azione_correttiva_completata,
             cw_lavoro_anno, cw_lavoro_settimana,
             disciplina:discipline(id, nome, codice, icona, colore),
-            tipo:tipi_componente(id, nome, icona)
+            tipo:tipi_componente(id, nome, icona),
+            work_package:work_packages(id, codice, nome),
+            tipo_azione:tipi_azione_correttiva(id, codice, nome, icona, colore),
+            squadra_azione:squadre!componenti_azione_assegnato_a_squadra_id_fkey(id, nome),
+            persona_azione:persone!componenti_azione_assegnato_a_persona_id_fkey(id, nome, cognome),
+            ditta_azione:ditte!componenti_azione_assegnato_a_ditta_id_fkey(id, codice, ragione_sociale)
           `)
           .eq('progetto_id', progettoId)
           .neq('stato', 'completato')
@@ -198,7 +237,20 @@ export default function PianificazionePage() {
           .from('squadre')
           .select('*')
           .eq('progetto_id', progettoId)
+          .eq('attiva', true),
+        // Ditte esterne
+        supabase
+          .from('ditte')
+          .select('*')
           .eq('attiva', true)
+          .order('ragione_sociale'),
+        // Tipi azione correttiva
+        supabase
+          .from('tipi_azione_correttiva')
+          .select('*')
+          .eq('progetto_id', progettoId)
+          .eq('attivo', true)
+          .order('ordine')
       ])
       
       setPianificazioni(pianData || [])
@@ -207,6 +259,8 @@ export default function PianificazionePage() {
       setDiscipline(discData || [])
       setFasiWorkflow(fasiData || [])
       setSquadre(squadreData || [])
+      setDitte(ditteData || [])
+      setTipiAzioneCorrettiva(tipiAzioneData || [])
     } catch (error) {
       console.error('Error loading:', error)
     } finally {
@@ -226,13 +280,14 @@ export default function PianificazionePage() {
     const problemi = pianificazioni.filter(p => p.ha_problema && !p.problema_risolto).length
     const bloccate = pianificazioni.filter(p => p.stato === 'bloccato').length
     
-    // Conta WP vs Componenti singoli
-    const wpCount = pianificazioni.filter(p => p.work_package_id).length
-    const compCount = pianificazioni.filter(p => p.componente_id && !p.work_package_id).length
+    // Conta per tipo
+    const wpCount = pianificazioni.filter(p => p.work_package_id && !p.componente_id).length
+    const compCount = pianificazioni.filter(p => p.componente_id && !p.is_azione_correttiva).length
+    const azioniCorrettiveCount = pianificazioni.filter(p => p.is_azione_correttiva).length
     
     const percentuale = totale > 0 ? Math.round((completate / totale) * 100) : 0
     
-    // Per disciplina (considera sia componenti che WP)
+    // Per disciplina
     const byDisciplina = {}
     pianificazioni.forEach(p => {
       const discNome = p.componente?.disciplina?.nome || p.work_package?.disciplina?.nome || 'N/D'
@@ -244,7 +299,10 @@ export default function PianificazionePage() {
       if (p.stato === 'completato') byDisciplina[discNome].completate++
     })
     
-    return { totale, completate, inCorso, pianificate, problemi, bloccate, percentuale, byDisciplina, wpCount, compCount }
+    return { 
+      totale, completate, inCorso, pianificate, problemi, bloccate, 
+      percentuale, byDisciplina, wpCount, compCount, azioniCorrettiveCount 
+    }
   }, [pianificazioni])
   
   // Filtra attività
@@ -254,6 +312,11 @@ export default function PianificazionePage() {
       if (filtri.disciplina && disc?.id !== filtri.disciplina) return false
       if (filtri.stato && p.stato !== filtri.stato) return false
       if (filtri.squadra && p.squadra_id !== filtri.squadra) return false
+      if (filtri.tipo) {
+        if (filtri.tipo === 'wp' && !(p.work_package_id && !p.componente_id)) return false
+        if (filtri.tipo === 'componente' && !(p.componente_id && !p.is_azione_correttiva)) return false
+        if (filtri.tipo === 'azione_correttiva' && !p.is_azione_correttiva) return false
+      }
       return true
     })
   }, [pianificazioni, filtri])
@@ -280,20 +343,29 @@ export default function PianificazionePage() {
     return grouped
   }, [attivitaFiltrate])
   
-  // Componenti disponibili per assegnazione singola
-  // ESCLUDE: componenti già assegnati in questa CW E componenti che fanno parte di un WP
+  // Componenti disponibili per assegnazione singola (SENZA WP)
   const componentiDisponibili = useMemo(() => {
     const assegnatiIds = new Set(pianificazioni.filter(p => p.componente_id).map(p => p.componente_id))
     return componenti.filter(c => 
       !assegnatiIds.has(c.id) && 
-      !c.work_package_id // ESCLUDE componenti già in un WP
+      !c.work_package_id // Solo componenti senza WP
+    )
+  }, [componenti, pianificazioni])
+  
+  // Componenti con AZIONE CORRETTIVA disponibili (hanno WP ma richiedono azione separata)
+  const componentiAzioneCorrettiva = useMemo(() => {
+    const assegnatiIds = new Set(pianificazioni.filter(p => p.componente_id).map(p => p.componente_id))
+    return componenti.filter(c => 
+      !assegnatiIds.has(c.id) && 
+      c.work_package_id && // Appartiene a un WP
+      c.richiede_azione_correttiva && // Richiede azione correttiva
+      !c.azione_correttiva_completata // Non ancora completata
     )
   }, [componenti, pianificazioni])
   
   // Work Package disponibili per assegnazione
-  // ESCLUDE: WP già assegnati in questa CW
   const wpDisponibili = useMemo(() => {
-    const wpAssegnatiIds = new Set(pianificazioni.filter(p => p.work_package_id).map(p => p.work_package_id))
+    const wpAssegnatiIds = new Set(pianificazioni.filter(p => p.work_package_id && !p.componente_id).map(p => p.work_package_id))
     return workPackages.filter(wp => !wpAssegnatiIds.has(wp.id))
   }, [workPackages, pianificazioni])
 
@@ -346,6 +418,17 @@ export default function PianificazionePage() {
     setShowWPAssignModal(true)
   }
   
+  const openAzioneCorrettivaModal = () => {
+    setAzioneCorrettivaForm({
+      componente_id: '',
+      fase_target_id: '',
+      priorita: pianificazioni.length + 1,
+      squadra_id: '',
+      istruzioni: ''
+    })
+    setShowAzioneCorrettivaModal(true)
+  }
+  
   const openBulkAssignModal = () => {
     setSelectedComponentIds([])
     setBulkAssignData({
@@ -369,7 +452,7 @@ export default function PianificazionePage() {
         .insert({
           progetto_id: progettoId,
           componente_id: assignForm.componente_id,
-          work_package_id: null, // esplicito: è un componente singolo
+          work_package_id: null,
           anno: selectedYear,
           settimana: selectedWeek,
           fase_target_id: assignForm.fase_target_id || null,
@@ -378,6 +461,7 @@ export default function PianificazionePage() {
           squadra_id: assignForm.squadra_id || null,
           istruzioni: assignForm.istruzioni || null,
           stato: 'pianificato',
+          is_azione_correttiva: false,
           created_by: persona?.id
         })
       
@@ -403,7 +487,7 @@ export default function PianificazionePage() {
         .from('pianificazione_cw')
         .insert({
           progetto_id: progettoId,
-          componente_id: null, // esplicito: è un WP, non un componente
+          componente_id: null,
           work_package_id: wpAssignForm.work_package_id,
           anno: selectedYear,
           settimana: selectedWeek,
@@ -413,6 +497,7 @@ export default function PianificazionePage() {
           squadra_id: wpAssignForm.squadra_id || null,
           istruzioni: wpAssignForm.istruzioni || null,
           stato: 'pianificato',
+          is_azione_correttiva: false,
           created_by: persona?.id
         })
       
@@ -422,6 +507,44 @@ export default function PianificazionePage() {
       loadData()
     } catch (error) {
       console.error('Error assigning WP:', error)
+      alert(t('error') + ': ' + error.message)
+    }
+  }
+  
+  // Assegna Azione Correttiva (componente che fa parte di un WP)
+  const handleAzioneCorrettivaAssign = async () => {
+    if (!azioneCorrettivaForm.componente_id) {
+      alert(t('selectComponent'))
+      return
+    }
+    
+    const comp = componentiAzioneCorrettiva.find(c => c.id === azioneCorrettivaForm.componente_id)
+    
+    try {
+      const { error } = await supabase
+        .from('pianificazione_cw')
+        .insert({
+          progetto_id: progettoId,
+          componente_id: azioneCorrettivaForm.componente_id,
+          work_package_id: null, // Non associato al WP nella pianificazione
+          anno: selectedYear,
+          settimana: selectedWeek,
+          fase_target_id: azioneCorrettivaForm.fase_target_id || null,
+          azione: comp?.tipo_azione?.nome || comp?.motivo_azione_correttiva || 'Azione correttiva',
+          priorita: azioneCorrettivaForm.priorita,
+          squadra_id: azioneCorrettivaForm.squadra_id || null,
+          istruzioni: azioneCorrettivaForm.istruzioni || null,
+          stato: 'pianificato',
+          is_azione_correttiva: true, // IMPORTANTE: marca come azione correttiva
+          created_by: persona?.id
+        })
+      
+      if (error) throw error
+      
+      setShowAzioneCorrettivaModal(false)
+      loadData()
+    } catch (error) {
+      console.error('Error assigning corrective action:', error)
       alert(t('error') + ': ' + error.message)
     }
   }
@@ -444,6 +567,7 @@ export default function PianificazionePage() {
         priorita: pianificazioni.length + index + 1,
         squadra_id: bulkAssignData.squadra_id || null,
         stato: 'pianificato',
+        is_azione_correttiva: false,
         created_by: persona?.id
       }))
       
@@ -473,6 +597,19 @@ export default function PianificazionePage() {
       if (newStatus === 'completato') {
         updateData.completato_il = new Date().toISOString()
         updateData.completato_da = persona?.id
+        
+        // Se è un'azione correttiva, aggiorna anche il componente
+        const activity = pianificazioni.find(p => p.id === activityId)
+        if (activity?.is_azione_correttiva && activity?.componente_id) {
+          await supabase
+            .from('componenti')
+            .update({
+              azione_correttiva_completata: true,
+              azione_correttiva_completata_il: new Date().toISOString(),
+              azione_correttiva_completata_da: persona?.id
+            })
+            .eq('id', activity.componente_id)
+        }
       }
       
       const { error } = await supabase
@@ -609,6 +746,14 @@ export default function PianificazionePage() {
           
           {canEdit && (
             <div className="flex flex-wrap gap-2">
+              {componentiAzioneCorrettiva.length > 0 && (
+                <button
+                  onClick={openAzioneCorrettivaModal}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center gap-2"
+                >
+                  ⚠️ {t('correctiveActions') || 'Azioni Correttive'} ({componentiAzioneCorrettiva.length})
+                </button>
+              )}
               <button
                 onClick={openWPAssignModal}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
@@ -693,7 +838,7 @@ export default function PianificazionePage() {
         </div>
         
         {/* Indicatori */}
-        <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t">
+        <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t">
           {isCurrentWeek(selectedYear, selectedWeek) && (
             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
               ✨ {t('currentWeek')}
@@ -715,6 +860,11 @@ export default function PianificazionePage() {
           {stats.compCount > 0 && (
             <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
               🔧 {stats.compCount} {t('components')}
+            </span>
+          )}
+          {stats.azioniCorrettiveCount > 0 && (
+            <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">
+              ⚠️ {stats.azioniCorrettiveCount} {t('correctiveActions') || 'Azioni Corr.'}
             </span>
           )}
         </div>
@@ -815,6 +965,16 @@ export default function PianificazionePage() {
             {squadre.map(s => (
               <option key={s.id} value={s.id}>{s.nome}</option>
             ))}
+          </select>
+          <select
+            value={filtri.tipo}
+            onChange={e => setFiltri({...filtri, tipo: e.target.value})}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="">{t('allTypes') || 'Tutti i tipi'}</option>
+            <option value="wp">📦 Work Package</option>
+            <option value="componente">🔧 {t('components')}</option>
+            <option value="azione_correttiva">⚠️ {t('correctiveActions') || 'Azioni Correttive'}</option>
           </select>
         </div>
       </div>
@@ -930,12 +1090,10 @@ export default function PianificazionePage() {
             </div>
             
             <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-150px)]">
-              {/* Info: solo componenti senza WP */}
               <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
                 ℹ️ {t('onlyComponentsWithoutWP') || 'Solo componenti non appartenenti a Work Package'}
               </div>
               
-              {/* Selezione componente */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('component')} *</label>
                 <select
@@ -950,14 +1108,8 @@ export default function PianificazionePage() {
                     </option>
                   ))}
                 </select>
-                {componentiDisponibili.length === 0 && (
-                  <p className="mt-1 text-xs text-orange-600">
-                    {t('noAvailableComponents') || 'Nessun componente disponibile (tutti assegnati o in WP)'}
-                  </p>
-                )}
               </div>
               
-              {/* Fase target */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('phase')}</label>
                 <select
@@ -972,7 +1124,6 @@ export default function PianificazionePage() {
                 </select>
               </div>
               
-              {/* Azione */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('action')}</label>
                 <input
@@ -984,7 +1135,6 @@ export default function PianificazionePage() {
                 />
               </div>
               
-              {/* Squadra */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('squad')}</label>
                 <select
@@ -999,7 +1149,6 @@ export default function PianificazionePage() {
                 </select>
               </div>
               
-              {/* Priorità */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('priority')}</label>
                 <input
@@ -1011,7 +1160,6 @@ export default function PianificazionePage() {
                 />
               </div>
               
-              {/* Istruzioni */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('instructions')}</label>
                 <textarea
@@ -1055,7 +1203,6 @@ export default function PianificazionePage() {
             </div>
             
             <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-150px)]">
-              {/* Selezione WP */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Work Package *</label>
                 <select
@@ -1070,14 +1217,8 @@ export default function PianificazionePage() {
                     </option>
                   ))}
                 </select>
-                {wpDisponibili.length === 0 && (
-                  <p className="mt-1 text-xs text-orange-600">
-                    {t('allWPAssigned') || 'Tutti i Work Package sono già assegnati a questa CW'}
-                  </p>
-                )}
               </div>
               
-              {/* Preview WP selezionato */}
               {wpAssignForm.work_package_id && (
                 <div className="p-3 bg-purple-50 rounded-lg">
                   {(() => {
@@ -1096,7 +1237,6 @@ export default function PianificazionePage() {
                 </div>
               )}
               
-              {/* Fase target */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('phase')}</label>
                 <select
@@ -1111,7 +1251,6 @@ export default function PianificazionePage() {
                 </select>
               </div>
               
-              {/* Azione */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('action')}</label>
                 <input
@@ -1123,7 +1262,6 @@ export default function PianificazionePage() {
                 />
               </div>
               
-              {/* Squadra */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('squad')}</label>
                 <select
@@ -1138,7 +1276,6 @@ export default function PianificazionePage() {
                 </select>
               </div>
               
-              {/* Priorità */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('priority')}</label>
                 <input
@@ -1150,7 +1287,6 @@ export default function PianificazionePage() {
                 />
               </div>
               
-              {/* Istruzioni */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('instructions')}</label>
                 <textarea
@@ -1183,7 +1319,167 @@ export default function PianificazionePage() {
       )}
       
       {/* ══════════════════════════════════════════════════════════════════════
-          MODAL: Assegna multipli (solo componenti senza WP)
+          MODAL: Assegna Azione Correttiva
+          ══════════════════════════════════════════════════════════════════════ */}
+      {showAzioneCorrettivaModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between bg-orange-50">
+              <h2 className="text-lg font-semibold text-orange-900">⚠️ {t('correctiveActions') || 'Azione Correttiva'} - CW {selectedWeek}</h2>
+              <button onClick={() => setShowAzioneCorrettivaModal(false)} className="p-2 hover:bg-orange-100 rounded-lg">✕</button>
+            </div>
+            
+            <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-150px)]">
+              <div className="p-3 bg-orange-50 rounded-lg text-sm text-orange-700">
+                ⚠️ {t('correctiveActionInfo') || 'Componenti che richiedono azioni correttive separate dal loro Work Package'}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('component')} *</label>
+                <select
+                  value={azioneCorrettivaForm.componente_id}
+                  onChange={e => setAzioneCorrettivaForm({...azioneCorrettivaForm, componente_id: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="">{t('selectComponent')}</option>
+                  {componentiAzioneCorrettiva.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.codice} - {c.tipo_azione?.nome || c.motivo_azione_correttiva || 'Azione correttiva'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Preview componente selezionato */}
+              {azioneCorrettivaForm.componente_id && (
+                <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                  {(() => {
+                    const c = componentiAzioneCorrettiva.find(comp => comp.id === azioneCorrettivaForm.componente_id)
+                    if (!c) return null
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-orange-900">{c.codice}</span>
+                          {c.azione_bloccante && (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">🚫 Bloccante</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-orange-700">{c.descrizione}</div>
+                        
+                        {/* Work Package di appartenenza */}
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-orange-600">📦 Parte di:</span>
+                          <span className="font-medium text-purple-700">{c.work_package?.codice} - {c.work_package?.nome}</span>
+                        </div>
+                        
+                        {/* Tipo azione */}
+                        {c.tipo_azione && (
+                          <div className="flex items-center gap-2">
+                            <span 
+                              className="px-2 py-1 rounded text-xs font-medium"
+                              style={{ backgroundColor: c.tipo_azione.colore + '20', color: c.tipo_azione.colore }}
+                            >
+                              {c.tipo_azione.icona} {c.tipo_azione.nome}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Motivo */}
+                        {c.motivo_azione_correttiva && (
+                          <div className="text-xs text-orange-600 bg-white p-2 rounded">
+                            💬 {c.motivo_azione_correttiva}
+                          </div>
+                        )}
+                        
+                        {/* Assegnatario già definito */}
+                        {c.azione_assegnato_a_tipo && (
+                          <div className="text-sm text-orange-700">
+                            👤 Assegnato a: 
+                            <span className="font-medium ml-1">
+                              {c.azione_assegnato_a_tipo === 'squadra' && c.squadra_azione?.nome}
+                              {c.azione_assegnato_a_tipo === 'foreman' && `${c.persona_azione?.nome} ${c.persona_azione?.cognome}`}
+                              {c.azione_assegnato_a_tipo === 'ditta' && c.ditta_azione?.ragione_sociale}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('phase')}</label>
+                <select
+                  value={azioneCorrettivaForm.fase_target_id}
+                  onChange={e => setAzioneCorrettivaForm({...azioneCorrettivaForm, fase_target_id: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="">{t('noSpecificPhase')}</option>
+                  {fasiWorkflow.map(f => (
+                    <option key={f.id} value={f.id}>{f.icona} {f.nome}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('squad')}</label>
+                <select
+                  value={azioneCorrettivaForm.squadra_id}
+                  onChange={e => setAzioneCorrettivaForm({...azioneCorrettivaForm, squadra_id: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="">{t('noSquadAssigned')}</option>
+                  {squadre.map(s => (
+                    <option key={s.id} value={s.id}>{s.nome}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('priority')}</label>
+                <input
+                  type="number"
+                  value={azioneCorrettivaForm.priorita}
+                  onChange={e => setAzioneCorrettivaForm({...azioneCorrettivaForm, priorita: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  min="1"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('instructions')}</label>
+                <textarea
+                  value={azioneCorrettivaForm.istruzioni}
+                  onChange={e => setAzioneCorrettivaForm({...azioneCorrettivaForm, istruzioni: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows="3"
+                  placeholder={t('instructionsPlaceholder')}
+                />
+              </div>
+            </div>
+            
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowAzioneCorrettivaModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleAzioneCorrettivaAssign}
+                disabled={!azioneCorrettivaForm.componente_id}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+              >
+                {t('assign')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: Assegna multipli
           ══════════════════════════════════════════════════════════════════════ */}
       {showBulkAssignModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1194,12 +1490,10 @@ export default function PianificazionePage() {
             </div>
             
             <div className="p-4 overflow-y-auto max-h-[calc(90vh-200px)]">
-              {/* Info */}
               <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700 mb-4">
                 ℹ️ {t('onlyComponentsWithoutWP') || 'Solo componenti non appartenenti a Work Package'}
               </div>
               
-              {/* Opzioni comuni */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">{t('phase')}</label>
@@ -1239,7 +1533,6 @@ export default function PianificazionePage() {
                 </div>
               </div>
               
-              {/* Lista componenti */}
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-sm text-gray-600">
                   {selectedComponentIds.length} {t('selectedOf')} {componentiDisponibili.length}
@@ -1342,19 +1635,24 @@ export default function PianificazionePage() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// COMPONENTE: Activity Card (supporta sia Componenti che WP)
+// COMPONENTE: Activity Card (supporta WP, Componenti, Azioni Correttive)
 // ══════════════════════════════════════════════════════════════════════
 
 function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProblem, canEdit, t }) {
   const isWP = !!activity.work_package_id && !activity.componente_id
+  const isAzioneCorrettiva = activity.is_azione_correttiva
   const item = isWP ? activity.work_package : activity.componente
   const disc = item?.disciplina
+  
+  // Per azioni correttive, mostra info WP di appartenenza
+  const wpAppartenenza = isAzioneCorrettiva ? activity.componente?.work_package : null
   
   return (
     <div
       onClick={onClick}
       className={`bg-white rounded-lg p-3 border shadow-sm hover:shadow-md cursor-pointer transition-all ${
-        isWP ? 'border-l-4 border-l-purple-500' : ''
+        isWP ? 'border-l-4 border-l-purple-500' : 
+        isAzioneCorrettiva ? 'border-l-4 border-l-orange-500' : ''
       }`}
     >
       {/* Header */}
@@ -1363,11 +1661,12 @@ function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProble
           className="text-xl w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: (disc?.colore || '#6B7280') + '20' }}
         >
-          {isWP ? '📦' : (disc?.icona || '🔧')}
+          {isWP ? '📦' : isAzioneCorrettiva ? '⚠️' : (disc?.icona || '🔧')}
         </span>
         <div className="flex-1 min-w-0">
           <div className="font-mono text-sm font-medium truncate">
             {isWP && <span className="text-purple-600 mr-1">[WP]</span>}
+            {isAzioneCorrettiva && <span className="text-orange-600 mr-1">[AC]</span>}
             {item?.codice}
           </div>
           <div className="text-xs text-gray-500 truncate">
@@ -1375,6 +1674,32 @@ function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProble
           </div>
         </div>
       </div>
+      
+      {/* Badge WP di appartenenza per azioni correttive */}
+      {isAzioneCorrettiva && wpAppartenenza && (
+        <div className="mb-2 px-2 py-1 bg-purple-50 rounded text-xs text-purple-700 flex items-center gap-1">
+          📦 <span className="font-medium">{wpAppartenenza.codice}</span>
+          <span className="text-purple-500">- {wpAppartenenza.nome}</span>
+        </div>
+      )}
+      
+      {/* Tipo azione correttiva */}
+      {isAzioneCorrettiva && activity.componente?.tipo_azione && (
+        <div className="mb-2">
+          <span 
+            className="px-2 py-0.5 rounded text-xs font-medium"
+            style={{ 
+              backgroundColor: activity.componente.tipo_azione.colore + '20', 
+              color: activity.componente.tipo_azione.colore 
+            }}
+          >
+            {activity.componente.tipo_azione.icona} {activity.componente.tipo_azione.nome}
+          </span>
+          {activity.componente.azione_bloccante && (
+            <span className="ml-1 px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">🚫 Bloccante</span>
+          )}
+        </div>
+      )}
       
       {/* Info */}
       {activity.azione && (
@@ -1433,7 +1758,7 @@ function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProble
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// COMPONENTE: Activity Detail Modal (supporta sia Componenti che WP)
+// COMPONENTE: Activity Detail Modal
 // ══════════════════════════════════════════════════════════════════════
 
 function ActivityDetailModal({ 
@@ -1454,40 +1779,46 @@ function ActivityDetailModal({
   const [problemDescription, setProblemDescription] = useState('')
   
   const isWP = !!activity.work_package_id && !activity.componente_id
+  const isAzioneCorrettiva = activity.is_azione_correttiva
   const item = isWP ? activity.work_package : activity.componente
   const disc = item?.disciplina
   const locale = language === 'en' ? 'en-GB' : 'it-IT'
+  
+  // Per azioni correttive
+  const wpAppartenenza = isAzioneCorrettiva ? activity.componente?.work_package : null
   
   const handleReportProblem = () => {
     if (!problemDescription.trim()) return
     onReportProblem(activity.id, problemDescription)
   }
   
+  const headerBg = isWP ? 'bg-purple-50' : isAzioneCorrettiva ? 'bg-orange-50' : ''
+  const headerIcon = isWP ? '📦 Work Package' : isAzioneCorrettiva ? '⚠️ Azione Correttiva' : t('details')
+  
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className={`p-4 border-b flex items-center justify-between ${isWP ? 'bg-purple-50' : ''}`}>
-          <h2 className="text-lg font-semibold">
-            {isWP ? '📦 Work Package' : t('details')}
-          </h2>
+        <div className={`p-4 border-b flex items-center justify-between ${headerBg}`}>
+          <h2 className="text-lg font-semibold">{headerIcon}</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
         </div>
         
         {/* Content */}
         <div className="p-4 overflow-y-auto max-h-[calc(90vh-200px)]">
           {/* Item info */}
-          <div className={`mb-4 p-4 rounded-xl ${isWP ? 'bg-purple-50' : 'bg-gray-50'}`}>
+          <div className={`mb-4 p-4 rounded-xl ${isWP ? 'bg-purple-50' : isAzioneCorrettiva ? 'bg-orange-50' : 'bg-gray-50'}`}>
             <div className="flex items-center gap-3 mb-3">
               <span 
                 className="text-2xl w-10 h-10 rounded-lg flex items-center justify-center"
                 style={{ backgroundColor: (disc?.colore || '#6B7280') + '20' }}
               >
-                {isWP ? '📦' : (disc?.icona || '🔧')}
+                {isWP ? '📦' : isAzioneCorrettiva ? '⚠️' : (disc?.icona || '🔧')}
               </span>
               <div>
                 <div className="font-mono font-bold">
                   {isWP && <span className="text-purple-600 mr-1">[WP]</span>}
+                  {isAzioneCorrettiva && <span className="text-orange-600 mr-1">[AC]</span>}
                   {item?.codice}
                 </div>
                 <div className="text-sm text-gray-500">
@@ -1496,8 +1827,41 @@ function ActivityDetailModal({
               </div>
             </div>
             
+            {/* WP di appartenenza per azioni correttive */}
+            {isAzioneCorrettiva && wpAppartenenza && (
+              <div className="mb-3 p-2 bg-purple-100 rounded-lg">
+                <div className="text-xs text-purple-600 mb-1">📦 Parte di Work Package:</div>
+                <div className="font-semibold text-purple-900">{wpAppartenenza.codice} - {wpAppartenenza.nome}</div>
+              </div>
+            )}
+            
+            {/* Tipo azione correttiva */}
+            {isAzioneCorrettiva && activity.componente?.tipo_azione && (
+              <div className="mb-3">
+                <span 
+                  className="px-3 py-1 rounded text-sm font-medium"
+                  style={{ 
+                    backgroundColor: activity.componente.tipo_azione.colore + '20', 
+                    color: activity.componente.tipo_azione.colore 
+                  }}
+                >
+                  {activity.componente.tipo_azione.icona} {activity.componente.tipo_azione.nome}
+                </span>
+                {activity.componente.azione_bloccante && (
+                  <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 rounded text-sm">🚫 Bloccante</span>
+                )}
+              </div>
+            )}
+            
+            {/* Motivo azione correttiva */}
+            {isAzioneCorrettiva && activity.componente?.motivo_azione_correttiva && (
+              <div className="mb-3 p-2 bg-white rounded text-sm">
+                <span className="text-gray-500">Motivo:</span>
+                <p className="mt-1">{activity.componente.motivo_azione_correttiva}</p>
+              </div>
+            )}
+            
             {isWP ? (
-              // Info WP
               <div className="space-y-2 text-sm">
                 {item?.descrizione && (
                   <div>
@@ -1517,7 +1881,6 @@ function ActivityDetailModal({
                 </div>
               </div>
             ) : (
-              // Info Componente
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-gray-500">{t('discipline')}:</span>
