@@ -102,29 +102,52 @@ export default function WorkPackagesPage() {
   const loadWorkPackages = useCallback(async () => {
     if (!progettoId) return []
     try {
-      // FIX: Query ottimizzata con join invece di N+1
+      // Query base semplice
       const { data: wpData, error } = await supabase
         .from('work_packages')
-        .select(`
-          *,
-          disciplina:discipline(id, nome, codice, icona, colore),
-          squadra:squadre(id, nome, colore),
-          foreman:persone!work_packages_foreman_id_fkey(id, nome, cognome),
-          predecessore:work_packages!work_packages_predecessore_id_fkey(id, codice, nome)
-        `)
+        .select('*')
         .eq('progetto_id', progettoId)
         .order('created_at', { ascending: false })
       
-      if (error) throw error
+      if (error) {
+        console.error('Errore query WP:', error)
+        return []
+      }
       
-      // Conta componenti e fasi per ogni WP
+      // Arricchisci ogni WP con dati correlati
       const enrichedWP = await Promise.all((wpData || []).map(async (wp) => {
+        // Conta componenti e fasi
         const [{ count: compCount }, { count: fasiCount }] = await Promise.all([
           supabase.from('work_package_componenti').select('*', { count: 'exact', head: true }).eq('work_package_id', wp.id),
           supabase.from('work_package_fasi').select('*', { count: 'exact', head: true }).eq('work_package_id', wp.id)
         ])
+        
+        // Carica dati correlati separatamente
+        let disciplina = null, squadra = null, foreman = null, predecessore = null
+        
+        if (wp.disciplina_id) {
+          const { data } = await supabase.from('discipline').select('id, nome, codice, icona, colore').eq('id', wp.disciplina_id).single()
+          disciplina = data
+        }
+        if (wp.squadra_id) {
+          const { data } = await supabase.from('squadre').select('id, nome, colore').eq('id', wp.squadra_id).single()
+          squadra = data
+        }
+        if (wp.foreman_id) {
+          const { data } = await supabase.from('persone').select('id, nome, cognome').eq('id', wp.foreman_id).single()
+          foreman = data
+        }
+        if (wp.predecessore_id) {
+          const { data } = await supabase.from('work_packages').select('id, codice, nome').eq('id', wp.predecessore_id).single()
+          predecessore = data
+        }
+        
         return { 
           ...wp, 
+          disciplina,
+          squadra,
+          foreman,
+          predecessore,
           componenti_count: compCount || 0, 
           fasi_count: fasiCount || 0 
         }
@@ -143,12 +166,7 @@ export default function WorkPackagesPage() {
     try {
       const { data: azioniData, error } = await supabase
         .from('azioni')
-        .select(`
-          *,
-          fase:fasi_workflow(id, nome, icona, colore),
-          squadra:squadre(id, nome),
-          foreman:persone!azioni_foreman_id_fkey(id, nome, cognome)
-        `)
+        .select('*')
         .eq('progetto_id', progettoId)
         .order('created_at', { ascending: false })
       
@@ -158,16 +176,33 @@ export default function WorkPackagesPage() {
           console.warn('Tabella azioni non esiste ancora')
           return []
         }
-        throw error
+        console.error('Errore query azioni:', error)
+        return []
       }
       
-      // Conta componenti per ogni azione
+      // Arricchisci ogni azione con dati correlati
       const enrichedAzioni = await Promise.all((azioniData || []).map(async (az) => {
         const { count } = await supabase
           .from('azioni_componenti')
           .select('*', { count: 'exact', head: true })
           .eq('azione_id', az.id)
-        return { ...az, componenti_count: count || 0 }
+        
+        let fase = null, squadra = null, foreman = null
+        
+        if (az.fase_workflow_id) {
+          const { data } = await supabase.from('fasi_workflow').select('id, nome, icona, colore').eq('id', az.fase_workflow_id).single()
+          fase = data
+        }
+        if (az.squadra_id) {
+          const { data } = await supabase.from('squadre').select('id, nome').eq('id', az.squadra_id).single()
+          squadra = data
+        }
+        if (az.foreman_id) {
+          const { data } = await supabase.from('persone').select('id, nome, cognome').eq('id', az.foreman_id).single()
+          foreman = data
+        }
+        
+        return { ...az, fase, squadra, foreman, componenti_count: count || 0 }
       }))
       
       return enrichedAzioni
