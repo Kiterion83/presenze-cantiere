@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 
-// Traduzioni
+// Traduzioni COMPLETE
 const translations = {
   it: {
-    // Header
+    // ==========================================
+    // HEADER & NAVIGATION
+    // ==========================================
     projectTrackingSystem: 'Project Tracking System',
     selectProject: 'Seleziona progetto',
     allProjects: 'Tutti i progetti (Admin)',
@@ -33,8 +35,8 @@ const translations = {
     planning: 'Pianificazione',
     field: 'Campo',
     workHours: 'Ore Lavoro',
-    activities: 'Activities',
-    warehouse: 'Warehouse',
+    activities: 'Attività',
+    warehouse: 'Magazzino',
     
     // Menu Items - Management
     transfers: 'Trasferimenti',
@@ -54,7 +56,9 @@ const translations = {
     enable: 'Attiva',
     notNow: 'Non ora',
     
-    // Common
+    // ==========================================
+    // COMMON / SHARED
+    // ==========================================
     save: 'Salva',
     cancel: 'Annulla',
     delete: 'Elimina',
@@ -63,6 +67,7 @@ const translations = {
     search: 'Cerca',
     filter: 'Filtra',
     all: 'Tutti',
+    allFemale: 'Tutte',
     none: 'Nessuno',
     loading: 'Caricamento...',
     error: 'Errore',
@@ -71,25 +76,134 @@ const translations = {
     close: 'Chiudi',
     yes: 'Sì',
     no: 'No',
-    
-    // Project Details
-    projectCode: 'Codice Commessa',
-    projectName: 'Nome Progetto',
-    
-    // Materials/Components Page
-    materialsManagement: 'Gestione Materiali',
+    actions: 'Azioni',
+    status: 'Stato',
+    state: 'Stato',
+    notes: 'Note',
+    description: 'Descrizione',
+    date: 'Data',
+    time: 'Ora',
+    from: 'Da',
+    to: 'A',
     total: 'Totale',
+    details: 'Dettagli',
+    view: 'Visualizza',
+    download: 'Scarica',
+    upload: 'Carica',
+    export: 'Esporta',
+    import: 'Importa',
+    back: 'Indietro',
+    next: 'Avanti',
+    previous: 'Precedente',
+    create: 'Crea',
+    update: 'Aggiorna',
+    assign: 'Assegna',
+    unassign: 'Rimuovi assegnazione',
+    select: 'Seleziona',
+    selectAll: 'Seleziona tutto',
+    deselectAll: 'Deseleziona tutto',
+    required: 'Obbligatorio',
+    optional: 'Opzionale',
+    
+    // ==========================================
+    // PLANNING PAGE - Pianificazione CW
+    // ==========================================
+    planningTitle: 'Pianificazione CW',
+    planningSubtitle: 'Pianificazione settimanale attività',
+    assignToCW: 'Assegna a CW',
+    assignMultiple: 'Assegna multipli',
+    week: 'Settimana',
+    currentWeek: 'Settimana corrente',
+    pastWeek: 'Settimana passata',
+    futureWeek: 'Settimana futura',
+    today: 'Oggi',
+    
+    // KPI Cards
+    planned: 'Pianificate',
+    plannedMale: 'Pianificati',
+    inProgress: 'In Corso',
+    completed: 'Completate',
+    completedMale: 'Completati',
+    problems: 'Problemi',
+    activitiesPlanned: 'attività pianificate',
+    
+    // Filters
+    discipline: 'Disciplina',
+    squad: 'Squadra',
+    allDisciplines: 'Tutte le discipline',
+    allSquads: 'Tutte le squadre',
+    allStatuses: 'Tutti gli stati',
+    
+    // Status columns
+    noActivity: 'Nessuna attività',
+    noProblem: 'Nessun problema',
+    noPlannedActivity: 'Nessuna attività pianificata',
+    thisWeekNoActivity: 'Questa settimana non ha ancora attività. Assegna componenti per iniziare.',
+    assignFirstComponent: 'Assegna primo componente',
+    
+    // Modal Assign to CW
+    assignToCWTitle: 'Assegna a CW',
+    component: 'Componente',
+    selectComponent: 'Seleziona componente...',
+    phase: 'Fase',
+    selectPhase: 'Seleziona fase...',
+    action: 'Azione',
+    actionPlaceholder: 'Es. Erection, Fit-up, Welding...',
+    noSquadAssigned: 'Nessuna squadra assegnata',
+    priority: 'Priorità (ordine esecuzione)',
+    instructions: 'Istruzioni',
+    instructionsPlaceholder: 'Istruzioni specifiche per il campo...',
+    
+    // Work Package specific
+    wpNotScheduled: 'WP non pianificati',
+    wpScheduled: 'WP pianificati',
+    scheduleWP: 'Pianifica WP',
+    wpWithoutDates: 'Work Package senza date',
+    
+    // ==========================================
+    // WORK PACKAGES PAGE
+    // ==========================================
+    workPackagesTitle: 'Work Packages',
+    workPackagesSubtitle: 'Pacchetti di lavoro organizzati',
+    newWP: 'Nuovo WP',
+    importExcel: 'Import Excel',
+    wpCode: 'Codice WP',
+    wpName: 'Nome WP',
+    area: 'Area',
+    startDate: 'Data Inizio',
+    endDate: 'Data Fine',
+    estimatedHours: 'Ore Stimate',
+    actualHours: 'Ore Effettive',
+    progressPercent: 'Avanzamento %',
+    assignedTo: 'Assegnato a',
+    components: 'Componenti',
+    phases: 'Fasi',
+    comp: 'comp.',
+    
+    // ==========================================
+    // MATERIALS / COMPONENTS PAGE
+    // ==========================================
+    materialsManagement: 'Gestione Materiali',
+    materialsSubtitle: 'Componenti e materiali del progetto',
     toOrder: 'Da ordinare',
     ordered: 'Ordinato',
+    delivered: 'Consegnato',
+    installed: 'Installato',
     codeOrDescription: 'Codice o descrizione...',
-    discipline: 'Disciplina',
     type: 'Tipo',
     noMaterials: 'Nessun materiale',
     startAddingMaterials: 'Inizia aggiungendo materiali',
+    componentCode: 'Codice Componente',
+    componentType: 'Tipo Componente',
+    quantity: 'Quantità',
+    unit: 'Unità',
+    weight: 'Peso',
     
-    // Warehouse Page
-    warehouseTitle: 'Warehouse',
-    warehouseDescription: 'Gestione materiali e spedizioni al site',
+    // ==========================================
+    // WAREHOUSE PAGE
+    // ==========================================
+    warehouseTitle: 'Magazzino',
+    warehouseSubtitle: 'Gestione materiali e spedizioni al site',
     inWarehouse: 'In Magazzino',
     receivedToday: 'Ricevuti Oggi',
     shippedToday: 'Spediti Oggi',
@@ -99,27 +213,175 @@ const translations = {
     scanOrEnterCode: 'Scansiona o inserisci il codice del componente',
     enterComponentCode: 'Inserisci codice componente...',
     searchBtn: 'Cerca',
+    readyToShip: 'Pronto per spedizione',
+    shipped: 'Spedito',
+    received: 'Ricevuto',
     
-    // Planning Page
-    planningTitle: 'Pianificazione CW',
-    week: 'Settimana',
-    currentWeek: 'Settimana corrente',
-    pastWeek: 'Settimana passata',
-    today: 'Oggi',
-    planned: 'Pianificati',
-    inProgress: 'In Corso',
-    completed: 'Completati',
-    problems: 'Problemi',
+    // ==========================================
+    // FIELD / FOREMAN PAGE
+    // ==========================================
+    fieldTitle: 'Campo',
+    fieldSubtitle: 'Gestione attività in campo',
+    todayActivities: 'Attività di oggi',
+    pendingActivities: 'Attività in sospeso',
+    completedActivities: 'Attività completate',
+    startActivity: 'Inizia attività',
+    completeActivity: 'Completa attività',
+    reportProblem: 'Segnala problema',
+    takePhoto: 'Scatta foto',
     
-    // Statistics
-    statisticsTitle: 'Statistiche',
+    // ==========================================
+    // PROGRESS / AVANZAMENTO PAGE
+    // ==========================================
+    progressTitle: 'Avanzamento',
+    progressSubtitle: 'Monitoraggio avanzamento lavori',
+    overallProgress: 'Avanzamento Generale',
+    byDiscipline: 'Per Disciplina',
+    byArea: 'Per Area',
+    byWP: 'Per Work Package',
+    behindSchedule: 'In ritardo',
+    onSchedule: 'In linea',
+    aheadSchedule: 'In anticipo',
+    
+    // ==========================================
+    // TIMESHEET / RAPPORTINO PAGE
+    // ==========================================
+    timesheetTitle: 'Rapportino',
+    timesheetSubtitle: 'Rapportino giornaliero',
+    dailyReport: 'Rapporto Giornaliero',
+    weeklyReport: 'Rapporto Settimanale',
     hoursWorked: 'Ore Lavorate',
+    overtime: 'Straordinario',
+    regularHours: 'Ore Ordinarie',
+    overtimeHours: 'Ore Straordinarie',
+    totalHours: 'Ore Totali',
+    submitReport: 'Invia Rapporto',
+    approveReport: 'Approva Rapporto',
+    rejectReport: 'Rifiuta Rapporto',
+    draft: 'Bozza',
+    submitted: 'Inviato',
+    approved: 'Approvato',
+    rejected: 'Rifiutato',
+    signature: 'Firma',
+    foremanSignature: 'Firma Caposquadra',
+    supervisorSignature: 'Firma Supervisore',
+    exportPDF: 'Esporta PDF',
+    
+    // ==========================================
+    // TEAM PAGE
+    // ==========================================
+    teamTitle: 'Team',
+    teamSubtitle: 'Gestione del team di progetto',
+    members: 'Membri',
+    addMember: 'Aggiungi Membro',
+    removeMember: 'Rimuovi Membro',
+    role: 'Ruolo',
+    email: 'Email',
+    phone: 'Telefono',
+    company: 'Azienda',
+    activeMembers: 'Membri Attivi',
+    
+    // ==========================================
+    // CALENDAR PAGE
+    // ==========================================
+    calendarTitle: 'Calendario',
+    calendarSubtitle: 'Visualizza eventi e scadenze',
+    event: 'Evento',
+    events: 'Eventi',
+    addEvent: 'Aggiungi Evento',
+    noEvents: 'Nessun evento',
+    
+    // ==========================================
+    // VACATION / FERIE PAGE
+    // ==========================================
+    vacationTitle: 'Ferie e Permessi',
+    vacationSubtitle: 'Gestione ferie e permessi',
+    requestVacation: 'Richiedi Ferie',
+    vacationDays: 'Giorni di Ferie',
+    remainingDays: 'Giorni Rimanenti',
+    usedDays: 'Giorni Utilizzati',
+    pendingRequests: 'Richieste in Attesa',
+    approvedRequests: 'Richieste Approvate',
+    vacationType: 'Tipo',
+    vacation: 'Ferie',
+    permit: 'Permesso',
+    sickLeave: 'Malattia',
+    
+    // ==========================================
+    // CHECK-IN PAGE
+    // ==========================================
+    checkInTitle: 'Check-in',
+    checkInSubtitle: 'Registra la tua presenza',
+    checkInNow: 'Check-in Ora',
+    checkOutNow: 'Check-out Ora',
+    checkedIn: 'Check-in effettuato',
+    checkedOut: 'Check-out effettuato',
+    notCheckedIn: 'Non registrato',
+    locationRequired: 'Posizione richiesta',
+    gpsError: 'Errore GPS',
+    outsideArea: 'Fuori area di lavoro',
+    
+    // ==========================================
+    // STATISTICS PAGE
+    // ==========================================
+    statisticsTitle: 'Statistiche',
+    statisticsSubtitle: 'Analisi dati e KPI',
     hoursBudget: 'Ore Budget',
     productivity: 'Produttività',
     trend: 'Trend',
     forecast: 'Previsione',
+    performance: 'Performance',
+    efficiency: 'Efficienza',
     
-    // Dates
+    // ==========================================
+    // DASHBOARD PAGE
+    // ==========================================
+    dashboardTitle: 'Dashboard',
+    dashboardSubtitle: 'Panoramica generale',
+    overview: 'Panoramica',
+    recentActivity: 'Attività Recente',
+    alerts: 'Avvisi',
+    
+    // ==========================================
+    // TRANSFERS PAGE
+    // ==========================================
+    transfersTitle: 'Trasferimenti',
+    transfersSubtitle: 'Gestione trasferimenti personale',
+    newTransfer: 'Nuovo Trasferimento',
+    fromProject: 'Da Progetto',
+    toProject: 'A Progetto',
+    transferDate: 'Data Trasferimento',
+    
+    // ==========================================
+    // SETTINGS PAGE
+    // ==========================================
+    settingsTitle: 'Impostazioni',
+    settingsSubtitle: 'Configurazione del progetto',
+    projectSettings: 'Impostazioni Progetto',
+    userSettings: 'Impostazioni Utente',
+    notificationSettings: 'Impostazioni Notifiche',
+    language: 'Lingua',
+    theme: 'Tema',
+    
+    // ==========================================
+    // IMPEDIMENTS / BLOCCHI
+    // ==========================================
+    impedimentsTitle: 'Impedimenti',
+    impedimentsSubtitle: 'Gestione blocchi e problemi',
+    newImpediment: 'Nuovo Impedimento',
+    impedimentType: 'Tipo Impedimento',
+    severity: 'Gravità',
+    low: 'Bassa',
+    medium: 'Media',
+    high: 'Alta',
+    critical: 'Critica',
+    open: 'Aperto',
+    resolved: 'Risolto',
+    escalated: 'Escalato',
+    
+    // ==========================================
+    // DATES
+    // ==========================================
     monday: 'Lunedì',
     tuesday: 'Martedì',
     wednesday: 'Mercoledì',
@@ -127,6 +389,15 @@ const translations = {
     friday: 'Venerdì',
     saturday: 'Sabato',
     sunday: 'Domenica',
+    
+    // Short days
+    mon: 'Lun',
+    tue: 'Mar',
+    wed: 'Mer',
+    thu: 'Gio',
+    fri: 'Ven',
+    sat: 'Sab',
+    sun: 'Dom',
     
     // Months
     january: 'Gennaio',
@@ -141,10 +412,29 @@ const translations = {
     october: 'Ottobre',
     november: 'Novembre',
     december: 'Dicembre',
+    
+    // Short months
+    jan: 'Gen',
+    feb: 'Feb',
+    mar: 'Mar',
+    apr: 'Apr',
+    mayShort: 'Mag',
+    jun: 'Giu',
+    jul: 'Lug',
+    aug: 'Ago',
+    sep: 'Set',
+    oct: 'Ott',
+    nov: 'Nov',
+    dec: 'Dic',
   },
   
+  // ==========================================
+  // ENGLISH TRANSLATIONS
+  // ==========================================
   en: {
-    // Header
+    // ==========================================
+    // HEADER & NAVIGATION
+    // ==========================================
     projectTrackingSystem: 'Project Tracking System',
     selectProject: 'Select project',
     allProjects: 'All projects (Admin)',
@@ -195,7 +485,9 @@ const translations = {
     enable: 'Enable',
     notNow: 'Not now',
     
-    // Common
+    // ==========================================
+    // COMMON / SHARED
+    // ==========================================
     save: 'Save',
     cancel: 'Cancel',
     delete: 'Delete',
@@ -204,6 +496,7 @@ const translations = {
     search: 'Search',
     filter: 'Filter',
     all: 'All',
+    allFemale: 'All',
     none: 'None',
     loading: 'Loading...',
     error: 'Error',
@@ -212,55 +505,312 @@ const translations = {
     close: 'Close',
     yes: 'Yes',
     no: 'No',
-    
-    // Project Details
-    projectCode: 'Project Code',
-    projectName: 'Project Name',
-    
-    // Materials/Components Page
-    materialsManagement: 'Materials Management',
+    actions: 'Actions',
+    status: 'Status',
+    state: 'State',
+    notes: 'Notes',
+    description: 'Description',
+    date: 'Date',
+    time: 'Time',
+    from: 'From',
+    to: 'To',
     total: 'Total',
-    toOrder: 'To order',
-    ordered: 'Ordered',
-    codeOrDescription: 'Code or description...',
+    details: 'Details',
+    view: 'View',
+    download: 'Download',
+    upload: 'Upload',
+    export: 'Export',
+    import: 'Import',
+    back: 'Back',
+    next: 'Next',
+    previous: 'Previous',
+    create: 'Create',
+    update: 'Update',
+    assign: 'Assign',
+    unassign: 'Unassign',
+    select: 'Select',
+    selectAll: 'Select all',
+    deselectAll: 'Deselect all',
+    required: 'Required',
+    optional: 'Optional',
+    
+    // ==========================================
+    // PLANNING PAGE - CW Planning
+    // ==========================================
+    planningTitle: 'CW Planning',
+    planningSubtitle: 'Weekly activity planning',
+    assignToCW: 'Assign to CW',
+    assignMultiple: 'Assign Multiple',
+    week: 'Week',
+    currentWeek: 'Current week',
+    pastWeek: 'Past week',
+    futureWeek: 'Future week',
+    today: 'Today',
+    
+    // KPI Cards
+    planned: 'Planned',
+    plannedMale: 'Planned',
+    inProgress: 'In Progress',
+    completed: 'Completed',
+    completedMale: 'Completed',
+    problems: 'Problems',
+    activitiesPlanned: 'activities planned',
+    
+    // Filters
     discipline: 'Discipline',
+    squad: 'Squad',
+    allDisciplines: 'All disciplines',
+    allSquads: 'All squads',
+    allStatuses: 'All statuses',
+    
+    // Status columns
+    noActivity: 'No activity',
+    noProblem: 'No problems',
+    noPlannedActivity: 'No planned activity',
+    thisWeekNoActivity: 'This week has no activities yet. Assign components to start.',
+    assignFirstComponent: 'Assign first component',
+    
+    // Modal Assign to CW
+    assignToCWTitle: 'Assign to CW',
+    component: 'Component',
+    selectComponent: 'Select component...',
+    phase: 'Phase',
+    selectPhase: 'Select phase...',
+    action: 'Action',
+    actionPlaceholder: 'E.g. Erection, Fit-up, Welding...',
+    noSquadAssigned: 'No squad assigned',
+    priority: 'Priority (execution order)',
+    instructions: 'Instructions',
+    instructionsPlaceholder: 'Specific instructions for the field...',
+    
+    // Work Package specific
+    wpNotScheduled: 'Unscheduled WPs',
+    wpScheduled: 'Scheduled WPs',
+    scheduleWP: 'Schedule WP',
+    wpWithoutDates: 'Work Packages without dates',
+    
+    // ==========================================
+    // WORK PACKAGES PAGE
+    // ==========================================
+    workPackagesTitle: 'Work Packages',
+    workPackagesSubtitle: 'Organized work packages',
+    newWP: 'New WP',
+    importExcel: 'Import Excel',
+    wpCode: 'WP Code',
+    wpName: 'WP Name',
+    area: 'Area',
+    startDate: 'Start Date',
+    endDate: 'End Date',
+    estimatedHours: 'Estimated Hours',
+    actualHours: 'Actual Hours',
+    progressPercent: 'Progress %',
+    assignedTo: 'Assigned To',
+    components: 'Components',
+    phases: 'Phases',
+    comp: 'comp.',
+    
+    // ==========================================
+    // MATERIALS / COMPONENTS PAGE
+    // ==========================================
+    materialsManagement: 'Materials Management',
+    materialsSubtitle: 'Project components and materials',
+    toOrder: 'To Order',
+    ordered: 'Ordered',
+    delivered: 'Delivered',
+    installed: 'Installed',
+    codeOrDescription: 'Code or description...',
     type: 'Type',
     noMaterials: 'No materials',
     startAddingMaterials: 'Start adding materials',
+    componentCode: 'Component Code',
+    componentType: 'Component Type',
+    quantity: 'Quantity',
+    unit: 'Unit',
+    weight: 'Weight',
     
-    // Warehouse Page
+    // ==========================================
+    // WAREHOUSE PAGE
+    // ==========================================
     warehouseTitle: 'Warehouse',
-    warehouseDescription: 'Materials management and site shipments',
+    warehouseSubtitle: 'Materials management and site shipments',
     inWarehouse: 'In Warehouse',
     receivedToday: 'Received Today',
     shippedToday: 'Shipped Today',
     receiveMaterial: 'Receive Material',
     shipToSite: 'Ship to Site',
     inventory: 'Inventory',
-    scanOrEnterCode: 'Scan or enter the component code',
+    scanOrEnterCode: 'Scan or enter component code',
     enterComponentCode: 'Enter component code...',
     searchBtn: 'Search',
+    readyToShip: 'Ready to ship',
+    shipped: 'Shipped',
+    received: 'Received',
     
-    // Planning Page
-    planningTitle: 'CW Planning',
-    week: 'Week',
-    currentWeek: 'Current week',
-    pastWeek: 'Past week',
-    today: 'Today',
-    planned: 'Planned',
-    inProgress: 'In Progress',
-    completed: 'Completed',
-    problems: 'Problems',
+    // ==========================================
+    // FIELD / FOREMAN PAGE
+    // ==========================================
+    fieldTitle: 'Field',
+    fieldSubtitle: 'Field activity management',
+    todayActivities: "Today's activities",
+    pendingActivities: 'Pending activities',
+    completedActivities: 'Completed activities',
+    startActivity: 'Start activity',
+    completeActivity: 'Complete activity',
+    reportProblem: 'Report problem',
+    takePhoto: 'Take photo',
     
-    // Statistics
-    statisticsTitle: 'Statistics',
+    // ==========================================
+    // PROGRESS / AVANZAMENTO PAGE
+    // ==========================================
+    progressTitle: 'Progress',
+    progressSubtitle: 'Work progress monitoring',
+    overallProgress: 'Overall Progress',
+    byDiscipline: 'By Discipline',
+    byArea: 'By Area',
+    byWP: 'By Work Package',
+    behindSchedule: 'Behind schedule',
+    onSchedule: 'On schedule',
+    aheadSchedule: 'Ahead of schedule',
+    
+    // ==========================================
+    // TIMESHEET / RAPPORTINO PAGE
+    // ==========================================
+    timesheetTitle: 'Timesheet',
+    timesheetSubtitle: 'Daily timesheet',
+    dailyReport: 'Daily Report',
+    weeklyReport: 'Weekly Report',
     hoursWorked: 'Hours Worked',
+    overtime: 'Overtime',
+    regularHours: 'Regular Hours',
+    overtimeHours: 'Overtime Hours',
+    totalHours: 'Total Hours',
+    submitReport: 'Submit Report',
+    approveReport: 'Approve Report',
+    rejectReport: 'Reject Report',
+    draft: 'Draft',
+    submitted: 'Submitted',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    signature: 'Signature',
+    foremanSignature: 'Foreman Signature',
+    supervisorSignature: 'Supervisor Signature',
+    exportPDF: 'Export PDF',
+    
+    // ==========================================
+    // TEAM PAGE
+    // ==========================================
+    teamTitle: 'Team',
+    teamSubtitle: 'Project team management',
+    members: 'Members',
+    addMember: 'Add Member',
+    removeMember: 'Remove Member',
+    role: 'Role',
+    email: 'Email',
+    phone: 'Phone',
+    company: 'Company',
+    activeMembers: 'Active Members',
+    
+    // ==========================================
+    // CALENDAR PAGE
+    // ==========================================
+    calendarTitle: 'Calendar',
+    calendarSubtitle: 'View events and deadlines',
+    event: 'Event',
+    events: 'Events',
+    addEvent: 'Add Event',
+    noEvents: 'No events',
+    
+    // ==========================================
+    // VACATION / FERIE PAGE
+    // ==========================================
+    vacationTitle: 'Vacation & Leave',
+    vacationSubtitle: 'Vacation and leave management',
+    requestVacation: 'Request Vacation',
+    vacationDays: 'Vacation Days',
+    remainingDays: 'Remaining Days',
+    usedDays: 'Used Days',
+    pendingRequests: 'Pending Requests',
+    approvedRequests: 'Approved Requests',
+    vacationType: 'Type',
+    vacation: 'Vacation',
+    permit: 'Leave',
+    sickLeave: 'Sick Leave',
+    
+    // ==========================================
+    // CHECK-IN PAGE
+    // ==========================================
+    checkInTitle: 'Check-in',
+    checkInSubtitle: 'Register your attendance',
+    checkInNow: 'Check-in Now',
+    checkOutNow: 'Check-out Now',
+    checkedIn: 'Checked in',
+    checkedOut: 'Checked out',
+    notCheckedIn: 'Not registered',
+    locationRequired: 'Location required',
+    gpsError: 'GPS Error',
+    outsideArea: 'Outside work area',
+    
+    // ==========================================
+    // STATISTICS PAGE
+    // ==========================================
+    statisticsTitle: 'Statistics',
+    statisticsSubtitle: 'Data analysis and KPIs',
     hoursBudget: 'Hours Budget',
     productivity: 'Productivity',
     trend: 'Trend',
     forecast: 'Forecast',
+    performance: 'Performance',
+    efficiency: 'Efficiency',
     
-    // Dates
+    // ==========================================
+    // DASHBOARD PAGE
+    // ==========================================
+    dashboardTitle: 'Dashboard',
+    dashboardSubtitle: 'General overview',
+    overview: 'Overview',
+    recentActivity: 'Recent Activity',
+    alerts: 'Alerts',
+    
+    // ==========================================
+    // TRANSFERS PAGE
+    // ==========================================
+    transfersTitle: 'Transfers',
+    transfersSubtitle: 'Personnel transfer management',
+    newTransfer: 'New Transfer',
+    fromProject: 'From Project',
+    toProject: 'To Project',
+    transferDate: 'Transfer Date',
+    
+    // ==========================================
+    // SETTINGS PAGE
+    // ==========================================
+    settingsTitle: 'Settings',
+    settingsSubtitle: 'Project configuration',
+    projectSettings: 'Project Settings',
+    userSettings: 'User Settings',
+    notificationSettings: 'Notification Settings',
+    language: 'Language',
+    theme: 'Theme',
+    
+    // ==========================================
+    // IMPEDIMENTS / BLOCCHI
+    // ==========================================
+    impedimentsTitle: 'Impediments',
+    impedimentsSubtitle: 'Blocks and issues management',
+    newImpediment: 'New Impediment',
+    impedimentType: 'Impediment Type',
+    severity: 'Severity',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    critical: 'Critical',
+    open: 'Open',
+    resolved: 'Resolved',
+    escalated: 'Escalated',
+    
+    // ==========================================
+    // DATES
+    // ==========================================
     monday: 'Monday',
     tuesday: 'Tuesday',
     wednesday: 'Wednesday',
@@ -268,6 +818,15 @@ const translations = {
     friday: 'Friday',
     saturday: 'Saturday',
     sunday: 'Sunday',
+    
+    // Short days
+    mon: 'Mon',
+    tue: 'Tue',
+    wed: 'Wed',
+    thu: 'Thu',
+    fri: 'Fri',
+    sat: 'Sat',
+    sun: 'Sun',
     
     // Months
     january: 'January',
@@ -282,6 +841,20 @@ const translations = {
     october: 'October',
     november: 'November',
     december: 'December',
+    
+    // Short months
+    jan: 'Jan',
+    feb: 'Feb',
+    mar: 'Mar',
+    apr: 'Apr',
+    mayShort: 'May',
+    jun: 'Jun',
+    jul: 'Jul',
+    aug: 'Aug',
+    sep: 'Sep',
+    oct: 'Oct',
+    nov: 'Nov',
+    dec: 'Dec',
   }
 }
 
