@@ -296,6 +296,231 @@ export default function RapportinoPage() {
   }
   const wpStats = countWPStats()
 
+  // ═══════════════════════════════════════════════════════════════
+  // EXPORT PDF - Genera documento stampabile
+  // ═══════════════════════════════════════════════════════════════
+  const handleExportPDF = () => {
+    const printWindow = window.open('', '_blank')
+    
+    const dataFormattata = new Date(selectedDate).toLocaleDateString('it-IT', {
+      weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+    })
+    
+    const cw = getWeekNumber(new Date(selectedDate))
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Rapportino ${selectedDate} - ${progetto?.nome}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; padding: 20px; font-size: 11px; color: #333; }
+          
+          .header { border-bottom: 3px solid #2563eb; padding-bottom: 15px; margin-bottom: 20px; }
+          .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
+          .header h1 { font-size: 24px; color: #1e40af; margin-bottom: 5px; }
+          .header .progetto { font-size: 16px; color: #666; }
+          .header .data-box { text-align: right; }
+          .header .data { font-size: 18px; font-weight: bold; }
+          .header .cw { font-size: 12px; color: #666; }
+          .header .stato { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; margin-top: 5px; }
+          .stato-bozza { background: #f3f4f6; color: #374151; }
+          .stato-inviato { background: #dbeafe; color: #1d4ed8; }
+          .stato-approvato { background: #d1fae5; color: #047857; }
+          .stato-rifiutato { background: #fee2e2; color: #b91c1c; }
+          
+          .section { margin-bottom: 25px; }
+          .section-title { font-size: 14px; font-weight: bold; color: #1e40af; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; }
+          
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background: #f8fafc; font-weight: bold; font-size: 10px; text-transform: uppercase; color: #64748b; }
+          tr:nth-child(even) { background: #f9fafb; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .font-bold { font-weight: bold; }
+          .text-green { color: #047857; }
+          .text-amber { color: #d97706; }
+          
+          .totali-row { background: #e0f2fe !important; font-weight: bold; }
+          
+          .firme-section { display: flex; gap: 40px; margin-top: 30px; }
+          .firma-box { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 15px; }
+          .firma-box h4 { font-size: 12px; color: #666; margin-bottom: 10px; }
+          .firma-img { max-height: 60px; object-fit: contain; }
+          .firma-data { font-size: 10px; color: #999; margin-top: 5px; }
+          .firma-empty { height: 60px; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; color: #999; font-size: 10px; }
+          
+          .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 10px; color: #999; text-align: center; }
+          
+          .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px; }
+          .summary-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center; }
+          .summary-box .value { font-size: 24px; font-weight: bold; color: #1e40af; }
+          .summary-box .label { font-size: 10px; color: #64748b; margin-top: 3px; }
+          
+          @media print {
+            body { padding: 10px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <!-- HEADER -->
+        <div class="header">
+          <div class="header-top">
+            <div>
+              <h1>📝 RAPPORTINO GIORNALIERO</h1>
+              <div class="progetto">${progetto?.nome || 'Progetto'}</div>
+            </div>
+            <div class="data-box">
+              <div class="data">${dataFormattata}</div>
+              <div class="cw">Settimana CW${String(cw).padStart(2, '0')}</div>
+              ${rapportino ? `<span class="stato stato-${rapportino.stato}">${rapportino.stato.toUpperCase()}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        
+        <!-- RIEPILOGO -->
+        <div class="summary-grid">
+          <div class="summary-box">
+            <div class="value">${attivita.length}</div>
+            <div class="label">Attività</div>
+          </div>
+          <div class="summary-box">
+            <div class="value">${totaleOre.toFixed(1)}h</div>
+            <div class="label">Ore Lavorate</div>
+          </div>
+          <div class="summary-box">
+            <div class="value">${presenze.length}</div>
+            <div class="label">Presenze</div>
+          </div>
+          <div class="summary-box">
+            <div class="value">${totaleOrePresenze.toFixed(1)}h</div>
+            <div class="label">Ore Presenze</div>
+          </div>
+        </div>
+        
+        <!-- ATTIVITÀ -->
+        <div class="section">
+          <div class="section-title">📋 ATTIVITÀ DEL GIORNO</div>
+          ${attivita.length === 0 ? '<p style="color:#999;padding:10px;">Nessuna attività registrata</p>' : `
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:100px">Centro Costo</th>
+                  <th>Descrizione</th>
+                  <th style="width:60px" class="text-right">Ore</th>
+                  <th style="width:80px" class="text-right">Quantità</th>
+                  <th style="width:80px" class="text-right">Resa</th>
+                  <th style="width:120px">Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${attivita.map(att => `
+                  <tr>
+                    <td><strong>${att.centro_costo?.codice || '-'}</strong></td>
+                    <td>${att.descrizione}</td>
+                    <td class="text-right font-bold">${att.ore}h</td>
+                    <td class="text-right">${att.quantita ? `${att.quantita} ${att.unita_misura || ''}` : '<span class="text-amber">Economia</span>'}</td>
+                    <td class="text-right ${att.quantita ? 'text-green' : ''}">${att.quantita ? `${(att.quantita / att.ore).toFixed(2)} /h` : '-'}</td>
+                    <td style="font-size:10px;color:#666;">${att.note || ''}</td>
+                  </tr>
+                `).join('')}
+                <tr class="totali-row">
+                  <td colspan="2"><strong>TOTALE</strong></td>
+                  <td class="text-right"><strong>${totaleOre.toFixed(1)}h</strong></td>
+                  <td colspan="3"></td>
+                </tr>
+              </tbody>
+            </table>
+          `}
+        </div>
+        
+        <!-- PRESENZE -->
+        <div class="section">
+          <div class="section-title">👷 PRESENZE (${presenze.length} persone)</div>
+          ${presenze.length === 0 ? '<p style="color:#999;padding:10px;">Nessuna presenza registrata</p>' : `
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th style="width:80px" class="text-center">Entrata</th>
+                  <th style="width:80px" class="text-center">Uscita</th>
+                  <th style="width:60px" class="text-right">Ore Ord.</th>
+                  <th style="width:60px" class="text-right">Ore Str.</th>
+                  <th style="width:60px" class="text-right">Totale</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${presenze.map(p => {
+                  const oreCalc = p.ore_ordinarie || p.ore_straordinarie 
+                    ? (parseFloat(p.ore_ordinarie || 0) + parseFloat(p.ore_straordinarie || 0))
+                    : (p.ora_checkin && p.ora_checkout 
+                        ? ((new Date('2000-01-01T' + p.ora_checkout) - new Date('2000-01-01T' + p.ora_checkin)) / 3600000) 
+                        : 0)
+                  return `
+                    <tr>
+                      <td><strong>${p.persona?.nome || ''} ${p.persona?.cognome || ''}</strong></td>
+                      <td class="text-center">${p.ora_checkin?.substring(0,5) || p.ora_entrata || '-'}</td>
+                      <td class="text-center">${p.ora_checkout?.substring(0,5) || p.ora_uscita || '-'}</td>
+                      <td class="text-right">${p.ore_ordinarie || '-'}</td>
+                      <td class="text-right">${p.ore_straordinarie || '-'}</td>
+                      <td class="text-right font-bold">${oreCalc.toFixed(1)}h</td>
+                    </tr>
+                  `
+                }).join('')}
+                <tr class="totali-row">
+                  <td colspan="5"><strong>TOTALE ORE PRESENZE</strong></td>
+                  <td class="text-right"><strong>${totaleOrePresenze.toFixed(1)}h</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          `}
+        </div>
+        
+        <!-- FIRME -->
+        ${rapportino ? `
+          <div class="section">
+            <div class="section-title">✍️ FIRME</div>
+            <div class="firme-section">
+              <div class="firma-box">
+                <h4>👷 Caposquadra</h4>
+                ${rapportino.firma_caposquadra 
+                  ? `<img src="${rapportino.firma_caposquadra}" class="firma-img" alt="Firma CS" />
+                     <div class="firma-data">Firmato: ${rapportino.firma_caposquadra_data ? new Date(rapportino.firma_caposquadra_data).toLocaleString('it-IT') : ''}</div>`
+                  : '<div class="firma-empty">In attesa di firma</div>'
+                }
+              </div>
+              <div class="firma-box">
+                <h4>📋 Supervisore</h4>
+                ${rapportino.firma_supervisore 
+                  ? `<img src="${rapportino.firma_supervisore}" class="firma-img" alt="Firma Sup" />
+                     <div class="firma-data">Firmato: ${rapportino.firma_supervisore_data ? new Date(rapportino.firma_supervisore_data).toLocaleString('it-IT') : ''}</div>`
+                  : '<div class="firma-empty">In attesa di firma</div>'
+                }
+              </div>
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- FOOTER -->
+        <div class="footer">
+          <p>Documento generato automaticamente da Presenze Cantiere - ${new Date().toLocaleString('it-IT')}</p>
+          <p>${progetto?.nome || ''}</p>
+        </div>
+        
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `
+    
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }
+
   return (
     <div className="p-4 lg:p-8">
       {/* Modal Firma */}
@@ -315,6 +540,15 @@ export default function RapportinoPage() {
         <div className="flex items-center gap-3">
           <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="px-4 py-2 border rounded-xl" />
           {rapportino && <span className={`px-3 py-1 rounded-full text-sm font-medium ${statoColors[rapportino.stato]}`}>{rapportino.stato}</span>}
+          {/* Pulsante Export PDF */}
+          {(attivita.length > 0 || presenze.length > 0) && (
+            <button
+              onClick={handleExportPDF}
+              className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 flex items-center gap-2 text-sm font-medium"
+            >
+              📄 PDF
+            </button>
+          )}
         </div>
       </div>
 
