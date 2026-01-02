@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
+import ImpedimentiList from './ImpedimentiList'
 
 export default function AvanzamentoPage() {
   const { progetto } = useAuth()
@@ -15,11 +16,13 @@ export default function AvanzamentoPage() {
     azioni: [],
     componenti: [],
     squadre: [],
-    discipline: []
+    discipline: [],
+    impedimenti: []
   })
   const [stats, setStats] = useState({})
   const [selectedPeriod, setSelectedPeriod] = useState('all') // all, month, week
   const [selectedSquadra, setSelectedSquadra] = useState('')
+  const [showImpedimenti, setShowImpedimenti] = useState(false)
 
   // Helper settimana
   function getWeekNumber(date) {
@@ -108,16 +111,24 @@ export default function AvanzamentoPage() {
         .eq('progetto_id', progettoId)
         .eq('attivo', true)
 
+      // Impedimenti aperti
+      const { data: impedimentiData } = await supabase
+        .from('impedimenti')
+        .select('*')
+        .eq('progetto_id', progettoId)
+        .eq('risolto', false)
+
       setData({
         workPackages: enrichedWP,
         azioni: azioniData || [],
         componenti: compData || [],
         squadre: squadreData || [],
-        discipline: discData || []
+        discipline: discData || [],
+        impedimenti: impedimentiData || []
       })
 
       // Calcola statistiche
-      calculateStats(enrichedWP, azioniData || [], compData || [])
+      calculateStats(enrichedWP, azioniData || [], compData || [], impedimentiData || [])
 
     } catch (error) {
       console.error('Errore caricamento:', error)
@@ -126,7 +137,7 @@ export default function AvanzamentoPage() {
     }
   }, [progettoId])
 
-  const calculateStats = (wps, azioni, componenti) => {
+  const calculateStats = (wps, azioni, componenti, impedimenti = []) => {
     // WP stats
     const wpTotale = wps.length
     const wpPianificati = wps.filter(w => w.stato === 'pianificato').length
@@ -151,6 +162,11 @@ export default function AvanzamentoPage() {
     const azioniInCorso = azioni.filter(a => a.stato === 'in_corso').length
     const azioniCompletate = azioni.filter(a => a.stato === 'completato').length
 
+    // Impedimenti stats
+    const impedimentiAperti = impedimenti.length
+    const impedimentiCritici = impedimenti.filter(i => i.urgenza === 'critica').length
+    const impedimentiAlti = impedimenti.filter(i => i.urgenza === 'alta').length
+
     // Per squadra
     const perSquadra = {}
     wps.forEach(wp => {
@@ -173,6 +189,7 @@ export default function AvanzamentoPage() {
       avanzamentoMedio,
       componenti: { totali: compTotali, inWP: compInWP, completati: compCompletati, liberi: compLiberi },
       azioni: { totale: azioniTotale, daFare: azioniDaFare, inCorso: azioniInCorso, completate: azioniCompletate },
+      impedimenti: { aperti: impedimentiAperti, critici: impedimentiCritici, alti: impedimentiAlti },
       perSquadra
     })
   }
@@ -289,7 +306,7 @@ export default function AvanzamentoPage() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
           <div className="bg-white/20 rounded-xl p-4 text-center">
             <p className="text-4xl font-bold">{stats.avanzamentoMedio || 0}%</p>
             <p className="text-sm text-white/80 mt-1">{language === 'it' ? 'Avanzamento Medio' : 'Avg Progress'}</p>
@@ -305,6 +322,26 @@ export default function AvanzamentoPage() {
           <div className="bg-white/20 rounded-xl p-4 text-center">
             <p className="text-4xl font-bold">{stats.azioni?.inCorso || 0}</p>
             <p className="text-sm text-white/80 mt-1">{language === 'it' ? 'Azioni in Corso' : 'Actions In Progress'}</p>
+          </div>
+          {/* KPI BLOCCATI - Cliccabile */}
+          <div 
+            onClick={() => setShowImpedimenti(true)}
+            className={`rounded-xl p-4 text-center cursor-pointer transition-all hover:scale-105 ${
+              (stats.impedimenti?.aperti || 0) > 0 
+                ? 'bg-red-500 hover:bg-red-600' 
+                : 'bg-white/20 hover:bg-white/30'
+            }`}
+          >
+            <p className="text-4xl font-bold">
+              {stats.impedimenti?.aperti || 0}
+              {(stats.impedimenti?.critici || 0) > 0 && (
+                <span className="text-lg ml-1">🔴</span>
+              )}
+            </p>
+            <p className="text-sm text-white/80 mt-1 flex items-center justify-center gap-1">
+              🚫 {language === 'it' ? 'Bloccati' : 'Blocked'}
+              <span className="text-xs">→</span>
+            </p>
           </div>
         </div>
       </div>
@@ -486,6 +523,13 @@ export default function AvanzamentoPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal Lista Impedimenti */}
+      {showImpedimenti && (
+        <ImpedimentiList
+          onClose={() => { setShowImpedimenti(false); loadData() }}
+        />
+      )}
     </div>
   )
 }
