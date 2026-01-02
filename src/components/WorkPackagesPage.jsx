@@ -273,27 +273,45 @@ export default function WorkPackagesPage() {
       }
       
       // Salva componenti - SEMPRE delete poi insert
-      await supabase.from('work_package_componenti').delete().eq('work_package_id', wpId)
+      console.log('Salvando componenti:', selectedComponents.length, 'per WP:', wpId)
+      const { error: delCompError } = await supabase.from('work_package_componenti').delete().eq('work_package_id', wpId)
+      if (delCompError) {
+        console.error('Errore delete componenti:', delCompError)
+      }
+      
       if (selectedComponents.length > 0) {
         const compRows = selectedComponents.map((cId, idx) => ({
           work_package_id: wpId,
           componente_id: cId,
           ordine: idx
         }))
+        console.log('Inserendo componenti:', compRows)
         const { error: compError } = await supabase.from('work_package_componenti').insert(compRows)
-        if (compError) console.error('Errore salvataggio componenti:', compError)
+        if (compError) {
+          console.error('Errore salvataggio componenti:', compError)
+          throw new Error(`Errore salvataggio componenti: ${compError.message}`)
+        }
       }
       
       // Salva fasi - SEMPRE delete poi insert
-      await supabase.from('work_package_fasi').delete().eq('work_package_id', wpId)
+      console.log('Salvando fasi:', selectedFasi.length, 'per WP:', wpId)
+      const { error: delFasiError } = await supabase.from('work_package_fasi').delete().eq('work_package_id', wpId)
+      if (delFasiError) {
+        console.error('Errore delete fasi:', delFasiError)
+      }
+      
       if (selectedFasi.length > 0) {
         const fasiRows = selectedFasi.map((fId, idx) => ({
           work_package_id: wpId,
           fase_workflow_id: fId,
           ordine: idx
         }))
+        console.log('Inserendo fasi:', fasiRows)
         const { error: fasiError } = await supabase.from('work_package_fasi').insert(fasiRows)
-        if (fasiError) console.error('Errore salvataggio fasi:', fasiError)
+        if (fasiError) {
+          console.error('Errore salvataggio fasi:', fasiError)
+          throw new Error(`Errore salvataggio fasi: ${fasiError.message}`)
+        }
       }
       
       setMessage({ type: 'success', text: language === 'it' ? 'Salvato!' : 'Saved!' })
