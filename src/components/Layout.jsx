@@ -58,8 +58,6 @@ export default function Layout({ children }) {
       emoji: '🏗️',
       items: [
         { path: '/materiali', labelKey: 'materials', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
-        { path: '/work-packages', labelKey: 'workPackages', emoji: '📋', minRole: 'foreman', specialAccess: 'work-packages' },
-        { path: '/avanzamento', labelKey: 'progress', emoji: '📊', minRole: 'foreman', specialAccess: 'avanzamento' },
         { path: '/pianificazione', labelKey: 'planning', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
         { path: '/foreman', labelKey: 'field', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
         { path: '/ore-componenti', labelKey: 'workHours', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
@@ -75,7 +73,7 @@ export default function Layout({ children }) {
         { path: '/trasferimenti', labelKey: 'transfers', emoji: '🔄', minRole: 'foreman' },
         { path: '/statistiche', labelKey: 'statistics', emoji: '📊', minRole: 'supervisor' },
         { path: '/gantt', labelKey: 'gantt', emoji: '📅', minRole: 'supervisor' },
-        { path: '/ai-insights', labelKey: 'aiInsights', emoji: '🤖', minRole: 'supervisor' },
+        { path: '/ai-insights', labelKey: 'aiInsights', emoji: '📑', minRole: 'supervisor' },
         { path: '/dashboard', labelKey: 'dashboard', emoji: '📈', minRole: 'supervisor' },
         { path: '/impostazioni', labelKey: 'settings', emoji: '⚙️', minRole: 'admin' },
       ]
