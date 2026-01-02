@@ -146,25 +146,38 @@ export default function WorkPackagesPage() {
     loadCategorie()
   }, [filters.disciplina])
 
-  // Load componenti
+  // Load componenti - carica anche quando si apre il form per mostrare i selezionati
   useEffect(() => {
     const loadComponenti = async () => {
-      if (!progettoId || (!showComponentSelector && !showAzioneComponentSelector)) return
+      if (!progettoId || (!showComponentSelector && !showAzioneComponentSelector && !showForm)) return
       let query = supabase.from('componenti').select(`*, tipo:tipi_componente(id, nome, prefisso_codice), disciplina:discipline(id, nome)`).eq('progetto_id', progettoId)
       if (filters.disciplina) query = query.eq('disciplina_id', filters.disciplina)
       if (filters.categoria) query = query.eq('tipo_componente_id', filters.categoria)
       if (filters.search) query = query.ilike('codice', `%${filters.search}%`)
       const { data } = await query.order('codice').limit(500)
       
-      if (filters.soloNonAssegnati && data) {
+      if (filters.soloNonAssegnati && data && (showComponentSelector || showAzioneComponentSelector)) {
         const { data: assignedWP } = await supabase.from('work_package_componenti').select('componente_id')
         const { data: assignedAz } = await supabase.from('azioni_componenti').select('componente_id')
         const assignedIds = new Set([...((assignedWP || []).map(a => a.componente_id)), ...((assignedAz || []).map(a => a.componente_id))])
-        setComponenti(data.filter(c => !assignedIds.has(c.id)))
+        // Mantieni i componenti già selezionati nel WP corrente
+        setComponenti(data.filter(c => !assignedIds.has(c.id) || selectedComponents.includes(c.id)))
       } else { setComponenti(data || []) }
     }
     loadComponenti()
-  }, [progettoId, filters, showComponentSelector, showAzioneComponentSelector])
+  }, [progettoId, filters, showComponentSelector, showAzioneComponentSelector, showForm])
+
+  // Funzione per calcolare numero settimana ISO da una data
+  const getWeekNumber = (dateStr) => {
+    const d = new Date(dateStr)
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7)
+    const week1 = new Date(d.getFullYear(), 0, 4)
+    return {
+      year: d.getFullYear(),
+      week: 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7)
+    }
+  }
 
   // === SALVA WP ===
   const handleSaveWP = async () => {
@@ -204,6 +217,27 @@ export default function WorkPackagesPage() {
         if (error) throw new Error(`Errore fasi: ${error.message}`)
       }
       
+      // === ASSEGNAZIONE AUTOMATICA ALLA CW ===
+      // Se c'è una data di inizio, assegna automaticamente alla CW corrispondente
+      // Prima rimuovi eventuali pianificazioni esistenti per questo WP
+      await supabase.from('pianificazione_cw').delete().eq('work_package_id', wpId).is('componente_id', null)
+      
+      if (form.data_inizio_pianificata) {
+        const { year, week } = getWeekNumber(form.data_inizio_pianificata)
+        const pianificazionePayload = {
+          progetto_id: progettoId,
+          work_package_id: wpId,
+          componente_id: null,
+          anno: year,
+          settimana: week,
+          stato: 'pianificato',
+          squadra_id: form.squadra_id || null,
+          priorita: form.priorita || 0
+        }
+        const { error: pianError } = await supabase.from('pianificazione_cw').insert(pianificazionePayload)
+        if (pianError) console.warn('Errore pianificazione automatica:', pianError)
+      }
+      
       setMessage({ type: 'success', text: 'Salvato!' }); setShowForm(false); resetWPForm()
       setWorkPackages(await loadWorkPackages())
     } catch (error) { setMessage({ type: 'error', text: error.message }) }
@@ -224,6 +258,8 @@ export default function WorkPackagesPage() {
 
   const handleDeleteWP = async (wp) => {
     if (!confirm(`Eliminare WP "${wp.codice}"?`)) return
+    // Rimuovi la pianificazione automatica
+    await supabase.from('pianificazione_cw').delete().eq('work_package_id', wp.id)
     // Rimuovi il riferimento work_package_id dai componenti
     await supabase.from('componenti').update({ work_package_id: null }).eq('work_package_id', wp.id)
     await supabase.from('work_packages').delete().eq('id', wp.id)
