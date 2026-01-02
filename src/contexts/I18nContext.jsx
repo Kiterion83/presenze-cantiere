@@ -28,6 +28,8 @@ const translations = {
     
     // Menu Items - Construction
     materials: 'Materiali',
+    workPackages: 'Work Packages',
+    progress: 'Avanzamento',
     planning: 'Pianificazione',
     field: 'Campo',
     workHours: 'Ore Lavoro',
@@ -167,6 +169,8 @@ const translations = {
     
     // Menu Items - Construction
     materials: 'Materials',
+    workPackages: 'Work Packages',
+    progress: 'Progress',
     planning: 'Planning',
     field: 'Field',
     workHours: 'Work Hours',
