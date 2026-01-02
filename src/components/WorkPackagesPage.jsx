@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
 import WorkPackageDetail from './WorkPackageDetail'
+import ImportWPExcel from './ImportWPExcel'
 
 export default function WorkPackagesPage() {
   const { progetto } = useAuth()
@@ -12,6 +13,9 @@ export default function WorkPackagesPage() {
 
   // Tab attivo: 'wp' o 'azioni'
   const [activeTab, setActiveTab] = useState('wp')
+  
+  // Import Excel
+  const [showImport, setShowImport] = useState(false)
 
   // === STATI WORK PACKAGES ===
   const [workPackages, setWorkPackages] = useState([])
@@ -314,9 +318,16 @@ export default function WorkPackagesPage() {
             <h1 className="text-2xl font-bold">{activeTab === 'wp' ? '📋 Work Packages' : '⚡ Azioni Parallele'}</h1>
             <p className="text-white/80 mt-1">{activeTab === 'wp' ? (language === 'it' ? 'Pacchetti di lavoro organizzati' : 'Organized work packages') : (language === 'it' ? 'Attività ad-hoc fuori dai WP' : 'Ad-hoc activities outside WP')}</p>
           </div>
-          <button onClick={() => activeTab === 'wp' ? (resetWPForm(), setShowForm(true)) : (resetAzioneForm(), setShowAzioneForm(true))} className="px-4 py-2 bg-white text-blue-600 font-medium rounded-xl hover:bg-blue-50">
-            + {activeTab === 'wp' ? (language === 'it' ? 'Nuovo WP' : 'New WP') : (language === 'it' ? 'Nuova Azione' : 'New Action')}
-          </button>
+          <div className="flex gap-2">
+            {activeTab === 'wp' && (
+              <button onClick={() => setShowImport(true)} className="px-4 py-2 bg-white/20 text-white font-medium rounded-xl hover:bg-white/30">
+                📥 {language === 'it' ? 'Import Excel' : 'Import Excel'}
+              </button>
+            )}
+            <button onClick={() => activeTab === 'wp' ? (resetWPForm(), setShowForm(true)) : (resetAzioneForm(), setShowAzioneForm(true))} className="px-4 py-2 bg-white text-blue-600 font-medium rounded-xl hover:bg-blue-50">
+              + {activeTab === 'wp' ? (language === 'it' ? 'Nuovo WP' : 'New WP') : (language === 'it' ? 'Nuova Azione' : 'New Action')}
+            </button>
+          </div>
         </div>
         
         {/* Tabs */}
@@ -697,6 +708,17 @@ export default function WorkPackagesPage() {
 
       {/* Modal WP Detail */}
       {showDetail && <WorkPackageDetail wp={showDetail} onClose={() => setShowDetail(null)} onUpdate={async () => setWorkPackages(await loadWorkPackages())} language={language} />}
+
+      {/* Modal Import Excel */}
+      {showImport && (
+        <ImportWPExcel
+          onClose={() => setShowImport(false)}
+          onSuccess={async () => setWorkPackages(await loadWorkPackages())}
+          discipline={discipline}
+          fasiWorkflow={fasiWorkflow}
+          squadre={squadre}
+        />
+      )}
     </div>
   )
 }
