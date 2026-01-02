@@ -88,14 +88,20 @@ export default function CheckinPage() {
       setPresenza(presenzaData)
       
       // Carica tutte le aree disponibili per il progetto
-      const { data: areeData } = await supabase
+      // Non filtrare per 'attiva' se il campo potrebbe non esistere
+      const { data: areeData, error: areeError } = await supabase
         .from('aree_lavoro')
         .select('*')
         .eq('progetto_id', progetto.id)
-        .eq('attiva', true)
         .order('nome')
       
-      setAreeDisponibili(areeData || [])
+      if (areeError) {
+        console.error('Errore caricamento aree:', areeError)
+      }
+      
+      // Filtra solo se il campo attiva esiste e è false
+      const areeFiltrate = (areeData || []).filter(a => a.attiva !== false)
+      setAreeDisponibili(areeFiltrate)
       
       // Pre-seleziona area dall'assegnazione se disponibile
       if (assegnazione?.area_lavoro_id) {
