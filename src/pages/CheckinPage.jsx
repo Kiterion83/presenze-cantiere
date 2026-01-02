@@ -319,13 +319,37 @@ export default function CheckinPage() {
     console.log('QR Code rilevato:', code)
     stopQrScanner()
     
+    let searchCode = code
+    let searchAreaId = null
+    
+    // Prova a parsare come JSON (formato: {"code":"QR-XXX","area":"uuid",...})
+    try {
+      const parsed = JSON.parse(code)
+      if (parsed.code) searchCode = parsed.code
+      if (parsed.area) searchAreaId = parsed.area
+      console.log('QR JSON parsed:', parsed)
+    } catch (e) {
+      // Non è JSON, usa il codice così com'è
+      console.log('QR non è JSON, uso raw:', code)
+    }
+    
     // Cerca area corrispondente
-    const areaMatch = areeDisponibili.find(a => 
-      a.qr_code === code || 
-      a.codice === code ||
-      a.nome.toLowerCase() === code.toLowerCase() ||
-      a.id === code
-    )
+    let areaMatch = null
+    
+    // Prima cerca per ID area (dal JSON)
+    if (searchAreaId) {
+      areaMatch = areeDisponibili.find(a => a.id === searchAreaId)
+    }
+    
+    // Se non trovato, cerca per qr_code o codice
+    if (!areaMatch) {
+      areaMatch = areeDisponibili.find(a => 
+        a.qr_code === searchCode || 
+        a.codice === searchCode ||
+        a.nome.toLowerCase() === searchCode.toLowerCase() ||
+        a.id === searchCode
+      )
+    }
     
     if (areaMatch) {
       setSelectedAreaId(areaMatch.id)
@@ -336,7 +360,7 @@ export default function CheckinPage() {
         ottieniPosizione()
       }
     } else {
-      setQrError(`Codice "${code}" non corrisponde a nessuna area configurata.`)
+      setQrError(`Codice "${searchCode}" non corrisponde a nessuna area configurata.`)
       setQrSuccess(null)
     }
   }
