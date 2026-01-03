@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
-import { supabase } from '../supabase'
+import { supabase } from '../lib/supabase'
 
 export default function TestPackagesPage() {
   const { progettoId, progetto, isAtLeast } = useAuth()
