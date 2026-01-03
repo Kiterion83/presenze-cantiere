@@ -3,6 +3,104 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n, LanguageSwitch } from '../contexts/I18nContext'
 
+// === ICONE SVG CUSTOM ===
+const IconDashboard = ({ className = "w-5 h-5" }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="6" width="56" height="40" rx="4" fill="#E5E7EB" stroke="currentColor" strokeWidth="2.5"/>
+    <rect x="8" y="10" width="48" height="32" fill="#F3F4F6"/>
+    <circle cx="22" cy="26" r="10" fill="#FCD34D" stroke="currentColor" strokeWidth="2"/>
+    <path d="M22 16 A10 10 0 0 1 32 26 L22 26 Z" fill="#3B82F6" stroke="currentColor" strokeWidth="2"/>
+    <path d="M22 26 L32 26 A10 10 0 0 1 22 36 Z" fill="#EF4444" stroke="currentColor" strokeWidth="2"/>
+    <rect x="38" y="30" width="5" height="8" fill="currentColor" rx="1"/>
+    <rect x="44" y="24" width="5" height="14" fill="#06B6D4" rx="1"/>
+    <rect x="50" y="18" width="5" height="20" fill="#10B981" rx="1"/>
+    <rect x="26" y="46" width="12" height="4" fill="#9CA3AF" stroke="currentColor" strokeWidth="2"/>
+    <rect x="20" y="50" width="24" height="6" rx="2" fill="#6B7280" stroke="currentColor" strokeWidth="2"/>
+  </svg>
+)
+
+const IconGantt = ({ className = "w-5 h-5" }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="4" width="56" height="56" rx="4" fill="#F3F4F6" stroke="currentColor" strokeWidth="2.5"/>
+    <rect x="4" y="4" width="56" height="12" rx="4" fill="#8B5CF6"/>
+    <rect x="4" y="12" width="56" height="4" fill="#8B5CF6"/>
+    <circle cx="14" cy="24" r="4" fill="#06B6D4" stroke="currentColor" strokeWidth="2"/>
+    <rect x="22" y="21" width="8" height="6" fill="#0D9488" stroke="currentColor" strokeWidth="2"/>
+    <rect x="30" y="21" width="14" height="6" fill="#14B8A6" stroke="currentColor" strokeWidth="2"/>
+    <circle cx="14" cy="36" r="4" fill="#3B82F6" stroke="currentColor" strokeWidth="2"/>
+    <rect x="30" y="33" width="12" height="6" fill="#60A5FA" stroke="currentColor" strokeWidth="2"/>
+    <rect x="42" y="33" width="10" height="6" fill="#0EA5E9" stroke="currentColor" strokeWidth="2"/>
+    <circle cx="14" cy="48" r="4" fill="#FBBF24" stroke="currentColor" strokeWidth="2"/>
+    <rect x="38" y="45" width="8" height="6" fill="#F59E0B" stroke="currentColor" strokeWidth="2"/>
+    <rect x="46" y="45" width="12" height="6" fill="#FCD34D" stroke="currentColor" strokeWidth="2"/>
+  </svg>
+)
+
+const IconAvanzamento = ({ className = "w-5 h-5" }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="54" width="56" height="6" rx="2" fill="#475569" stroke="currentColor" strokeWidth="2"/>
+    <rect x="8" y="44" width="10" height="10" fill="#60A5FA" stroke="currentColor" strokeWidth="2" rx="2"/>
+    <rect x="20" y="36" width="10" height="18" fill="#60A5FA" stroke="currentColor" strokeWidth="2" rx="2"/>
+    <rect x="32" y="26" width="10" height="28" fill="#60A5FA" stroke="currentColor" strokeWidth="2" rx="2"/>
+    <rect x="44" y="18" width="10" height="36" fill="#60A5FA" stroke="currentColor" strokeWidth="2" rx="2"/>
+    <path d="M12 42 L50 12" stroke="#475569" strokeWidth="3" strokeLinecap="round"/>
+    <polygon points="54,8 46,12 50,18" fill="#475569"/>
+    <circle cx="18" cy="18" r="12" fill="#E0F2FE" stroke="currentColor" strokeWidth="2.5"/>
+    <rect x="16" y="2" width="4" height="5" fill="#3B82F6" stroke="currentColor" strokeWidth="1.5" rx="1"/>
+    <line x1="18" y1="18" x2="18" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    <line x1="18" y1="18" x2="23" y2="20" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M18 9 A9 9 0 0 1 27 18 L18 18 Z" fill="#FCD34D" opacity="0.7"/>
+  </svg>
+)
+
+const IconAttivita = ({ className = "w-5 h-5" }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="8" y="8" width="40" height="52" rx="4" fill="#3B82F6" stroke="currentColor" strokeWidth="2.5"/>
+    <rect x="12" y="14" width="32" height="42" rx="2" fill="white"/>
+    <rect x="20" y="4" width="16" height="10" rx="2" fill="#0EA5E9" stroke="currentColor" strokeWidth="2"/>
+    <rect x="24" y="2" width="8" height="6" rx="3" fill="#0EA5E9" stroke="currentColor" strokeWidth="2"/>
+    <rect x="16" y="20" width="8" height="8" rx="2" fill="#10B981" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M18 24 L20 26 L23 22" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <rect x="26" y="22" width="14" height="3" fill="#64748B" rx="1"/>
+    <rect x="16" y="32" width="8" height="8" rx="2" fill="#F59E0B" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M18 36 L20 38 L23 34" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <rect x="26" y="34" width="12" height="3" fill="#64748B" rx="1"/>
+    <rect x="16" y="44" width="8" height="8" rx="2" fill="#10B981" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M18 48 L20 50 L23 46" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <rect x="26" y="46" width="10" height="3" fill="#64748B" rx="1"/>
+    <circle cx="50" cy="46" r="12" fill="#E0F2FE" stroke="currentColor" strokeWidth="2.5"/>
+    <circle cx="50" cy="46" r="9" fill="white" stroke="#0EA5E9" strokeWidth="2"/>
+    <circle cx="50" cy="46" r="2" fill="#10B981"/>
+    <line x1="50" y1="46" x2="50" y2="40" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    <line x1="50" y1="46" x2="55" y2="49" stroke="#F97316" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+)
+
+const IconDiscipline = ({ className = "w-5 h-5" }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M28 8 L32 8 L33 12 L36 13 L39 10 L42 13 L39 16 L40 19 L44 20 L44 24 L40 25 L39 28 L42 31 L39 34 L36 31 L33 32 L32 36 L28 36 L27 32 L24 31 L21 34 L18 31 L21 28 L20 25 L16 24 L16 20 L20 19 L21 16 L18 13 L21 10 L24 13 L27 12 Z" fill="currentColor" stroke="currentColor" strokeWidth="1.5"/>
+    <circle cx="30" cy="22" r="6" fill="#F1F5F9"/>
+    <ellipse cx="30" cy="24" rx="8" ry="4" fill="currentColor"/>
+    <rect x="22" y="20" width="16" height="6" rx="2" fill="currentColor"/>
+    <rect x="26" y="22" width="8" height="2" fill="#F1F5F9"/>
+    <circle cx="30" cy="30" r="5" fill="currentColor"/>
+    <path d="M22 36 L24 34 L30 36 L36 34 L38 36 L38 44 L22 44 Z" fill="currentColor"/>
+    <rect x="26" y="36" width="2" height="8" fill="#F1F5F9"/>
+    <rect x="32" y="36" width="2" height="8" fill="#F1F5F9"/>
+    <circle cx="48" cy="28" r="6" fill="currentColor"/>
+    <circle cx="48" cy="28" r="2" fill="#F1F5F9"/>
+    <circle cx="54" cy="38" r="4" fill="currentColor"/>
+    <circle cx="54" cy="38" r="1.5" fill="#F1F5F9"/>
+    <rect x="4" y="46" width="12" height="6" rx="1" fill="currentColor"/>
+    <rect x="18" y="46" width="8" height="6" rx="1" fill="currentColor"/>
+    <rect x="28" y="46" width="10" height="6" rx="1" fill="currentColor"/>
+    <rect x="4" y="54" width="8" height="6" rx="1" fill="currentColor"/>
+    <rect x="14" y="54" width="10" height="6" rx="1" fill="currentColor"/>
+    <rect x="26" y="54" width="8" height="6" rx="1" fill="currentColor"/>
+    <rect x="36" y="54" width="12" height="6" rx="1" fill="currentColor"/>
+  </svg>
+)
+
 export default function Layout({ children }) {
   const location = useLocation()
   const { persona, progetto, assegnazioni, assegnazione, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast, canAccess, cambiaProgetto } = useAuth()
@@ -133,12 +231,13 @@ export default function Layout({ children }) {
       id: 'construction',
       labelKey: 'construction',
       emoji: '🏗️',
+      IconComponent: IconDiscipline, // NUOVA ICONA SVG
       items: [
         { path: '/materiali', labelKey: 'materials', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
         { path: '/work-packages', labelKey: 'workPackages', emoji: '📦', minRole: 'supervisor', specialAccess: 'work-packages' }, // MODIFICATO: supervisor invece di foreman
         { path: '/test-packages', labelKey: 'testPackages', emoji: '💧', minRole: 'foreman', specialAccess: 'test-packages' },
-        { path: '/attivita', labelKey: 'activities', emoji: '📋', minRole: 'foreman' }, // NUOVO - path corretto
-        { path: '/avanzamento', labelKey: 'progress', emoji: '📊', minRole: 'foreman', specialAccess: 'avanzamento' },
+        { path: '/attivita', labelKey: 'activities', IconComponent: IconAttivita, minRole: 'foreman' }, // ICONA SVG
+        { path: '/avanzamento', labelKey: 'progress', IconComponent: IconAvanzamento, minRole: 'foreman', specialAccess: 'avanzamento' }, // ICONA SVG
         { path: '/pianificazione', labelKey: 'planning', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
         { path: '/foreman', labelKey: 'field', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
         { path: '/ore-componenti', labelKey: 'workHours', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
@@ -152,9 +251,9 @@ export default function Layout({ children }) {
       items: [
         { path: '/trasferimenti', labelKey: 'transfers', emoji: '🔄', minRole: 'foreman' },
         { path: '/statistiche', labelKey: 'statistics', emoji: '📊', minRole: 'supervisor' },
-        { path: '/gantt', labelKey: 'gantt', emoji: '📅', minRole: 'supervisor' },
+        { path: '/gantt', labelKey: 'gantt', IconComponent: IconGantt, minRole: 'supervisor' }, // ICONA SVG
         { path: '/ai-insights', labelKey: 'aiInsights', emoji: '📑', minRole: 'supervisor' },
-        { path: '/dashboard', labelKey: 'dashboard', emoji: '📈', minRole: 'supervisor' },
+        { path: '/dashboard', labelKey: 'dashboard', IconComponent: IconDashboard, minRole: 'supervisor' }, // ICONA SVG
         { path: '/impostazioni', labelKey: 'settings', emoji: '⚙️', minRole: 'admin' },
       ]
     }
@@ -479,7 +578,11 @@ export default function Layout({ children }) {
                     className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:bg-gray-50 rounded-lg transition-colors"
                   >
                     <span className="flex items-center gap-2">
-                      <span>{section.emoji}</span>
+                      {section.IconComponent ? (
+                        <section.IconComponent className="w-4 h-4" />
+                      ) : (
+                        <span>{section.emoji}</span>
+                      )}
                       <span>{t(section.labelKey)}</span>
                       <span className="text-gray-300 font-normal">({visibleItems.length})</span>
                     </span>
@@ -488,9 +591,13 @@ export default function Layout({ children }) {
                     </span>
                   </button>
                 ) : (
-                  // Collapsed: separatore con emoji
+                  // Collapsed: separatore con emoji o icona
                   <div className="flex justify-center py-2">
-                    <span className="text-lg opacity-50" title={t(section.labelKey)}>{section.emoji}</span>
+                    {section.IconComponent ? (
+                      <section.IconComponent className="w-5 h-5 opacity-50" />
+                    ) : (
+                      <span className="text-lg opacity-50" title={t(section.labelKey)}>{section.emoji}</span>
+                    )}
                   </div>
                 )}
                 
@@ -512,7 +619,11 @@ export default function Layout({ children }) {
                             : 'text-gray-600 hover:bg-gray-50'
                         }`}
                       >
-                        <span className={`${isCollapsed ? 'text-xl' : 'text-lg'}`}>{item.emoji}</span>
+                        {item.IconComponent ? (
+                          <item.IconComponent className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'}`} />
+                        ) : (
+                          <span className={`${isCollapsed ? 'text-xl' : 'text-lg'}`}>{item.emoji}</span>
+                        )}
                         {!isCollapsed && <span className="truncate text-sm">{t(item.labelKey)}</span>}
                       </Link>
                     ))}
