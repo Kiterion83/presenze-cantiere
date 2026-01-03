@@ -77,7 +77,7 @@ export default function Layout({ children }) {
       items: [
         { path: '/materiali', labelKey: 'materials', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
         { path: '/work-packages', labelKey: 'workPackages', emoji: '📦', minRole: 'foreman', specialAccess: 'work-packages' },
-        { path: '/test-packages', labelKey: 'testPackages', emoji: '🧪', minRole: 'foreman', specialAccess: 'test-packages' },
+        { path: '/test-packages', labelKey: 'testPackages', emoji: '💧', minRole: 'foreman', specialAccess: 'test-packages' },
         { path: '/avanzamento', labelKey: 'progress', emoji: '📊', minRole: 'foreman', specialAccess: 'avanzamento' },
         { path: '/pianificazione', labelKey: 'planning', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
         { path: '/foreman', labelKey: 'field', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
