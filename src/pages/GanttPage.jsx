@@ -454,16 +454,58 @@ export default function GanttPage() {
     }
   }, [weeks])
 
-  // Colori stato
+  // Colori stato - MIGLIORATI per distinguere bozza/pianificato
   const getStatusColor = (stato) => {
     const colors = {
-      completato: 'bg-green-500', passed: 'bg-green-500',
-      in_corso: 'bg-blue-500', in_progress: 'bg-blue-500',
-      holding: 'bg-purple-500', ready: 'bg-indigo-500',
-      planned: 'bg-cyan-500', pianificato: 'bg-cyan-500',
-      draft: 'bg-gray-400', failed: 'bg-red-500'
+      // TP Stati
+      draft: 'bg-gray-400',           // Grigio - Bozza
+      planned: 'bg-cyan-500',         // Cyan - Pianificato
+      ready: 'bg-indigo-500',         // Indigo - Pronto per test
+      in_progress: 'bg-amber-500',    // Amber - In corso
+      holding: 'bg-purple-500',       // Viola - Holding (pressione)
+      passed: 'bg-green-500',         // Verde - Superato
+      failed: 'bg-red-500',           // Rosso - Fallito
+      // WP/Componenti Stati
+      completato: 'bg-green-500',
+      in_corso: 'bg-blue-500',
+      pianificato: 'bg-cyan-500',
+      da_fare: 'bg-gray-400'
     }
     return colors[stato] || 'bg-gray-400'
+  }
+  
+  // Colore bordo per stato (per le barre del Gantt)
+  const getStatusBorderColor = (stato) => {
+    const colors = {
+      draft: '#9CA3AF',      // Grigio
+      planned: '#06B6D4',    // Cyan
+      ready: '#6366F1',      // Indigo
+      in_progress: '#F59E0B', // Amber
+      holding: '#8B5CF6',    // Viola
+      passed: '#22C55E',     // Verde
+      failed: '#EF4444',     // Rosso
+      completato: '#22C55E',
+      in_corso: '#3B82F6',
+      pianificato: '#06B6D4'
+    }
+    return colors[stato] || '#9CA3AF'
+  }
+  
+  // Label stato in italiano
+  const getStatusLabel = (stato) => {
+    const labels = {
+      draft: 'Bozza',
+      planned: 'Pianificato',
+      ready: 'Pronto',
+      in_progress: 'In Corso',
+      holding: 'Holding',
+      passed: 'Superato',
+      failed: 'Fallito',
+      completato: 'Completato',
+      in_corso: 'In Corso',
+      pianificato: 'Pianificato'
+    }
+    return labels[stato] || stato
   }
   
   const getTPBadgeColor = (tipo) => {
@@ -535,7 +577,7 @@ export default function GanttPage() {
               <div>💧 {tooltip.content.fluido_test}</div>
             )}
             <div className="pt-1 border-t border-gray-700">
-              Stato: <span className="font-medium text-white">{tooltip.content.statoTP || tooltip.content.stato}</span>
+              Stato: <span className="font-medium text-white">{getStatusLabel(tooltip.content.statoTP || tooltip.content.stato)}</span>
             </div>
           </div>
           <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full">
@@ -721,7 +763,7 @@ export default function GanttPage() {
         <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
           {/* Legend */}
           <div className="p-4 border-b bg-gray-50 flex flex-wrap items-center gap-4">
-            <span className="text-sm font-medium text-gray-600">Legenda:</span>
+            <span className="text-sm font-medium text-gray-600">Tipo:</span>
             <div className="flex items-center gap-1">
               <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">📦 WP</span>
             </div>
@@ -731,18 +773,32 @@ export default function GanttPage() {
             <div className="flex items-center gap-1">
               <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-700">🔩 COMP</span>
             </div>
-            <div className="ml-auto flex items-center gap-3 text-xs">
+            <span className="text-gray-300">|</span>
+            <span className="text-sm font-medium text-gray-600">Stato:</span>
+            <div className="flex items-center gap-3 text-xs flex-wrap">
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-green-500 rounded"></div>
-                <span>Completato</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                <span>In corso</span>
+                <div className="w-3 h-3 bg-gray-400 rounded"></div>
+                <span>Bozza</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-cyan-500 rounded"></div>
                 <span>Pianificato</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-indigo-500 rounded"></div>
+                <span>Pronto</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-amber-500 rounded"></div>
+                <span>In Corso</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-green-500 rounded"></div>
+                <span>Superato</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-red-500 rounded"></div>
+                <span>Fallito</span>
               </div>
             </div>
           </div>
@@ -858,9 +914,6 @@ export default function GanttPage() {
                                       isEnd ? 'left-0 right-1 rounded-r-lg' :
                                       'left-0 right-0'
                                     }`}
-                                    style={item.colore && !['completato', 'passed', 'failed'].includes(item.statoTP || item.stato) ? {
-                                      backgroundColor: item.colore
-                                    } : {}}
                                     onMouseEnter={(e) => showTooltip(e, item)}
                                     onMouseLeave={hideTooltip}
                                   >
@@ -1116,7 +1169,7 @@ export default function GanttPage() {
                             <span className="font-mono font-semibold">{item.codice}</span>
                           </div>
                           <span className={`px-2 py-1 rounded-full text-xs text-white ${getStatusColor(item.statoTP || item.stato)}`}>
-                            {item.statoTP || item.stato}
+                            {getStatusLabel(item.statoTP || item.stato)}
                           </span>
                         </div>
                         {item.nome && <p className="text-sm text-gray-600 mb-2">{item.nome}</p>}
