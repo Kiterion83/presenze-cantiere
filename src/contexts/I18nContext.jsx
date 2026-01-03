@@ -27,6 +27,7 @@ const translations = {
     timesheet: 'Rapportino',
     documents: 'Documenti',
     notifications: 'Notifiche',
+    confirmAttendance: 'Conferma Presenze', // NUOVO
     
     // Menu Items - Construction
     materials: 'Materiali',
@@ -304,7 +305,6 @@ const translations = {
     pendingRequests: 'Richieste in Attesa',
     approvedRequests: 'Richieste Approvate',
     vacationType: 'Tipo',
-    // vacation già definito sopra nel menu
     permit: 'Permesso',
     sickLeave: 'Malattia',
     
@@ -387,7 +387,6 @@ const translations = {
     remove: 'Rimuovi',
     componentStatus: 'Stato comp.',
     completedBy: 'Completato da',
-    // assignToCWTitle già definito sopra
 
     // ==========================================
     // IMPEDIMENTS / BLOCCHI (IT)
@@ -482,6 +481,7 @@ const translations = {
     timesheet: 'Timesheet',
     documents: 'Documents',
     notifications: 'Notifications',
+    confirmAttendance: 'Confirm Attendance', // NUOVO
     
     // Menu Items - Construction
     materials: 'Materials',
@@ -759,7 +759,6 @@ const translations = {
     pendingRequests: 'Pending Requests',
     approvedRequests: 'Approved Requests',
     vacationType: 'Type',
-    // vacation già definito sopra nel menu
     permit: 'Leave',
     sickLeave: 'Sick Leave',
     
@@ -842,7 +841,6 @@ const translations = {
     remove: 'Remove',
     componentStatus: 'Comp. status',
     completedBy: 'Completed by',
-    // assignToCWTitle già definito sopra
 
     // ==========================================
     // IMPEDIMENTS / BLOCCHI (EN)
