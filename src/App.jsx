@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { I18nProvider } from './contexts/I18nContext'
 
 // Pages
 import LoginPage from './pages/LoginPage'
@@ -17,13 +18,26 @@ import StatistichePage from './pages/StatistichePage'
 import DashboardPage from './pages/DashboardPage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
 import MenuPage from './pages/MenuPage'
+// NUOVE PAGINE CONSTRUCTION
+import ActivitiesPage from './pages/ActivitiesPage'
+import WarehousePage from './pages/WarehousePage'
+import MaterialiPage from './pages/MaterialiPage'  // Rinominato da ComponentiPage
+import PianificazionePage from './pages/PianificazionePage'
+import ForemanPage from './pages/ForemanPage'
+import OreComponentiPage from './pages/OreComponentiPage'
+import WorkPackagesPage from './components/WorkPackagesPage'  // Work Packages
+import TestPackagesPage from './components/TestPackagesPage'  // NUOVO - Test Packages & Commissioning
+import AvanzamentoPage from './pages/AvanzamentoPage'  // Dashboard Avanzamento
+// NUOVE PAGINE - Statistiche e AI
+import GanttPage from './pages/GanttPage'
+import AIInsightsPage from './pages/AIInsightsPage'
 
 // Components
 import Layout from './components/Layout'
 
-// Protected Route Component
-function ProtectedRoute({ children, minRole }) {
-  const { user, loading, isAtLeast } = useAuth()
+// Protected Route Component - AGGIORNATO con supporto requiredAccess
+function ProtectedRoute({ children, minRole, requiredAccess }) {
+  const { user, loading, isAtLeast, canAccess } = useAuth()
 
   if (loading) {
     return (
@@ -42,6 +56,12 @@ function ProtectedRoute({ children, minRole }) {
     return <Navigate to="/login" replace />
   }
 
+  // Check special access (for warehouse, activities, etc.)
+  if (requiredAccess && canAccess && !canAccess(requiredAccess)) {
+    return <Navigate to="/" replace />
+  }
+
+  // Check minimum role
   if (minRole && !isAtLeast(minRole)) {
     return <Navigate to="/" replace />
   }
@@ -93,9 +113,23 @@ function AppRoutes() {
       <Route path="/notifiche" element={<ProtectedRoute minRole="foreman"><NotifichePage /></ProtectedRoute>} />
       <Route path="/trasferimenti" element={<ProtectedRoute minRole="foreman"><TrasferimentiPage /></ProtectedRoute>} />
 
+      {/* NUOVE ROUTES - Construction Module */}
+      <Route path="/activities" element={<ProtectedRoute requiredAccess="activities"><ActivitiesPage /></ProtectedRoute>} />
+      <Route path="/warehouse" element={<ProtectedRoute requiredAccess="warehouse"><WarehousePage /></ProtectedRoute>} />
+      <Route path="/materiali" element={<ProtectedRoute requiredAccess="componenti"><MaterialiPage /></ProtectedRoute>} />
+      <Route path="/componenti" element={<Navigate to="/materiali" replace />} /> {/* Redirect per backward compatibility */}
+      <Route path="/pianificazione" element={<ProtectedRoute requiredAccess="pianificazione"><PianificazionePage /></ProtectedRoute>} />
+      <Route path="/foreman" element={<ProtectedRoute requiredAccess="foreman"><ForemanPage /></ProtectedRoute>} />
+      <Route path="/ore-componenti" element={<ProtectedRoute requiredAccess="ore-componenti"><OreComponentiPage /></ProtectedRoute>} />
+      <Route path="/work-packages" element={<ProtectedRoute requiredAccess="work-packages"><WorkPackagesPage /></ProtectedRoute>} />
+      <Route path="/test-packages" element={<ProtectedRoute requiredAccess="test-packages"><TestPackagesPage /></ProtectedRoute>} />
+      <Route path="/avanzamento" element={<ProtectedRoute requiredAccess="avanzamento"><AvanzamentoPage /></ProtectedRoute>} />
+
       {/* Protected Routes - Supervisor+ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute minRole="supervisor"><DashboardPage /></ProtectedRoute>} />
+      <Route path="/gantt" element={<ProtectedRoute minRole="supervisor"><GanttPage /></ProtectedRoute>} />
+      <Route path="/ai-insights" element={<ProtectedRoute minRole="supervisor"><AIInsightsPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Admin */}
       <Route path="/impostazioni" element={<ProtectedRoute minRole="admin"><ImpostazioniPage /></ProtectedRoute>} />
@@ -110,9 +144,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <Router>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </I18nProvider>
     </Router>
   )
 }

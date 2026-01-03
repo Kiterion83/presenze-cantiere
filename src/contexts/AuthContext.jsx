@@ -169,10 +169,10 @@ export const AuthProvider = ({ children }) => {
 
   const effectiveRole = testRoleOverride || assegnazione?.ruolo || null
 
-  // Gerarchia ruoli
+  // AGGIORNATO: Gerarchia ruoli con warehouse e engineer
   const isAtLeast = (role) => {
     if (!effectiveRole) return false
-    const hierarchy = ['helper', 'office', 'foreman', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
+    const hierarchy = ['helper', 'warehouse', 'office', 'foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
     return hierarchy.indexOf(effectiveRole) >= hierarchy.indexOf(role)
   }
 
@@ -195,16 +195,47 @@ export const AuthProvider = ({ children }) => {
     return effectiveRole === 'cm' || effectiveRole === 'pm' || effectiveRole === 'admin'
   }
 
-  // NUOVO: Verifica se l'utente è admin globale (admin in almeno un progetto)
+  // Verifica se l'utente è admin globale (admin in almeno un progetto)
   const isGlobalAdmin = () => {
     return assegnazioni.some(a => a.ruolo === 'admin' && !a.isVirtual)
+  }
+
+  // NUOVO: Verifica accesso a pagine speciali (per warehouse, activities, construction)
+  const canAccess = (page) => {
+    if (!effectiveRole) return false
+    
+    const pagePermissions = {
+      // Activities: foreman+ e ruoli superiori
+      'activities': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Warehouse: solo warehouse e ruoli di gestione (cm, pm, admin)
+      'warehouse': ['warehouse', 'cm', 'pm', 'admin'],
+      // Construction settings: engineer e ruoli superiori di gestione
+      'construction': ['engineer', 'cm', 'pm', 'admin'],
+      // Componenti: engineer+ per gestione, foreman può solo visualizzare (gestito separatamente)
+      'componenti': ['engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Work Packages: foreman+ può gestire WP, pianificare e segnare completamenti
+      'work-packages': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Dashboard Avanzamento: foreman+ può vedere, supervisor+ per report completi
+      'avanzamento': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Pianificazione CW: engineer+ può pianificare, foreman può visualizzare
+      'pianificazione': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Foreman mobile view: foreman e superiori
+      'foreman': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
+      // Ore componenti: foreman può registrare, engineer+ può vedere report completo
+      'ore-componenti': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
+    }
+
+    const allowedRoles = pagePermissions[page]
+    if (!allowedRoles) return isAtLeast('helper') // Default: tutti
+
+    return allowedRoles.includes(effectiveRole)
   }
 
   const value = {
     user,
     persona,
     assegnazioni,
-    tuttiProgetti, // NUOVO: tutti i progetti per admin
+    tuttiProgetti,
     assegnazione,
     progetto,
     loading,
@@ -215,7 +246,8 @@ export const AuthProvider = ({ children }) => {
     isOfficePath,
     getPercorso,
     canApproveDirectly,
-    isGlobalAdmin, // NUOVO
+    isGlobalAdmin,
+    canAccess,  // NUOVO
     setTestRole,
     testRoleOverride,
     cambiaProgetto,

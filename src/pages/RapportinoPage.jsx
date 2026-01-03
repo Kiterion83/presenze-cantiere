@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import FirmaDigitale from '../components/FirmaDigitale'
+import ImpedimentoModal from '../components/ImpedimentoModal'
 
 export default function RapportinoPage() {
   const { persona, assegnazione, progetto, isAtLeast } = useAuth()
@@ -15,11 +16,30 @@ export default function RapportinoPage() {
   const [message, setMessage] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [showFirma, setShowFirma] = useState(false)
-  const [tipoFirma, setTipoFirma] = useState(null) // 'caposquadra' o 'supervisore'
+  const [tipoFirma, setTipoFirma] = useState(null)
   const [formData, setFormData] = useState({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', note: '' })
-  
-  // NUOVO: Centro costo selezionato per mostrare unità di misura
   const [centroCostoSelezionato, setCentroCostoSelezionato] = useState(null)
+
+  // NUOVO: Stati per Work Packages e Componenti
+  const [workPackages, setWorkPackages] = useState([])
+  const [wpComponenti, setWpComponenti] = useState({}) // { wpId: [componenti] }
+  const [loadingWP, setLoadingWP] = useState(false)
+  const [showWPSection, setShowWPSection] = useState(true)
+  
+  // Stato per modal impedimento
+  const [showImpedimento, setShowImpedimento] = useState(null) // { pianCompId, compCodice, wpCodice }
+
+  // Helper settimana
+  function getWeekNumber(date) {
+    const d = new Date(date)
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7))
+    const yearStart = new Date(d.getFullYear(), 0, 1)
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
+  }
+
+  const currentWeek = getWeekNumber(new Date(selectedDate))
+  const currentYear = new Date(selectedDate).getFullYear()
 
   useEffect(() => {
     if (assegnazione?.progetto_id) loadData()
@@ -27,7 +47,6 @@ export default function RapportinoPage() {
 
   const loadData = async () => {
     setLoading(true)
-    // AGGIORNATO: Carica anche unità di misura con il centro costo
     const { data: cc } = await supabase
       .from('centri_costo')
       .select('*, unita_misura:unita_misura(id, codice, nome)')
@@ -55,7 +74,99 @@ export default function RapportinoPage() {
       .eq('progetto_id', assegnazione.progetto_id)
       .eq('data', selectedDate)
     setPresenze(pres || [])
+    
+    // NUOVO: Carica Work Packages
+    await loadWorkPackages()
+    
     setLoading(false)
+  }
+
+  // NUOVO: Carica Work Packages assegnati al foreman
+  const loadWorkPackages = async () => {
+    if (!persona?.id || !assegnazione?.progetto_id) return
+    setLoadingWP(true)
+    
+    try {
+      // Carica WP dove il foreman è assegnato o della sua squadra
+      const { data: wpData } = await supabase
+        .from('work_packages')
+        .select('*, squadra:squadre(id, nome)')
+        .eq('progetto_id', assegnazione.progetto_id)
+        .in('stato', ['pianificato', 'in_corso'])
+        .or(`foreman_id.eq.${persona.id}`)
+      
+      // Per ogni WP, carica i componenti pianificati per questa settimana
+      const wpWithComponents = {}
+      
+      for (const wp of (wpData || [])) {
+        // Trova pianificazioni per questa settimana
+        const { data: pianificazioni } = await supabase
+          .from('work_package_pianificazione')
+          .select('id')
+          .eq('work_package_id', wp.id)
+          .eq('anno', currentYear)
+          .eq('settimana', currentWeek)
+        
+        if (pianificazioni && pianificazioni.length > 0) {
+          const pianIds = pianificazioni.map(p => p.id)
+          
+          // Carica componenti pianificati
+          const { data: pianComp } = await supabase
+            .from('work_package_pianificazione_componenti')
+            .select(`
+              id,
+              completato,
+              completato_at,
+              bloccato,
+              impedimento_id,
+              componente:componenti(id, codice),
+              pianificazione:work_package_pianificazione(
+                id,
+                fase:fasi_workflow(id, nome, icona, colore)
+              )
+            `)
+            .in('pianificazione_id', pianIds)
+            .order('created_at')
+          
+          if (pianComp && pianComp.length > 0) {
+            wpWithComponents[wp.id] = {
+              wp,
+              componenti: pianComp
+            }
+          }
+        }
+      }
+      
+      setWorkPackages(wpData || [])
+      setWpComponenti(wpWithComponents)
+    } catch (error) {
+      console.error('Errore caricamento WP:', error)
+    } finally {
+      setLoadingWP(false)
+    }
+  }
+
+  // NUOVO: Toggle completamento componente
+  const handleToggleComponente = async (pianCompId, currentValue) => {
+    try {
+      const { error } = await supabase
+        .from('work_package_pianificazione_componenti')
+        .update({ 
+          completato: !currentValue,
+          completato_at: !currentValue ? new Date().toISOString() : null
+        })
+        .eq('id', pianCompId)
+      
+      if (error) throw error
+      
+      // Ricarica WP
+      await loadWorkPackages()
+      setMessage({ type: 'success', text: !currentValue ? 'Componente completato!' : 'Completamento rimosso' })
+      setTimeout(() => setMessage(null), 2000)
+    } catch (error) {
+      console.error('Errore:', error)
+      setMessage({ type: 'error', text: error.message })
+    }
   }
 
   const getOrCreateRapportino = async () => {
@@ -66,25 +177,20 @@ export default function RapportinoPage() {
     return data
   }
 
-  // NUOVO: Gestione selezione centro costo
   const handleCentroCostoChange = (ccId) => {
     setFormData({ ...formData, centro_costo_id: ccId })
     const cc = centriCosto.find(c => c.id === ccId)
     setCentroCostoSelezionato(cc)
   }
 
-  // NUOVO: Calcolo resa
   const calcolaResa = () => {
     const ore = parseFloat(formData.ore) || 0
     const qty = parseFloat(formData.quantita) || 0
-    if (ore > 0 && qty > 0) {
-      return (qty / ore).toFixed(2)
-    }
+    if (ore > 0 && qty > 0) return (qty / ore).toFixed(2)
     return null
   }
 
   const handleAddAttivita = async () => {
-    // AGGIORNATO: Solo descrizione e ore sono obbligatorie, quantità è opzionale
     if (!formData.descrizione || !formData.ore) { 
       setMessage({ type: 'error', text: 'Descrizione e ore obbligatorie' })
       return 
@@ -93,8 +199,6 @@ export default function RapportinoPage() {
     setMessage(null)
     try {
       const rap = await getOrCreateRapportino()
-      
-      // AGGIORNATO: unita_misura viene dal centro costo, non dal form
       const unitaMisura = centroCostoSelezionato?.unita_misura?.codice || null
       
       await supabase.from('attivita_rapportino').insert({ 
@@ -102,9 +206,7 @@ export default function RapportinoPage() {
         centro_costo_id: formData.centro_costo_id || null, 
         descrizione: formData.descrizione, 
         ore: parseFloat(formData.ore), 
-        // AGGIORNATO: quantità può essere null per lavori in economia
         quantita: formData.quantita ? parseFloat(formData.quantita) : null, 
-        // AGGIORNATO: unità di misura dal centro costo
         unita_misura: unitaMisura, 
         note: formData.note || null 
       })
@@ -133,7 +235,6 @@ export default function RapportinoPage() {
     loadData()
   }
 
-  // Gestione firma
   const handleOpenFirma = (tipo) => {
     setTipoFirma(tipo)
     setShowFirma(true)
@@ -168,12 +269,10 @@ export default function RapportinoPage() {
 
   const totaleOre = attivita.reduce((s, a) => s + (parseFloat(a.ore) || 0), 0)
   
-  // AGGIORNATO: Calcolo ore presenze più robusto
   const calcolaOrePresenza = (p) => {
     if (p.ore_ordinarie || p.ore_straordinarie) {
       return (parseFloat(p.ore_ordinarie || 0) + parseFloat(p.ore_straordinarie || 0))
     }
-    // Fallback: calcola da ora_checkin/ora_checkout
     if (p.ora_checkin && p.ora_checkout) {
       const checkin = new Date(`2000-01-01T${p.ora_checkin}`)
       const checkout = new Date(`2000-01-01T${p.ora_checkout}`)
@@ -184,6 +283,243 @@ export default function RapportinoPage() {
   const totaleOrePresenze = presenze.reduce((s, p) => s + calcolaOrePresenza(p), 0)
 
   const statoColors = { bozza: 'bg-gray-100 text-gray-700', inviato: 'bg-blue-100 text-blue-700', approvato: 'bg-green-100 text-green-700', rifiutato: 'bg-red-100 text-red-700' }
+
+  // NUOVO: Conta componenti per WP
+  const countWPStats = () => {
+    let totale = 0, completati = 0, bloccati = 0
+    Object.values(wpComponenti).forEach(({ componenti }) => {
+      totale += componenti.length
+      completati += componenti.filter(c => c.completato).length
+      bloccati += componenti.filter(c => c.bloccato).length
+    })
+    return { totale, completati, bloccati }
+  }
+  const wpStats = countWPStats()
+
+  // ═══════════════════════════════════════════════════════════════
+  // EXPORT PDF - Genera documento stampabile
+  // ═══════════════════════════════════════════════════════════════
+  const handleExportPDF = () => {
+    const printWindow = window.open('', '_blank')
+    
+    const dataFormattata = new Date(selectedDate).toLocaleDateString('it-IT', {
+      weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+    })
+    
+    const cw = getWeekNumber(new Date(selectedDate))
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Rapportino ${selectedDate} - ${progetto?.nome}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; padding: 20px; font-size: 11px; color: #333; }
+          
+          .header { border-bottom: 3px solid #2563eb; padding-bottom: 15px; margin-bottom: 20px; }
+          .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
+          .header h1 { font-size: 24px; color: #1e40af; margin-bottom: 5px; }
+          .header .progetto { font-size: 16px; color: #666; }
+          .header .data-box { text-align: right; }
+          .header .data { font-size: 18px; font-weight: bold; }
+          .header .cw { font-size: 12px; color: #666; }
+          .header .stato { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; margin-top: 5px; }
+          .stato-bozza { background: #f3f4f6; color: #374151; }
+          .stato-inviato { background: #dbeafe; color: #1d4ed8; }
+          .stato-approvato { background: #d1fae5; color: #047857; }
+          .stato-rifiutato { background: #fee2e2; color: #b91c1c; }
+          
+          .section { margin-bottom: 25px; }
+          .section-title { font-size: 14px; font-weight: bold; color: #1e40af; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; }
+          
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background: #f8fafc; font-weight: bold; font-size: 10px; text-transform: uppercase; color: #64748b; }
+          tr:nth-child(even) { background: #f9fafb; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .font-bold { font-weight: bold; }
+          .text-green { color: #047857; }
+          .text-amber { color: #d97706; }
+          
+          .totali-row { background: #e0f2fe !important; font-weight: bold; }
+          
+          .firme-section { display: flex; gap: 40px; margin-top: 30px; }
+          .firma-box { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 15px; }
+          .firma-box h4 { font-size: 12px; color: #666; margin-bottom: 10px; }
+          .firma-img { max-height: 60px; object-fit: contain; }
+          .firma-data { font-size: 10px; color: #999; margin-top: 5px; }
+          .firma-empty { height: 60px; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; color: #999; font-size: 10px; }
+          
+          .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 10px; color: #999; text-align: center; }
+          
+          .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px; }
+          .summary-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center; }
+          .summary-box .value { font-size: 24px; font-weight: bold; color: #1e40af; }
+          .summary-box .label { font-size: 10px; color: #64748b; margin-top: 3px; }
+          
+          @media print {
+            body { padding: 10px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <!-- HEADER -->
+        <div class="header">
+          <div class="header-top">
+            <div>
+              <h1>📝 RAPPORTINO GIORNALIERO</h1>
+              <div class="progetto">${progetto?.nome || 'Progetto'}</div>
+            </div>
+            <div class="data-box">
+              <div class="data">${dataFormattata}</div>
+              <div class="cw">Settimana CW${String(cw).padStart(2, '0')}</div>
+              ${rapportino ? `<span class="stato stato-${rapportino.stato}">${rapportino.stato.toUpperCase()}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        
+        <!-- RIEPILOGO -->
+        <div class="summary-grid">
+          <div class="summary-box">
+            <div class="value">${attivita.length}</div>
+            <div class="label">Attività</div>
+          </div>
+          <div class="summary-box">
+            <div class="value">${totaleOre.toFixed(1)}h</div>
+            <div class="label">Ore Lavorate</div>
+          </div>
+          <div class="summary-box">
+            <div class="value">${presenze.length}</div>
+            <div class="label">Presenze</div>
+          </div>
+          <div class="summary-box">
+            <div class="value">${totaleOrePresenze.toFixed(1)}h</div>
+            <div class="label">Ore Presenze</div>
+          </div>
+        </div>
+        
+        <!-- ATTIVITÀ -->
+        <div class="section">
+          <div class="section-title">📋 ATTIVITÀ DEL GIORNO</div>
+          ${attivita.length === 0 ? '<p style="color:#999;padding:10px;">Nessuna attività registrata</p>' : `
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:100px">Centro Costo</th>
+                  <th>Descrizione</th>
+                  <th style="width:60px" class="text-right">Ore</th>
+                  <th style="width:80px" class="text-right">Quantità</th>
+                  <th style="width:80px" class="text-right">Resa</th>
+                  <th style="width:120px">Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${attivita.map(att => `
+                  <tr>
+                    <td><strong>${att.centro_costo?.codice || '-'}</strong></td>
+                    <td>${att.descrizione}</td>
+                    <td class="text-right font-bold">${att.ore}h</td>
+                    <td class="text-right">${att.quantita ? `${att.quantita} ${att.unita_misura || ''}` : '<span class="text-amber">Economia</span>'}</td>
+                    <td class="text-right ${att.quantita ? 'text-green' : ''}">${att.quantita ? `${(att.quantita / att.ore).toFixed(2)} /h` : '-'}</td>
+                    <td style="font-size:10px;color:#666;">${att.note || ''}</td>
+                  </tr>
+                `).join('')}
+                <tr class="totali-row">
+                  <td colspan="2"><strong>TOTALE</strong></td>
+                  <td class="text-right"><strong>${totaleOre.toFixed(1)}h</strong></td>
+                  <td colspan="3"></td>
+                </tr>
+              </tbody>
+            </table>
+          `}
+        </div>
+        
+        <!-- PRESENZE -->
+        <div class="section">
+          <div class="section-title">👷 PRESENZE (${presenze.length} persone)</div>
+          ${presenze.length === 0 ? '<p style="color:#999;padding:10px;">Nessuna presenza registrata</p>' : `
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th style="width:80px" class="text-center">Entrata</th>
+                  <th style="width:80px" class="text-center">Uscita</th>
+                  <th style="width:60px" class="text-right">Ore Ord.</th>
+                  <th style="width:60px" class="text-right">Ore Str.</th>
+                  <th style="width:60px" class="text-right">Totale</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${presenze.map(p => {
+                  const oreCalc = p.ore_ordinarie || p.ore_straordinarie 
+                    ? (parseFloat(p.ore_ordinarie || 0) + parseFloat(p.ore_straordinarie || 0))
+                    : (p.ora_checkin && p.ora_checkout 
+                        ? ((new Date('2000-01-01T' + p.ora_checkout) - new Date('2000-01-01T' + p.ora_checkin)) / 3600000) 
+                        : 0)
+                  return `
+                    <tr>
+                      <td><strong>${p.persona?.nome || ''} ${p.persona?.cognome || ''}</strong></td>
+                      <td class="text-center">${p.ora_checkin?.substring(0,5) || p.ora_entrata || '-'}</td>
+                      <td class="text-center">${p.ora_checkout?.substring(0,5) || p.ora_uscita || '-'}</td>
+                      <td class="text-right">${p.ore_ordinarie || '-'}</td>
+                      <td class="text-right">${p.ore_straordinarie || '-'}</td>
+                      <td class="text-right font-bold">${oreCalc.toFixed(1)}h</td>
+                    </tr>
+                  `
+                }).join('')}
+                <tr class="totali-row">
+                  <td colspan="5"><strong>TOTALE ORE PRESENZE</strong></td>
+                  <td class="text-right"><strong>${totaleOrePresenze.toFixed(1)}h</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          `}
+        </div>
+        
+        <!-- FIRME -->
+        ${rapportino ? `
+          <div class="section">
+            <div class="section-title">✍️ FIRME</div>
+            <div class="firme-section">
+              <div class="firma-box">
+                <h4>👷 Caposquadra</h4>
+                ${rapportino.firma_caposquadra 
+                  ? `<img src="${rapportino.firma_caposquadra}" class="firma-img" alt="Firma CS" />
+                     <div class="firma-data">Firmato: ${rapportino.firma_caposquadra_data ? new Date(rapportino.firma_caposquadra_data).toLocaleString('it-IT') : ''}</div>`
+                  : '<div class="firma-empty">In attesa di firma</div>'
+                }
+              </div>
+              <div class="firma-box">
+                <h4>📋 Supervisore</h4>
+                ${rapportino.firma_supervisore 
+                  ? `<img src="${rapportino.firma_supervisore}" class="firma-img" alt="Firma Sup" />
+                     <div class="firma-data">Firmato: ${rapportino.firma_supervisore_data ? new Date(rapportino.firma_supervisore_data).toLocaleString('it-IT') : ''}</div>`
+                  : '<div class="firma-empty">In attesa di firma</div>'
+                }
+              </div>
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- FOOTER -->
+        <div class="footer">
+          <p>Documento generato automaticamente da Presenze Cantiere - ${new Date().toLocaleString('it-IT')}</p>
+          <p>${progetto?.nome || ''}</p>
+        </div>
+        
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `
+    
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }
 
   return (
     <div className="p-4 lg:p-8">
@@ -204,6 +540,15 @@ export default function RapportinoPage() {
         <div className="flex items-center gap-3">
           <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="px-4 py-2 border rounded-xl" />
           {rapportino && <span className={`px-3 py-1 rounded-full text-sm font-medium ${statoColors[rapportino.stato]}`}>{rapportino.stato}</span>}
+          {/* Pulsante Export PDF */}
+          {(attivita.length > 0 || presenze.length > 0) && (
+            <button
+              onClick={handleExportPDF}
+              className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 flex items-center gap-2 text-sm font-medium"
+            >
+              📄 PDF
+            </button>
+          )}
         </div>
       </div>
 
@@ -214,13 +559,12 @@ export default function RapportinoPage() {
       ) : (
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* Form Attività - AGGIORNATO */}
+            {/* Form Attività */}
             {(!rapportino || rapportino.stato === 'bozza') && (
               showForm ? (
                 <div className="bg-white rounded-xl p-6 shadow-sm border">
                   <h3 className="font-semibold text-gray-700 mb-4">➕ Nuova Attività</h3>
                   <div className="grid gap-4">
-                    {/* Centro di costo */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Centro di Costo</label>
                       <select 
@@ -237,7 +581,6 @@ export default function RapportinoPage() {
                       </select>
                     </div>
                     
-                    {/* NUOVO: Info centro costo selezionato con unità di misura */}
                     {centroCostoSelezionato && (
                       <div className="p-3 bg-blue-50 rounded-xl text-sm">
                         <p className="text-blue-700">
@@ -256,7 +599,6 @@ export default function RapportinoPage() {
                       </div>
                     )}
                     
-                    {/* Descrizione */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Descrizione *</label>
                       <input 
@@ -268,7 +610,6 @@ export default function RapportinoPage() {
                       />
                     </div>
                     
-                    {/* Ore e Quantità */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Ore *</label>
@@ -304,7 +645,6 @@ export default function RapportinoPage() {
                       </div>
                     </div>
                     
-                    {/* NUOVO: Resa calcolata */}
                     {calcolaResa() && (
                       <div className="p-3 bg-green-50 rounded-xl">
                         <p className="text-sm text-green-700">
@@ -319,7 +659,6 @@ export default function RapportinoPage() {
                       </div>
                     )}
                     
-                    {/* NUOVO: Indicatore lavoro in economia */}
                     {!formData.quantita && formData.ore && (
                       <div className="p-3 bg-amber-50 rounded-xl">
                         <p className="text-sm text-amber-700">
@@ -329,7 +668,6 @@ export default function RapportinoPage() {
                       </div>
                     )}
                     
-                    {/* Note */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
                       <textarea 
@@ -341,7 +679,6 @@ export default function RapportinoPage() {
                       />
                     </div>
                     
-                    {/* Azioni */}
                     <div className="flex gap-2 pt-2">
                       <button 
                         onClick={() => { setShowForm(false); setCentroCostoSelezionato(null); setFormData({ centro_costo_id: '', descrizione: '', ore: '', quantita: '', note: '' }) }} 
@@ -369,7 +706,7 @@ export default function RapportinoPage() {
               )
             )}
 
-            {/* Lista Attività - AGGIORNATO */}
+            {/* Lista Attività */}
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
               <div className="p-4 border-b flex items-center justify-between">
                 <div>
@@ -425,15 +762,160 @@ export default function RapportinoPage() {
                     <span>Totale Ore</span>
                     <span>{totaleOre}h</span>
                   </div>
-                  {attivita.some(a => a.quantita) && (
-                    <div className="flex justify-between text-sm text-gray-600 mt-1">
-                      <span>Attività con quantità</span>
-                      <span>{attivita.filter(a => a.quantita).length} / {attivita.length}</span>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* NUOVA SEZIONE: Completamento Componenti Work Packages */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {Object.keys(wpComponenti).length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                <div 
+                  className="p-4 border-b flex items-center justify-between cursor-pointer hover:bg-gray-50"
+                  onClick={() => setShowWPSection(!showWPSection)}
+                >
+                  <div>
+                    <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                      📦 Completamento Componenti
+                      <span className="text-xs font-normal bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                        CW{String(currentWeek).padStart(2, '0')}
+                      </span>
+                      {wpStats.bloccati > 0 && (
+                        <span className="text-xs font-normal bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                          🚫 {wpStats.bloccati} bloccati
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {wpStats.completati}/{wpStats.totale} componenti completati questa settimana
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {/* Progress mini */}
+                    <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-green-500 transition-all" 
+                        style={{ width: `${wpStats.totale > 0 ? (wpStats.completati / wpStats.totale) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-lg">{showWPSection ? '▼' : '▶'}</span>
+                  </div>
+                </div>
+                
+                {showWPSection && (
+                  <div className="divide-y">
+                    {Object.entries(wpComponenti).map(([wpId, { wp, componenti }]) => {
+                      const wpCompletati = componenti.filter(c => c.completato).length
+                      const wpTotale = componenti.length
+                      
+                      // Raggruppa per fase
+                      const perFase = {}
+                      componenti.forEach(c => {
+                        const faseNome = c.pianificazione?.fase?.nome || 'Senza fase'
+                        const faseIcona = c.pianificazione?.fase?.icona || '📦'
+                        const faseColore = c.pianificazione?.fase?.colore || '#9CA3AF'
+                        if (!perFase[faseNome]) {
+                          perFase[faseNome] = { icona: faseIcona, colore: faseColore, componenti: [] }
+                        }
+                        perFase[faseNome].componenti.push(c)
+                      })
+                      
+                      return (
+                        <div key={wpId} className="p-4">
+                          {/* Header WP */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-10 rounded" style={{ backgroundColor: wp.colore || '#3B82F6' }} />
+                              <div>
+                                <span className="font-mono font-bold text-blue-700">{wp.codice}</span>
+                                <span className="ml-2 text-gray-700">{wp.nome}</span>
+                              </div>
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              <span className={`font-medium ${wpCompletati === wpTotale ? 'text-green-600' : ''}`}>
+                                {wpCompletati}/{wpTotale}
+                              </span>
+                              {wpCompletati === wpTotale && <span className="ml-1">✅</span>}
+                            </div>
+                          </div>
+                          
+                          {/* Componenti per fase */}
+                          <div className="space-y-3 ml-5">
+                            {Object.entries(perFase).map(([faseNome, { icona, colore, componenti: faseComp }]) => (
+                              <div key={faseNome}>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span>{icona}</span>
+                                  <span className="text-sm font-medium text-gray-600">{faseNome}</span>
+                                  <span className="text-xs text-gray-400">
+                                    ({faseComp.filter(c => c.completato).length}/{faseComp.length})
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-2 ml-6">
+                                  {faseComp.map(comp => (
+                                    <div key={comp.id} className="flex items-center gap-1">
+                                      {/* Pulsante principale componente */}
+                                      <button
+                                        onClick={() => !comp.bloccato && handleToggleComponente(comp.id, comp.completato)}
+                                        disabled={comp.bloccato}
+                                        className={`px-3 py-1.5 rounded-lg text-sm font-mono transition-all ${
+                                          comp.bloccato
+                                            ? 'bg-red-100 text-red-700 ring-2 ring-red-400 cursor-not-allowed'
+                                            : comp.completato
+                                              ? 'bg-green-100 text-green-700 ring-2 ring-green-500'
+                                              : 'bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600'
+                                        }`}
+                                      >
+                                        {comp.bloccato && <span className="mr-1">🚫</span>}
+                                        {comp.completato && !comp.bloccato && <span className="mr-1">✓</span>}
+                                        {comp.componente?.codice || '???'}
+                                      </button>
+                                      
+                                      {/* Pulsante blocca/sblocca */}
+                                      <button
+                                        onClick={() => setShowImpedimento({
+                                          pianCompId: comp.id,
+                                          compCodice: comp.componente?.codice,
+                                          wpCodice: wp.codice,
+                                          bloccato: comp.bloccato,
+                                          impedimentoId: comp.impedimento_id
+                                        })}
+                                        className={`p-1 rounded text-xs transition-all ${
+                                          comp.bloccato 
+                                            ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                                            : 'bg-gray-100 text-gray-400 hover:bg-amber-100 hover:text-amber-600'
+                                        }`}
+                                        title={comp.bloccato ? 'Gestisci blocco' : 'Segnala impedimento'}
+                                      >
+                                        {comp.bloccato ? '⚠️' : '🚫'}
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                
+                {/* Footer con info */}
+                <div className="p-3 bg-purple-50 border-t text-xs text-purple-600 flex items-center gap-2">
+                  <span>💡</span>
+                  <span>Clicca sui componenti per segnarli come completati. I dati vengono salvati automaticamente.</span>
+                </div>
+              </div>
+            )}
+
+            {/* Messaggio se non ci sono WP pianificati questa settimana */}
+            {Object.keys(wpComponenti).length === 0 && !loadingWP && workPackages.length > 0 && (
+              <div className="bg-gray-50 rounded-xl border border-dashed p-6 text-center text-gray-500">
+                <p className="text-lg mb-1">📦 Nessun componente pianificato</p>
+                <p className="text-sm">Non ci sono componenti pianificati per la settimana CW{String(currentWeek).padStart(2, '0')}</p>
+              </div>
+            )}
 
             {/* Sezione Firme */}
             {rapportino && attivita.length > 0 && (
@@ -543,14 +1025,14 @@ export default function RapportinoPage() {
                     <span className="text-gray-500">Ore presenze</span>
                     <span className="font-medium">{totaleOrePresenze.toFixed(1)}h</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Con quantità</span>
-                    <span className="font-medium">{attivita.filter(a => a.quantita).length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">In economia</span>
-                    <span className="font-medium text-amber-600">{attivita.filter(a => !a.quantita).length}</span>
-                  </div>
+                  {wpStats.totale > 0 && (
+                    <>
+                      <div className="flex justify-between pt-2 border-t">
+                        <span className="text-gray-500">Componenti WP</span>
+                        <span className="font-medium text-purple-600">{wpStats.completati}/{wpStats.totale}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between pt-2 border-t">
                     <span className="text-gray-500">Firma CS</span>
                     <span>{rapportino.firma_caposquadra ? '✅' : '⏳'}</span>
@@ -562,8 +1044,49 @@ export default function RapportinoPage() {
                 </div>
               </div>
             )}
+
+            {/* NUOVO: Mini riepilogo WP */}
+            {wpStats.totale > 0 && (
+              <div className="bg-purple-50 rounded-xl border border-purple-200 mt-4 p-4">
+                <h3 className="font-semibold text-purple-800 mb-2 flex items-center gap-2">
+                  📦 Work Packages
+                  <span className="text-xs bg-purple-200 px-2 py-0.5 rounded">CW{String(currentWeek).padStart(2, '0')}</span>
+                </h3>
+                <div className="space-y-2">
+                  {Object.entries(wpComponenti).map(([wpId, { wp, componenti }]) => {
+                    const done = componenti.filter(c => c.completato).length
+                    const total = componenti.length
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 0
+                    return (
+                      <div key={wpId} className="flex items-center gap-2">
+                        <div className="w-2 h-6 rounded" style={{ backgroundColor: wp.colore || '#3B82F6' }} />
+                        <span className="text-sm font-mono text-purple-700">{wp.codice}</span>
+                        <div className="flex-1 h-2 bg-purple-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-purple-600" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs text-purple-600 font-medium">{pct}%</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {/* Modal Impedimento */}
+      {showImpedimento && (
+        <ImpedimentoModal
+          onClose={() => setShowImpedimento(null)}
+          onSave={async () => {
+            await loadWorkPackages()
+            setShowImpedimento(null)
+          }}
+          pianificazioneComponenteId={showImpedimento.pianCompId}
+          componenteCodice={showImpedimento.compCodice}
+          wpCodice={showImpedimento.wpCodice}
+        />
       )}
     </div>
   )

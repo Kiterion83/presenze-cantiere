@@ -461,7 +461,6 @@ function TuttiProgettiTab() {
     )
   }
 
-  // ========== CREAZIONE PROGETTO ==========
   const handleCreate = async () => {
     if (!formData.nome) { setMessage({ type: 'error', text: t('nameRequired') }); return }
     setSaving(true); setMessage(null)
@@ -561,13 +560,10 @@ function TuttiProgettiTab() {
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
           <h3 className="font-semibold text-blue-800 mb-4">➕ {t('newProject')}</h3>
           <div className="grid gap-4">
-            {/* Nome e Codice */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div><label className="block text-sm font-medium mb-1">{t('name')} *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               <div><label className="block text-sm font-medium mb-1">{t('projectCode')}</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
-            
-            {/* Indirizzo con Autocomplete */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div className="relative"><label className="block text-sm font-medium mb-1">{t('address')}</label>
                 <input type="text" value={formData.indirizzo} onChange={(e) => { setFormData({...formData, indirizzo: e.target.value}); searchAddress(e.target.value) }} className="w-full px-4 py-3 border rounded-xl" placeholder={t('search')}/>
@@ -579,8 +575,6 @@ function TuttiProgettiTab() {
               </div>
               <div><label className="block text-sm font-medium mb-1">{t('city')}</label><input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
-            
-            {/* Date */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div><label className="block text-sm font-medium mb-1">{t('startDate')}</label><input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               <div><label className="block text-sm font-medium mb-1">{t('endDate')}</label><input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
