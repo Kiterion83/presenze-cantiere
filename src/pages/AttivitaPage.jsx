@@ -498,15 +498,36 @@ export default function AttivitaPage() {
                 </div>
               </div>
 
-              {/* Assegnazioni */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Disciplina</label>
-                  <select value={form.disciplina_id} onChange={e => setForm({...form, disciplina_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
-                    <option value="">Seleziona...</option>
-                    {discipline.map(d => <option key={d.id} value={d.id}>{d.icona} {d.nome}</option>)}
-                  </select>
+              {/* Disciplina con Bottoni */}
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                <label className="block text-sm font-medium mb-2 text-emerald-800">
+                  🎯 Disciplina
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {discipline.map(disc => (
+                    <button
+                      key={disc.id}
+                      type="button"
+                      onClick={() => setForm({ ...form, disciplina_id: disc.id })}
+                      className={`px-4 py-2 rounded-xl text-sm flex items-center gap-2 transition-all border-2 ${
+                        form.disciplina_id === disc.id 
+                          ? 'border-emerald-500 shadow-md' 
+                          : 'border-transparent bg-white hover:bg-gray-50'
+                      }`}
+                      style={{ 
+                        backgroundColor: form.disciplina_id === disc.id ? (disc.colore || '#10B981') + '20' : undefined,
+                        borderColor: form.disciplina_id === disc.id ? disc.colore : undefined
+                      }}
+                    >
+                      <span className="text-lg">{disc.icona}</span>
+                      <span>{disc.nome}</span>
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              {/* Assegnazioni */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Squadra</label>
                   <select value={form.squadra_id} onChange={e => setForm({...form, squadra_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
