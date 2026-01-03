@@ -18,19 +18,27 @@ import StatistichePage from './pages/StatistichePage'
 import DashboardPage from './pages/DashboardPage'
 import ImpostazioniPage from './pages/ImpostazioniPage'
 import MenuPage from './pages/MenuPage'
+
 // NUOVE PAGINE CONSTRUCTION
 import ActivitiesPage from './pages/ActivitiesPage'
 import WarehousePage from './pages/WarehousePage'
-import MaterialiPage from './pages/MaterialiPage'  // Rinominato da ComponentiPage
+import MaterialiPage from './pages/MaterialiPage'
 import PianificazionePage from './pages/PianificazionePage'
 import ForemanPage from './pages/ForemanPage'
 import OreComponentiPage from './pages/OreComponentiPage'
-import WorkPackagesPage from './components/WorkPackagesPage'  // Work Packages
-import TestPackagesPage from './components/TestPackagesPage'  // NUOVO - Test Packages & Commissioning
-import AvanzamentoPage from './pages/AvanzamentoPage'  // Dashboard Avanzamento
+import WorkPackagesPage from './components/WorkPackagesPage'
+import TestPackagesPage from './components/TestPackagesPage'
+import AvanzamentoPage from './pages/AvanzamentoPage'
+
 // NUOVE PAGINE - Statistiche e AI
 import GanttPage from './pages/GanttPage'
 import AIInsightsPage from './pages/AIInsightsPage'
+
+// ============================================
+// NUOVE PAGINE - Conferma Presenze e Attività Extra
+// ============================================
+import ConfermaPresenzePage from './pages/ConfermaPresenzePage'
+import AttivitaPage from './pages/AttivitaPage'
 
 // Components
 import Layout from './components/Layout'
@@ -113,7 +121,13 @@ function AppRoutes() {
       <Route path="/notifiche" element={<ProtectedRoute minRole="foreman"><NotifichePage /></ProtectedRoute>} />
       <Route path="/trasferimenti" element={<ProtectedRoute minRole="foreman"><TrasferimentiPage /></ProtectedRoute>} />
 
-      {/* NUOVE ROUTES - Construction Module */}
+      {/* ============================================ */}
+      {/* NUOVE ROUTES - Conferma Presenze e Attività */}
+      {/* ============================================ */}
+      <Route path="/conferma-presenze" element={<ProtectedRoute minRole="foreman"><ConfermaPresenzePage /></ProtectedRoute>} />
+      <Route path="/attivita" element={<ProtectedRoute minRole="foreman"><AttivitaPage /></ProtectedRoute>} />
+
+      {/* ROUTES - Construction Module */}
       <Route path="/activities" element={<ProtectedRoute requiredAccess="activities"><ActivitiesPage /></ProtectedRoute>} />
       <Route path="/warehouse" element={<ProtectedRoute requiredAccess="warehouse"><WarehousePage /></ProtectedRoute>} />
       <Route path="/materiali" element={<ProtectedRoute requiredAccess="componenti"><MaterialiPage /></ProtectedRoute>} />
