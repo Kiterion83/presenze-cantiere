@@ -684,4 +684,247 @@ export default function GanttPage() {
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 mb-2 space-y-1">
-                    {wp.squadra && <div>👥 {wp.squadra.nome}</div
+                    {wp.squadra && <div>👥 {wp.squadra.nome}</div>}
+                    {wp.foreman && <div>👷 {wp.foreman.nome} {wp.foreman.cognome}</div>}
+                    {wp.data_inizio_pianificata && (
+                      <div>📅 {new Date(wp.data_inizio_pianificata).toLocaleDateString('it-IT')} - {wp.data_fine_pianificata ? new Date(wp.data_fine_pianificata).toLocaleDateString('it-IT') : '?'}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-sm font-medium text-gray-600">{progress}%</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* NUOVO: Test Packages Summary */}
+      {testPackages.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border p-6 mt-6">
+          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            💧 Test Packages ({testPackages.length})
+          </h3>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {testPackages.map((tp, idx) => {
+              const getTPStatoBadge = (stato) => {
+                const badges = {
+                  draft: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Bozza' },
+                  planned: { bg: 'bg-blue-100', text: 'text-blue-600', label: 'Pianificato' },
+                  ready: { bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Pronto' },
+                  in_progress: { bg: 'bg-amber-100', text: 'text-amber-600', label: 'In Corso' },
+                  holding: { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Holding' },
+                  passed: { bg: 'bg-green-100', text: 'text-green-600', label: 'Superato' },
+                  failed: { bg: 'bg-red-100', text: 'text-red-600', label: 'Fallito' }
+                }
+                return badges[stato] || badges.draft
+              }
+              
+              const statoBadge = getTPStatoBadge(tp.stato)
+              
+              return (
+                <div 
+                  key={idx} 
+                  className="border rounded-xl p-4 hover:shadow-md transition-shadow"
+                  style={{ borderLeftWidth: '4px', borderLeftColor: tp.colore || '#8B5CF6' }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{getTipoTestIcon(tp.tipo)}</span>
+                      <div>
+                        <span className="font-mono font-bold text-purple-600">{tp.codice}</span>
+                        <p className="text-sm text-gray-600 mt-0.5">{tp.nome}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statoBadge.bg} ${statoBadge.text}`}>
+                      {statoBadge.label}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mb-2 space-y-1">
+                    {tp.pressione_test && <div>⏲️ {tp.pressione_test} bar / {tp.durata_holding_minuti} min</div>}
+                    {tp.squadra && <div>👥 {tp.squadra.nome}</div>}
+                    {tp.foreman && <div>👷 {tp.foreman.nome} {tp.foreman.cognome}</div>}
+                    {tp.data_inizio_pianificata && (
+                      <div>📅 {new Date(tp.data_inizio_pianificata).toLocaleDateString('it-IT')} - {tp.data_fine_pianificata ? new Date(tp.data_fine_pianificata).toLocaleDateString('it-IT') : '?'}</div>
+                    )}
+                  </div>
+                  {/* Progress bar per fasi */}
+                  {tp.fase_corrente && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full transition-all duration-500"
+                          style={{ 
+                            width: `${(tp.fase_corrente.ordine / 11) * 100}%`,
+                            backgroundColor: tp.stato === 'passed' ? '#22C55E' : (tp.colore || '#8B5CF6')
+                          }}
+                        ></div>
+                      </div>
+                      <span className="text-xs text-gray-500">{tp.fase_corrente.ordine}/11</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal CW Detail - AGGIORNATO con TP */}
+      {selectedCW && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCW(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold">{selectedCW.label} - {selectedCW.year}</h3>
+                  <p className="text-blue-100 mt-1">
+                    {getActivitiesForCW(selectedCW.year, selectedCW.week).length} attività pianificate
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedCW(null)}
+                  className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-xl"
+                >
+                  ✕
+                </button>
+              </div>
+              {/* Search */}
+              <div className="mt-4">
+                <input
+                  type="text"
+                  placeholder="🔍 Cerca attività..."
+                  value={cwSearch}
+                  onChange={e => setCwSearch(e.target.value)}
+                  className="w-full px-4 py-2 rounded-xl bg-white/20 placeholder-blue-200 text-white border border-white/30 focus:outline-none focus:bg-white/30"
+                />
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {(() => {
+                const activities = getActivitiesForCW(selectedCW.year, selectedCW.week)
+                  .filter(a => {
+                    if (!cwSearch) return true
+                    const search = cwSearch.toLowerCase()
+                    return (
+                      a.codice?.toLowerCase().includes(search) ||
+                      a.nome?.toLowerCase().includes(search) ||
+                      a.squadra?.toLowerCase().includes(search) ||
+                      a.foreman?.toLowerCase().includes(search) ||
+                      a.disciplina?.nome?.toLowerCase().includes(search)
+                    )
+                  })
+                  .sort((a, b) => (a.priorita || 0) - (b.priorita || 0))
+                
+                if (activities.length === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <div className="text-5xl mb-4">📭</div>
+                      <p className="text-gray-500">
+                        {cwSearch ? 'Nessuna attività trovata' : 'Nessuna attività pianificata per questa settimana'}
+                      </p>
+                    </div>
+                  )
+                }
+                
+                // Raggruppa per disciplina
+                const byDisc = {}
+                activities.forEach(a => {
+                  const disc = a.disciplina?.nome || 'Senza Disciplina'
+                  if (!byDisc[disc]) byDisc[disc] = { nome: disc, colore: a.disciplina?.colore || '#6B7280', items: [] }
+                  byDisc[disc].items.push(a)
+                })
+                
+                return (
+                  <div className="space-y-6">
+                    {Object.values(byDisc).map((disc, dIdx) => (
+                      <div key={dIdx}>
+                        <div 
+                          className="flex items-center gap-2 mb-3 pb-2 border-b"
+                          style={{ borderColor: disc.colore }}
+                        >
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: disc.colore }}
+                          ></div>
+                          <span className="font-semibold text-gray-700">{disc.nome}</span>
+                          <span className="text-sm text-gray-400">({disc.items.length})</span>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {disc.items.map((activity, aIdx) => (
+                            <div 
+                              key={aIdx}
+                              className="border rounded-xl p-4 hover:shadow-md transition-shadow"
+                              style={activity.tipo === 'TP' ? { borderLeftWidth: '4px', borderLeftColor: activity.colore || '#8B5CF6' } : {}}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTPBadgeColor(activity.tipo)}`}>
+                                    {activity.tipoIcona} {activity.tipo}
+                                  </span>
+                                  <span className="font-mono font-semibold text-gray-800">
+                                    {activity.codice}
+                                  </span>
+                                </div>
+                                <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(activity.statoTP || activity.stato)} text-white`}>
+                                  {activity.statoTP || activity.stato}
+                                </span>
+                              </div>
+                              {activity.nome && (
+                                <p className="text-sm text-gray-600 mb-2">{activity.nome}</p>
+                              )}
+                              <div className="text-xs text-gray-500 space-y-1">
+                                {activity.tipo === 'TP' && activity.pressione_test && (
+                                  <div className="text-purple-600 font-medium">⏲️ {activity.pressione_test} bar - {activity.tipo_test}</div>
+                                )}
+                                {activity.fase && (
+                                  <div className="flex items-center gap-1">
+                                    <span>{activity.fase.icona}</span>
+                                    <span>{activity.fase.nome}</span>
+                                  </div>
+                                )}
+                                {activity.squadra && (
+                                  <div>👥 {activity.squadra}</div>
+                                )}
+                                {activity.foreman && (
+                                  <div>👷 {activity.foreman}</div>
+                                )}
+                                {activity.azione && (
+                                  <div>🔧 {activity.azione}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+            
+            {/* Footer */}
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setSelectedCW(null)}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
