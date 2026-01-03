@@ -16,7 +16,7 @@ export default function GanttPage() {
   const [pianificazioni, setPianificazioni] = useState([])
   
   // Range date
-  const [rangePreset, setRangePreset] = useState('6months')
+  const [rangePreset, setRangePreset] = useState('activities')
   const [customRange, setCustomRange] = useState({ startDate: '', endDate: '' })
   const [dateRange, setDateRange] = useState({ start: null, end: null })
   
@@ -78,47 +78,82 @@ export default function GanttPage() {
     return icons[tipo] || '🧪'
   }
 
-  // Calcola range basato su preset
+  // Calcola range basato su preset E sulle date effettive delle attività
   const calculateDateRange = useCallback(() => {
     const oggi = new Date()
+    
+    // Trova la prima e ultima data tra WP e TP
+    const allDates = [
+      ...workPackages.filter(wp => wp.data_inizio_pianificata).map(wp => new Date(wp.data_inizio_pianificata)),
+      ...workPackages.filter(wp => wp.data_fine_pianificata).map(wp => new Date(wp.data_fine_pianificata)),
+      ...testPackages.filter(tp => tp.data_inizio_pianificata).map(tp => new Date(tp.data_inizio_pianificata)),
+      ...testPackages.filter(tp => tp.data_fine_pianificata).map(tp => new Date(tp.data_fine_pianificata))
+    ]
+    
+    const minDate = allDates.length > 0 ? new Date(Math.min(...allDates)) : oggi
+    const maxDate = allDates.length > 0 ? new Date(Math.max(...allDates)) : oggi
+    
     let start, end
     
     switch (rangePreset) {
       case '3months':
-        start = new Date(oggi); start.setMonth(start.getMonth() - 1)
-        end = new Date(oggi); end.setMonth(end.getMonth() + 2)
+        // Parte 2 settimane prima della prima attività, finisce 3 mesi dopo
+        start = new Date(minDate)
+        start.setDate(start.getDate() - 14)
+        end = new Date(maxDate)
+        end.setMonth(end.getMonth() + 1)
+        // Ma almeno 3 mesi di range
+        const min3m = new Date(start)
+        min3m.setMonth(min3m.getMonth() + 3)
+        if (end < min3m) end = min3m
         break
       case '6months':
-        start = new Date(oggi); start.setMonth(start.getMonth() - 2)
-        end = new Date(oggi); end.setMonth(end.getMonth() + 4)
+        start = new Date(minDate)
+        start.setDate(start.getDate() - 14)
+        end = new Date(maxDate)
+        end.setMonth(end.getMonth() + 2)
+        const min6m = new Date(start)
+        min6m.setMonth(min6m.getMonth() + 6)
+        if (end < min6m) end = min6m
         break
       case '1year':
-        start = new Date(oggi); start.setMonth(start.getMonth() - 3)
-        end = new Date(oggi); end.setMonth(end.getMonth() + 9)
+        start = new Date(minDate)
+        start.setDate(start.getDate() - 14)
+        end = new Date(maxDate)
+        end.setMonth(end.getMonth() + 3)
+        const min1y = new Date(start)
+        min1y.setMonth(min1y.getMonth() + 12)
+        if (end < min1y) end = min1y
         break
       case 'project':
-        start = progetto?.data_inizio ? new Date(progetto.data_inizio) : new Date(oggi)
-        start.setMonth(start.getMonth() - 1)
-        end = progetto?.data_fine_prevista ? new Date(progetto.data_fine_prevista) : new Date(oggi)
+        start = progetto?.data_inizio ? new Date(progetto.data_inizio) : new Date(minDate)
+        start.setDate(start.getDate() - 7)
+        end = progetto?.data_fine_prevista ? new Date(progetto.data_fine_prevista) : new Date(maxDate)
         end.setMonth(end.getMonth() + 1)
         break
-      case 'lastyear':
-        start = new Date(oggi.getFullYear() - 1, 0, 1)
-        end = new Date(oggi)
+      case 'activities':
+        // Mostra solo il range delle attività
+        start = new Date(minDate)
+        start.setDate(start.getDate() - 14)
+        end = new Date(maxDate)
+        end.setDate(end.getDate() + 14)
         break
       case 'custom':
-        start = customRange.startDate ? new Date(customRange.startDate) : new Date(oggi)
-        end = customRange.endDate ? new Date(customRange.endDate) : new Date(oggi)
-        end.setMonth(end.getMonth() + 6)
+        start = customRange.startDate ? new Date(customRange.startDate) : new Date(minDate)
+        end = customRange.endDate ? new Date(customRange.endDate) : new Date(maxDate)
         break
       default:
-        start = new Date(oggi); start.setMonth(start.getMonth() - 2)
-        end = new Date(oggi); end.setMonth(end.getMonth() + 4)
+        start = new Date(minDate)
+        start.setDate(start.getDate() - 14)
+        end = new Date(maxDate)
+        end.setMonth(end.getMonth() + 2)
     }
     
+    // Imposta al primo del mese per start
     start.setDate(1)
+    
     setDateRange({ start, end })
-  }, [rangePreset, customRange, progetto])
+  }, [rangePreset, customRange, progetto, workPackages, testPackages])
 
   useEffect(() => {
     calculateDateRange()
@@ -576,11 +611,11 @@ export default function GanttPage() {
               onChange={(e) => setRangePreset(e.target.value)}
               className="px-3 py-2 border rounded-lg text-sm bg-white"
             >
+              <option value="activities">📍 Solo Attività</option>
               <option value="3months">3 Mesi</option>
               <option value="6months">6 Mesi</option>
               <option value="1year">1 Anno</option>
               <option value="project">Durata Progetto</option>
-              <option value="lastyear">Anno Scorso → Oggi</option>
               <option value="custom">Personalizzato</option>
             </select>
           </div>
