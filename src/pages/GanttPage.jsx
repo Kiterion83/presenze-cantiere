@@ -15,24 +15,27 @@ export default function GanttPage() {
   const [testPackages, setTestPackages] = useState([])
   const [pianificazioni, setPianificazioni] = useState([])
   
-  // Range date - NUOVO: controlli flessibili
-  const [rangePreset, setRangePreset] = useState('6months') // 3months, 6months, 1year, custom
-  const [customRange, setCustomRange] = useState({
-    startDate: '',
-    endDate: ''
-  })
+  // Range date
+  const [rangePreset, setRangePreset] = useState('6months')
+  const [customRange, setCustomRange] = useState({ startDate: '', endDate: '' })
   const [dateRange, setDateRange] = useState({ start: null, end: null })
   
   // Modal CW Detail
   const [selectedCW, setSelectedCW] = useState(null)
   const [cwSearch, setCwSearch] = useState('')
   
+  // Modal TP non pianificati
+  const [showUnplannedTPModal, setShowUnplannedTPModal] = useState(false)
+  
   // Filtro vista
-  const [viewFilter, setViewFilter] = useState('all') // all, wp, tp
+  const [viewFilter, setViewFilter] = useState('all')
   
   // Sezioni collassabili
   const [showWPSection, setShowWPSection] = useState(false)
   const [showTPSection, setShowTPSection] = useState(false)
+  
+  // Tooltip
+  const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: null })
   
   // Scroll ref
   const ganttRef = useRef(null)
@@ -52,6 +55,28 @@ export default function GanttPage() {
     const checkWeek = getWeekNumber(date)
     return currentWeek === checkWeek && now.getFullYear() === date.getFullYear()
   }
+  
+  // Calcola CW da una data
+  function getYearWeekFromDate(dateStr) {
+    if (!dateStr) return null
+    const d = new Date(dateStr)
+    return { year: d.getFullYear(), week: getWeekNumber(d) }
+  }
+
+  // Helper per icona tipo test
+  const getTipoTestIcon = (tipo) => {
+    const icons = {
+      hydrotest: '💧',
+      pneumatic: '💨',
+      leak_test: '🔍',
+      functional: '⚙️',
+      electrical: '⚡',
+      loop_check: '🔄',
+      cleaning: '🧹',
+      drying: '☀️'
+    }
+    return icons[tipo] || '🧪'
+  }
 
   // Calcola range basato su preset
   const calculateDateRange = useCallback(() => {
@@ -60,22 +85,16 @@ export default function GanttPage() {
     
     switch (rangePreset) {
       case '3months':
-        start = new Date(oggi)
-        start.setMonth(start.getMonth() - 1)
-        end = new Date(oggi)
-        end.setMonth(end.getMonth() + 2)
+        start = new Date(oggi); start.setMonth(start.getMonth() - 1)
+        end = new Date(oggi); end.setMonth(end.getMonth() + 2)
         break
       case '6months':
-        start = new Date(oggi)
-        start.setMonth(start.getMonth() - 2)
-        end = new Date(oggi)
-        end.setMonth(end.getMonth() + 4)
+        start = new Date(oggi); start.setMonth(start.getMonth() - 2)
+        end = new Date(oggi); end.setMonth(end.getMonth() + 4)
         break
       case '1year':
-        start = new Date(oggi)
-        start.setMonth(start.getMonth() - 3)
-        end = new Date(oggi)
-        end.setMonth(end.getMonth() + 9)
+        start = new Date(oggi); start.setMonth(start.getMonth() - 3)
+        end = new Date(oggi); end.setMonth(end.getMonth() + 9)
         break
       case 'project':
         start = progetto?.data_inizio ? new Date(progetto.data_inizio) : new Date(oggi)
@@ -84,8 +103,8 @@ export default function GanttPage() {
         end.setMonth(end.getMonth() + 1)
         break
       case 'lastyear':
-        start = new Date(oggi.getFullYear() - 1, 0, 1) // 1 Jan anno scorso
-        end = new Date(oggi) // oggi
+        start = new Date(oggi.getFullYear() - 1, 0, 1)
+        end = new Date(oggi)
         break
       case 'custom':
         start = customRange.startDate ? new Date(customRange.startDate) : new Date(oggi)
@@ -93,15 +112,11 @@ export default function GanttPage() {
         end.setMonth(end.getMonth() + 6)
         break
       default:
-        start = new Date(oggi)
-        start.setMonth(start.getMonth() - 2)
-        end = new Date(oggi)
-        end.setMonth(end.getMonth() + 4)
+        start = new Date(oggi); start.setMonth(start.getMonth() - 2)
+        end = new Date(oggi); end.setMonth(end.getMonth() + 4)
     }
     
-    // Imposta al primo del mese per start
     start.setDate(1)
-    
     setDateRange({ start, end })
   }, [rangePreset, customRange, progetto])
 
@@ -115,7 +130,7 @@ export default function GanttPage() {
     setLoading(true)
 
     try {
-      // Work Packages con disciplina
+      // Work Packages
       const { data: wpData } = await supabase
         .from('work_packages')
         .select(`
@@ -129,7 +144,7 @@ export default function GanttPage() {
 
       setWorkPackages(wpData || [])
 
-      // Test Packages con disciplina
+      // Test Packages
       const { data: tpData } = await supabase
         .from('test_packages')
         .select(`
@@ -144,7 +159,7 @@ export default function GanttPage() {
 
       setTestPackages(tpData || [])
 
-      // Pianificazioni CW con componenti, work_packages E test_packages
+      // Pianificazioni CW (per componenti)
       const { data: pianData } = await supabase
         .from('pianificazione_cw')
         .select(`
@@ -173,7 +188,6 @@ export default function GanttPage() {
         .order('anno')
         .order('settimana')
 
-      console.log('Pianificazioni caricate:', pianData?.length, pianData?.filter(p => p.test_package_id))
       setPianificazioni(pianData || [])
 
     } catch (error) {
@@ -234,136 +248,161 @@ export default function GanttPage() {
     return Object.values(monthMap)
   }, [weeks])
 
-  // Helper per icona tipo test
-  const getTipoTestIcon = (tipo) => {
-    const icons = {
-      hydrotest: '💧',
-      pneumatic: '💨',
-      leak_test: '🔍',
-      functional: '⚙️',
-      electrical: '⚡',
-      loop_check: '🔄',
-      cleaning: '🧹',
-      drying: '☀️'
-    }
-    return icons[tipo] || '🧪'
-  }
+  // KPI: TP senza date pianificate
+  const tpSenzaDate = useMemo(() => {
+    return testPackages.filter(tp => !tp.data_inizio_pianificata)
+  }, [testPackages])
 
-  // Raggruppa pianificazioni per disciplina - CON FIX PER TP
+  // KPI: TP con date pianificate
+  const tpConDate = useMemo(() => {
+    return testPackages.filter(tp => tp.data_inizio_pianificata)
+  }, [testPackages])
+
+  // Raggruppa per disciplina - ORA INCLUDE WP E TP DIRETTAMENTE DALLE DATE
   const ganttRows = useMemo(() => {
     const byDiscipline = {}
     
-    // Filtra in base a viewFilter
-    const filteredPian = pianificazioni.filter(p => {
-      if (viewFilter === 'all') return true
-      if (viewFilter === 'wp') return p.work_package_id && !p.test_package_id && !p.componente_id
-      if (viewFilter === 'tp') return p.test_package_id
-      return true
-    })
-    
-    console.log('Filtrate per', viewFilter, ':', filteredPian.length)
-    
-    filteredPian.forEach(p => {
-      // Determina se è un WP, TP o un componente
-      const isTP = !!p.test_package_id
-      const isWP = !!p.work_package_id && !p.componente_id && !p.test_package_id
-      const item = isTP ? p.test_package : (isWP ? p.work_package : p.componente)
-      
-      if (!item) {
-        console.log('Item null per pianificazione:', p.id, 'TP:', p.test_package_id, 'WP:', p.work_package_id)
-        return // Skip se non c'è item
-      }
-      
-      // Disciplina dal TP, WP o dal componente
-      const disc = item?.disciplina?.nome || 'Senza Disciplina'
-      const color = item?.disciplina?.colore || '#6B7280'
-      const icona = item?.disciplina?.icona || '📦'
-      
-      if (!byDiscipline[disc]) {
-        byDiscipline[disc] = {
-          name: disc,
-          color,
-          icona,
-          items: [],
-          expanded: true
+    // === 1. AGGIUNGI WP DIRETTAMENTE DALLE DATE ===
+    if (viewFilter === 'all' || viewFilter === 'wp') {
+      workPackages.forEach(wp => {
+        if (!wp.data_inizio_pianificata) return // Skip WP senza date
+        if (!showCompleted && wp.stato === 'completato') return
+        
+        const startYW = getYearWeekFromDate(wp.data_inizio_pianificata)
+        const endYW = getYearWeekFromDate(wp.data_fine_pianificata)
+        if (!startYW) return
+        
+        const disc = wp.disciplina?.nome || 'Senza Disciplina'
+        const color = wp.disciplina?.colore || '#6B7280'
+        const icona = wp.disciplina?.icona || '📦'
+        
+        if (!byDiscipline[disc]) {
+          byDiscipline[disc] = { name: disc, color, icona, items: [], expanded: true }
         }
-      }
-      
-      // Determina tipo e icona
-      let tipo = 'COMP'
-      let tipoIcona = '🔩'
-      if (isTP) {
-        tipo = 'TP'
-        tipoIcona = getTipoTestIcon(p.test_package?.tipo)
-      } else if (isWP) {
-        tipo = 'WP'
-        tipoIcona = '📦'
-      }
-      
-      byDiscipline[disc].items.push({
-        id: p.id,
-        tipo,
-        tipoIcona,
-        codice: item?.codice || 'N/D',
-        nome: isTP ? item?.nome : (isWP ? item?.nome : item?.descrizione),
-        descrizione: item?.descrizione,
-        stato: p.stato || 'pianificato',
-        statoTP: isTP ? p.test_package?.stato : null,
-        anno: p.anno,
-        settimana: p.settimana,
-        azione: p.azione,
-        priorita: p.priorita,
-        squadra: isTP ? p.test_package?.squadra?.nome : (isWP ? p.work_package?.squadra?.nome : p.squadra?.nome),
-        foreman: isTP 
-          ? (p.test_package?.foreman ? `${p.test_package.foreman.nome} ${p.test_package.foreman.cognome}` : null)
-          : (isWP ? (p.work_package?.foreman ? `${p.work_package.foreman.nome} ${p.work_package.foreman.cognome}` : null) : null),
-        fase: p.fase,
-        work_package: p.work_package,
-        test_package: p.test_package,
-        componente: p.componente,
-        colore: isTP ? (p.test_package?.colore || '#06B6D4') : (isWP ? (p.work_package?.colore || '#3B82F6') : null),
-        // Info extra per TP
-        pressione_test: isTP ? p.test_package?.pressione_test : null,
-        durata_holding: isTP ? p.test_package?.durata_holding_minuti : null
+        
+        byDiscipline[disc].items.push({
+          id: `wp-${wp.id}`,
+          originalId: wp.id,
+          tipo: 'WP',
+          tipoIcona: '📦',
+          codice: wp.codice,
+          nome: wp.nome,
+          descrizione: wp.descrizione,
+          stato: wp.stato || 'pianificato',
+          statoTP: null,
+          annoInizio: startYW.year,
+          settimanaInizio: startYW.week,
+          annoFine: endYW?.year,
+          settimanaFine: endYW?.week,
+          dataInizio: wp.data_inizio_pianificata,
+          dataFine: wp.data_fine_pianificata,
+          squadra: wp.squadra?.nome,
+          foreman: wp.foreman ? `${wp.foreman.nome} ${wp.foreman.cognome}` : null,
+          disciplina: wp.disciplina,
+          colore: wp.colore || '#8B5CF6',
+          priorita: wp.priorita
+        })
+      })
+    }
+    
+    // === 2. AGGIUNGI TP DIRETTAMENTE DALLE DATE ===
+    if (viewFilter === 'all' || viewFilter === 'tp') {
+      testPackages.forEach(tp => {
+        if (!tp.data_inizio_pianificata) return // Skip TP senza date
+        if (!showCompleted && (tp.stato === 'passed' || tp.stato === 'failed')) return
+        
+        const startYW = getYearWeekFromDate(tp.data_inizio_pianificata)
+        const endYW = getYearWeekFromDate(tp.data_fine_pianificata)
+        if (!startYW) return
+        
+        const disc = tp.disciplina?.nome || 'Commissioning'
+        const color = tp.disciplina?.colore || '#06B6D4'
+        const icona = tp.disciplina?.icona || '💧'
+        
+        if (!byDiscipline[disc]) {
+          byDiscipline[disc] = { name: disc, color, icona, items: [], expanded: true }
+        }
+        
+        byDiscipline[disc].items.push({
+          id: `tp-${tp.id}`,
+          originalId: tp.id,
+          tipo: 'TP',
+          tipoIcona: getTipoTestIcon(tp.tipo),
+          codice: tp.codice,
+          nome: tp.nome,
+          descrizione: tp.descrizione,
+          stato: tp.stato || 'draft',
+          statoTP: tp.stato,
+          annoInizio: startYW.year,
+          settimanaInizio: startYW.week,
+          annoFine: endYW?.year,
+          settimanaFine: endYW?.week,
+          dataInizio: tp.data_inizio_pianificata,
+          dataFine: tp.data_fine_pianificata,
+          squadra: tp.squadra?.nome,
+          foreman: tp.foreman ? `${tp.foreman.nome} ${tp.foreman.cognome}` : null,
+          disciplina: tp.disciplina,
+          colore: tp.colore || '#06B6D4',
+          pressione_test: tp.pressione_test,
+          durata_holding: tp.durata_holding_minuti,
+          fluido_test: tp.fluido_test,
+          tipoTest: tp.tipo,
+          priorita: tp.priorita
+        })
+      })
+    }
+    
+    // === 3. AGGIUNGI COMPONENTI DA PIANIFICAZIONE_CW (se viewFilter = all) ===
+    if (viewFilter === 'all') {
+      pianificazioni.forEach(p => {
+        // Solo componenti singoli (non WP e non TP che sono già aggiunti dalle date)
+        if (!p.componente_id || p.work_package_id || p.test_package_id) return
+        if (!showCompleted && p.stato === 'completato') return
+        
+        const comp = p.componente
+        if (!comp) return
+        
+        const disc = comp.disciplina?.nome || 'Senza Disciplina'
+        const color = comp.disciplina?.colore || '#6B7280'
+        const icona = comp.disciplina?.icona || '🔩'
+        
+        if (!byDiscipline[disc]) {
+          byDiscipline[disc] = { name: disc, color, icona, items: [], expanded: true }
+        }
+        
+        byDiscipline[disc].items.push({
+          id: `comp-${p.id}`,
+          originalId: p.id,
+          tipo: 'COMP',
+          tipoIcona: '🔩',
+          codice: comp.codice,
+          nome: comp.descrizione,
+          descrizione: comp.descrizione,
+          stato: p.stato || 'pianificato',
+          statoTP: null,
+          annoInizio: p.anno,
+          settimanaInizio: p.settimana,
+          annoFine: null,
+          settimanaFine: null,
+          squadra: p.squadra?.nome,
+          foreman: null,
+          disciplina: comp.disciplina,
+          colore: null,
+          fase: p.fase
+        })
+      })
+    }
+    
+    // Ordina items per settimana
+    Object.values(byDiscipline).forEach(disc => {
+      disc.items.sort((a, b) => {
+        if (a.annoInizio !== b.annoInizio) return a.annoInizio - b.annoInizio
+        return a.settimanaInizio - b.settimanaInizio
       })
     })
     
     return Object.values(byDiscipline).sort((a, b) => a.name.localeCompare(b.name))
-  }, [pianificazioni, viewFilter])
-
-  // Attività per una specifica CW (per il modal)
-  const getActivitiesForCW = (year, week) => {
-    return pianificazioni.filter(p => p.anno === year && p.settimana === week).map(p => {
-      const isTP = !!p.test_package_id
-      const isWP = !!p.work_package_id && !p.componente_id && !p.test_package_id
-      const item = isTP ? p.test_package : (isWP ? p.work_package : p.componente)
-      
-      let tipo = 'COMP'
-      if (isTP) tipo = 'TP'
-      else if (isWP) tipo = 'WP'
-      
-      return {
-        id: p.id,
-        tipo,
-        tipoIcona: isTP ? getTipoTestIcon(p.test_package?.tipo) : (isWP ? '📦' : '🔩'),
-        codice: item?.codice || 'N/D',
-        nome: isTP ? item?.nome : (isWP ? item?.nome : item?.descrizione),
-        stato: p.stato,
-        statoTP: isTP ? p.test_package?.stato : null,
-        disciplina: item?.disciplina,
-        squadra: isTP ? p.test_package?.squadra?.nome : (isWP ? p.work_package?.squadra?.nome : p.squadra?.nome),
-        foreman: isTP 
-          ? (p.test_package?.foreman ? `${p.test_package.foreman.nome} ${p.test_package.foreman.cognome}` : null)
-          : (isWP ? (p.work_package?.foreman ? `${p.work_package.foreman.nome} ${p.work_package.foreman.cognome}` : null) : null),
-        fase: p.fase,
-        priorita: p.priorita,
-        azione: p.azione,
-        colore: isTP ? (p.test_package?.colore || '#06B6D4') : (isWP ? (p.work_package?.colore || '#3B82F6') : null),
-        pressione_test: isTP ? p.test_package?.pressione_test : null,
-        tipo_test: isTP ? p.test_package?.tipo : null
-      }
-    })
-  }
+  }, [workPackages, testPackages, pianificazioni, viewFilter, showCompleted])
 
   // Scroll to today
   const scrollToToday = () => {
@@ -382,31 +421,34 @@ export default function GanttPage() {
 
   // Colori stato
   const getStatusColor = (stato) => {
-    switch (stato) {
-      case 'completato': return 'bg-green-500'
-      case 'passed': return 'bg-green-500'
-      case 'in_corso': return 'bg-blue-500'
-      case 'in_progress': return 'bg-blue-500'
-      case 'holding': return 'bg-purple-500'
-      case 'al_site': return 'bg-purple-500'
-      case 'ready': return 'bg-indigo-500'
-      case 'in_warehouse': return 'bg-amber-500'
-      case 'planned': return 'bg-cyan-500'
-      case 'pianificato': return 'bg-gray-400'
-      case 'draft': return 'bg-gray-300'
-      case 'failed': return 'bg-red-500'
-      case 'da_ordinare': return 'bg-red-400'
-      default: return 'bg-gray-400'
+    const colors = {
+      completato: 'bg-green-500', passed: 'bg-green-500',
+      in_corso: 'bg-blue-500', in_progress: 'bg-blue-500',
+      holding: 'bg-purple-500', ready: 'bg-indigo-500',
+      planned: 'bg-cyan-500', pianificato: 'bg-cyan-500',
+      draft: 'bg-gray-400', failed: 'bg-red-500'
     }
+    return colors[stato] || 'bg-gray-400'
   }
   
-  // Badge per tipo
   const getTPBadgeColor = (tipo) => {
-    switch (tipo) {
-      case 'TP': return 'bg-cyan-100 text-cyan-700'
-      case 'WP': return 'bg-purple-100 text-purple-700'
-      default: return 'bg-gray-100 text-gray-700'
-    }
+    const colors = { TP: 'bg-cyan-100 text-cyan-700', WP: 'bg-purple-100 text-purple-700' }
+    return colors[tipo] || 'bg-gray-100 text-gray-700'
+  }
+
+  // Tooltip handlers
+  const showTooltip = (e, item) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setTooltip({
+      show: true,
+      x: rect.left + rect.width / 2,
+      y: rect.top - 10,
+      content: item
+    })
+  }
+  
+  const hideTooltip = () => {
+    setTooltip({ show: false, x: 0, y: 0, content: null })
   }
 
   // Loading
@@ -422,6 +464,51 @@ export default function GanttPage() {
 
   return (
     <div className="p-4 lg:p-8">
+      {/* Tooltip */}
+      {tooltip.show && tooltip.content && (
+        <div 
+          className="fixed z-50 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl max-w-xs pointer-events-none"
+          style={{ 
+            left: tooltip.x, 
+            top: tooltip.y,
+            transform: 'translate(-50%, -100%)'
+          }}
+        >
+          <div className="font-bold text-sm mb-1">
+            {tooltip.content.tipoIcona} {tooltip.content.codice}
+          </div>
+          <div className="text-gray-300 mb-2">{tooltip.content.nome}</div>
+          <div className="space-y-1 text-gray-400">
+            {tooltip.content.disciplina && (
+              <div>📁 {tooltip.content.disciplina.nome}</div>
+            )}
+            {tooltip.content.squadra && (
+              <div>👥 {tooltip.content.squadra}</div>
+            )}
+            {tooltip.content.foreman && (
+              <div>👷 {tooltip.content.foreman}</div>
+            )}
+            {tooltip.content.dataInizio && (
+              <div>📅 {new Date(tooltip.content.dataInizio).toLocaleDateString('it-IT')} 
+                {tooltip.content.dataFine && ` → ${new Date(tooltip.content.dataFine).toLocaleDateString('it-IT')}`}
+              </div>
+            )}
+            {tooltip.content.pressione_test && (
+              <div>⏲️ {tooltip.content.pressione_test} bar / {tooltip.content.durata_holding} min</div>
+            )}
+            {tooltip.content.fluido_test && (
+              <div>💧 {tooltip.content.fluido_test}</div>
+            )}
+            <div className="pt-1 border-t border-gray-700">
+              Stato: <span className="font-medium text-white">{tooltip.content.statoTP || tooltip.content.stato}</span>
+            </div>
+          </div>
+          <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full">
+            <div className="border-8 border-transparent border-t-gray-900"></div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div>
@@ -462,7 +549,7 @@ export default function GanttPage() {
           
           <button
             onClick={scrollToToday}
-            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700"
           >
             📍 Oggi
           </button>
@@ -472,14 +559,14 @@ export default function GanttPage() {
               type="checkbox"
               checked={showCompleted}
               onChange={(e) => setShowCompleted(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="w-4 h-4 rounded border-gray-300 text-blue-600"
             />
             Mostra completati
           </label>
         </div>
       </div>
 
-      {/* NUOVO: Controllo Range Date */}
+      {/* Controllo Range Date */}
       <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
           <div className="flex items-center gap-2">
@@ -531,7 +618,7 @@ export default function GanttPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
         <div className="bg-white rounded-xl p-4 shadow-sm border">
           <p className="text-2xl font-bold text-gray-800">{workPackages.length}</p>
           <p className="text-sm text-gray-500">📦 Work Packages</p>
@@ -541,39 +628,57 @@ export default function GanttPage() {
           <p className="text-sm text-gray-500">💧 Test Packages</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border">
-          <p className="text-2xl font-bold text-blue-600">{pianificazioni.length}</p>
-          <p className="text-sm text-gray-500">📅 Pianificazioni</p>
+          <p className="text-2xl font-bold text-green-600">{tpConDate.length}</p>
+          <p className="text-sm text-gray-500">📅 TP Pianificati</p>
+        </div>
+        {/* KPI: TP senza date - CLICCABILE */}
+        <div 
+          className={`bg-white rounded-xl p-4 shadow-sm border cursor-pointer hover:shadow-md transition-shadow ${
+            tpSenzaDate.length > 0 ? 'border-orange-300 bg-orange-50' : ''
+          }`}
+          onClick={() => tpSenzaDate.length > 0 && setShowUnplannedTPModal(true)}
+        >
+          <p className={`text-2xl font-bold ${tpSenzaDate.length > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+            {tpSenzaDate.length}
+          </p>
+          <p className="text-sm text-gray-500">⚠️ TP Senza Date</p>
+          {tpSenzaDate.length > 0 && (
+            <p className="text-xs text-orange-500 mt-1">Clicca per vedere</p>
+          )}
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border">
           <p className="text-2xl font-bold text-green-600">
-            {pianificazioni.filter(p => p.stato === 'completato').length}
-          </p>
-          <p className="text-sm text-gray-500">✅ Completate</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border">
-          <p className="text-2xl font-bold text-amber-600">
             {testPackages.filter(tp => tp.stato === 'passed').length}
           </p>
           <p className="text-sm text-gray-500">🏆 Test Superati</p>
         </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border">
+          <p className="text-2xl font-bold text-blue-600">
+            {ganttRows.reduce((acc, d) => acc + d.items.length, 0)}
+          </p>
+          <p className="text-sm text-gray-500">📊 Nel Gantt</p>
+        </div>
       </div>
 
-      {/* Empty state per Gantt */}
+      {/* Empty state */}
       {ganttRows.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
           <div className="text-6xl mb-4">📅</div>
           <h3 className="text-xl font-semibold text-gray-700 mb-2">
-            {viewFilter === 'tp' ? 'Nessun Test Package pianificato' : 
-             viewFilter === 'wp' ? 'Nessun Work Package pianificato' :
-             'Nessuna attività pianificata'}
+            {viewFilter === 'tp' ? 'Nessun Test Package con date pianificate' : 
+             viewFilter === 'wp' ? 'Nessun Work Package con date pianificate' :
+             'Nessuna attività con date pianificate'}
           </h3>
-          <p className="text-gray-500">
-            Vai alla sezione Pianificazione per assegnare {viewFilter === 'tp' ? 'Test Packages' : 'attività'} alle settimane
+          <p className="text-gray-500 mb-4">
+            Imposta le date di inizio e fine nei WP/TP per vederli nel Gantt
           </p>
-          {pianificazioni.length > 0 && (
-            <p className="text-sm text-gray-400 mt-2">
-              (Ci sono {pianificazioni.length} pianificazioni totali, di cui {pianificazioni.filter(p => p.test_package_id).length} Test Packages)
-            </p>
+          {tpSenzaDate.length > 0 && (
+            <button
+              onClick={() => setShowUnplannedTPModal(true)}
+              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+            >
+              ⚠️ Vedi {tpSenzaDate.length} TP senza date
+            </button>
           )}
         </div>
       ) : (
@@ -584,28 +689,25 @@ export default function GanttPage() {
             <span className="text-sm font-medium text-gray-600">Legenda:</span>
             <div className="flex items-center gap-1">
               <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">📦 WP</span>
-              <span className="text-xs text-gray-500">Work Package</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="px-2 py-0.5 rounded text-xs font-bold bg-cyan-100 text-cyan-700">💧 TP</span>
-              <span className="text-xs text-gray-500">Test Package</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-700">🔩 COMP</span>
-              <span className="text-xs text-gray-500">Componente</span>
             </div>
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-green-500 rounded"></div>
-                <span className="text-xs text-gray-500">Completato</span>
+                <span>Completato</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                <span className="text-xs text-gray-500">In corso</span>
+                <span>In corso</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-cyan-500 rounded"></div>
-                <span className="text-xs text-gray-500">Pianificato</span>
+                <span>Pianificato</span>
               </div>
             </div>
           </div>
@@ -641,12 +743,9 @@ export default function GanttPage() {
                     <div 
                       key={idx}
                       className={`w-[60px] text-center py-2 text-xs border-r cursor-pointer transition-colors ${
-                        week.isCurrentWeek 
-                          ? 'bg-blue-100 text-blue-700 font-bold' 
-                          : 'hover:bg-gray-50'
+                        week.isCurrentWeek ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-gray-50'
                       }`}
                       onClick={() => { setSelectedCW(week); setCwSearch('') }}
-                      title={`Clicca per dettagli CW${week.week}`}
                     >
                       <div className="font-medium">{week.label}</div>
                     </div>
@@ -658,9 +757,7 @@ export default function GanttPage() {
               {ganttRows.map((discipline, dIdx) => (
                 <div key={dIdx} className="border-b last:border-b-0">
                   {/* Discipline Header */}
-                  <div 
-                    className="flex items-center p-3 bg-gray-50 font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                  >
+                  <div className="flex items-center p-3 bg-gray-50 font-medium text-gray-700">
                     <span className="mr-2">{discipline.icona}</span>
                     <span 
                       className="w-3 h-3 rounded-full mr-2"
@@ -671,76 +768,85 @@ export default function GanttPage() {
                   </div>
 
                   {/* Items */}
-                  {discipline.items
-                    .filter(item => showCompleted || (item.stato !== 'completato' && item.statoTP !== 'passed'))
-                    .map((item, iIdx) => {
-                      const weekIndex = weeks.findIndex(w => w.year === item.anno && w.week === item.settimana)
-                      
-                      return (
-                        <div key={iIdx} className="flex border-t border-gray-100 hover:bg-gray-50">
-                          {/* Item label */}
-                          <div className="w-[300px] flex-shrink-0 p-2 border-r flex items-center gap-2">
-                            <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${getTPBadgeColor(item.tipo)}`}>
-                              {item.tipoIcona}
-                            </span>
-                            <span className="font-mono text-sm font-medium text-gray-700 truncate">
-                              {item.codice}
-                            </span>
-                            {item.nome && (
-                              <span className="text-xs text-gray-400 truncate hidden lg:inline">
-                                {item.nome.length > 20 ? item.nome.substring(0, 20) + '...' : item.nome}
-                              </span>
-                            )}
-                            {item.pressione_test && (
-                              <span className="text-xs text-cyan-500 ml-auto">
-                                {item.pressione_test} bar
-                              </span>
-                            )}
-                          </div>
-                          
-                          {/* Timeline */}
-                          <div className="flex relative">
-                            {weeks.map((week, wIdx) => {
-                              const isActive = wIdx === weekIndex
-                              const isCurrent = week.isCurrentWeek
-                              
-                              return (
-                                <div 
-                                  key={wIdx}
-                                  className={`w-[60px] h-10 border-r border-gray-100 relative ${
-                                    isCurrent ? 'bg-blue-50' : ''
-                                  }`}
-                                >
-                                  {isActive && (
-                                    <div 
-                                      className={`absolute inset-1 rounded-lg flex items-center justify-center text-white text-xs font-medium ${
-                                        item.tipo === 'TP' 
-                                          ? getStatusColor(item.statoTP || item.stato)
-                                          : getStatusColor(item.stato)
-                                      }`}
-                                      style={item.colore && !['completato', 'passed', 'failed'].includes(item.stato) && !['completato', 'passed', 'failed'].includes(item.statoTP) ? {
-                                        backgroundColor: item.colore
-                                      } : {}}
-                                      title={`${item.codice} - ${item.nome || ''}\nStato: ${item.statoTP || item.stato}`}
-                                    >
-                                      {item.tipo === 'TP' ? item.tipoIcona : (item.stato === 'completato' ? '✓' : '')}
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
-                            
-                            {/* Current week indicator line */}
-                            {currentWeekIndex >= 0 && (
-                              <div 
-                                className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-                                style={{ left: `${currentWeekIndex * 60 + 30}px` }}
-                              ></div>
-                            )}
-                          </div>
+                  {discipline.items.map((item, iIdx) => {
+                    const startWeekIndex = weeks.findIndex(w => 
+                      w.year === item.annoInizio && w.week === item.settimanaInizio
+                    )
+                    const endWeekIndex = item.annoFine && item.settimanaFine 
+                      ? weeks.findIndex(w => w.year === item.annoFine && w.week === item.settimanaFine)
+                      : startWeekIndex
+                    
+                    const barStart = Math.max(0, startWeekIndex)
+                    const barEnd = Math.max(barStart, endWeekIndex >= 0 ? endWeekIndex : barStart)
+                    const barWidth = barEnd - barStart + 1
+                    
+                    return (
+                      <div key={iIdx} className="flex border-t border-gray-100 hover:bg-gray-50">
+                        {/* Item label */}
+                        <div 
+                          className="w-[300px] flex-shrink-0 p-2 border-r flex items-center gap-2 cursor-pointer"
+                          onMouseEnter={(e) => showTooltip(e, item)}
+                          onMouseLeave={hideTooltip}
+                        >
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${getTPBadgeColor(item.tipo)}`}>
+                            {item.tipoIcona}
+                          </span>
+                          <span className="font-mono text-sm font-medium text-gray-700 truncate">
+                            {item.codice}
+                          </span>
+                          <span className="text-xs text-gray-400 truncate hidden lg:inline flex-1">
+                            {item.nome?.length > 20 ? item.nome.substring(0, 20) + '...' : item.nome}
+                          </span>
+                          {item.pressione_test && (
+                            <span className="text-xs text-cyan-500">{item.pressione_test} bar</span>
+                          )}
                         </div>
-                      )
-                    })}
+                        
+                        {/* Timeline */}
+                        <div className="flex relative">
+                          {weeks.map((week, wIdx) => {
+                            const isInRange = wIdx >= barStart && wIdx <= barEnd && startWeekIndex >= 0
+                            const isStart = wIdx === barStart && startWeekIndex >= 0
+                            const isEnd = wIdx === barEnd && startWeekIndex >= 0
+                            const isCurrent = week.isCurrentWeek
+                            
+                            return (
+                              <div 
+                                key={wIdx}
+                                className={`w-[60px] h-10 border-r border-gray-100 relative ${isCurrent ? 'bg-blue-50' : ''}`}
+                              >
+                                {isInRange && (
+                                  <div 
+                                    className={`absolute top-1 bottom-1 flex items-center justify-center text-white text-xs font-medium ${getStatusColor(item.statoTP || item.stato)} ${
+                                      isStart && isEnd ? 'left-1 right-1 rounded-lg' :
+                                      isStart ? 'left-1 right-0 rounded-l-lg' :
+                                      isEnd ? 'left-0 right-1 rounded-r-lg' :
+                                      'left-0 right-0'
+                                    }`}
+                                    style={item.colore && !['completato', 'passed', 'failed'].includes(item.statoTP || item.stato) ? {
+                                      backgroundColor: item.colore
+                                    } : {}}
+                                    onMouseEnter={(e) => showTooltip(e, item)}
+                                    onMouseLeave={hideTooltip}
+                                  >
+                                    {isStart && item.tipoIcona}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                          
+                          {/* Current week indicator line */}
+                          {currentWeekIndex >= 0 && (
+                            <div 
+                              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                              style={{ left: `${currentWeekIndex * 60 + 30}px` }}
+                            ></div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               ))}
             </div>
@@ -748,12 +854,12 @@ export default function GanttPage() {
         </div>
       )}
 
-      {/* Work Packages Summary - Collapsabile */}
+      {/* Work Packages - Collapsabile */}
       {workPackages.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border mt-6 overflow-hidden">
           <button
             onClick={() => setShowWPSection(!showWPSection)}
-            className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            className="w-full p-4 flex items-center justify-between hover:bg-gray-50"
           >
             <h3 className="font-semibold text-gray-800 flex items-center gap-2">
               📦 Work Packages ({workPackages.length})
@@ -764,38 +870,41 @@ export default function GanttPage() {
           {showWPSection && (
             <div className="px-4 pb-4">
               <div className="flex flex-wrap gap-2">
-                {workPackages.map((wp, idx) => {
-                  const wpPianificazioni = pianificazioni.filter(p => p.work_package_id === wp.id)
-                  const completati = wpPianificazioni.filter(p => p.stato === 'completato').length
-                  const progress = wpPianificazioni.length > 0 ? Math.round((completati / wpPianificazioni.length) * 100) : 0
-                  
-                  return (
-                    <div 
-                      key={idx} 
-                      className="px-3 py-2 border rounded-lg hover:shadow-sm transition-shadow flex items-center gap-2"
-                      title={`${wp.codice} - ${wp.nome}\n${wp.disciplina?.nome || 'N/D'}\nProgresso: ${progress}%`}
-                    >
-                      <span className="font-mono text-sm font-bold text-purple-600">{wp.codice}</span>
-                      <span className="text-sm text-gray-600 max-w-[150px] truncate">{wp.nome}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{progress}%</span>
-                    </div>
-                  )
-                })}
+                {workPackages.map((wp, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`px-3 py-2 border rounded-lg flex items-center gap-2 ${
+                      !wp.data_inizio_pianificata ? 'border-orange-300 bg-orange-50' : ''
+                    }`}
+                    title={`${wp.codice} - ${wp.nome}\n${wp.disciplina?.nome || 'N/D'}\n${wp.data_inizio_pianificata ? new Date(wp.data_inizio_pianificata).toLocaleDateString('it-IT') : '⚠️ Senza date'}`}
+                  >
+                    <span className="font-mono text-sm font-bold text-purple-600">{wp.codice}</span>
+                    <span className="text-sm text-gray-600 max-w-[150px] truncate">{wp.nome}</span>
+                    {!wp.data_inizio_pianificata && (
+                      <span className="text-xs text-orange-500">⚠️</span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Test Packages Summary - Collapsabile */}
+      {/* Test Packages - Collapsabile */}
       {testPackages.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border mt-6 overflow-hidden">
           <button
             onClick={() => setShowTPSection(!showTPSection)}
-            className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            className="w-full p-4 flex items-center justify-between hover:bg-gray-50"
           >
             <h3 className="font-semibold text-gray-800 flex items-center gap-2">
               💧 Test Packages ({testPackages.length})
+              {tpSenzaDate.length > 0 && (
+                <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full">
+                  {tpSenzaDate.length} senza date
+                </span>
+              )}
             </h3>
             <span className="text-gray-400 text-xl">{showTPSection ? '▼' : '▶'}</span>
           </button>
@@ -803,43 +912,93 @@ export default function GanttPage() {
           {showTPSection && (
             <div className="px-4 pb-4">
               <div className="flex flex-wrap gap-2">
-                {testPackages.map((tp, idx) => {
-                  const getTPStatoColor = (stato) => {
-                    const colors = {
-                      draft: 'bg-gray-100 text-gray-600',
-                      planned: 'bg-blue-100 text-blue-600',
-                      ready: 'bg-indigo-100 text-indigo-600',
-                      in_progress: 'bg-amber-100 text-amber-600',
-                      holding: 'bg-purple-100 text-purple-600',
-                      passed: 'bg-green-100 text-green-600',
-                      failed: 'bg-red-100 text-red-600'
-                    }
-                    return colors[stato] || colors.draft
-                  }
-                  
-                  return (
-                    <div 
-                      key={idx} 
-                      className="px-3 py-2 border rounded-lg hover:shadow-sm transition-shadow flex items-center gap-2"
-                      style={{ borderLeftWidth: '3px', borderLeftColor: tp.colore || '#06B6D4' }}
-                      title={`${tp.codice} - ${tp.nome}\n${tp.pressione_test ? tp.pressione_test + ' bar / ' + tp.durata_holding_minuti + ' min' : ''}\n${tp.disciplina?.nome || 'N/D'}`}
-                    >
-                      <span className="text-lg">{getTipoTestIcon(tp.tipo)}</span>
-                      <span className="font-mono text-sm font-bold text-cyan-600">{tp.codice}</span>
-                      <span className="text-sm text-gray-600 max-w-[150px] truncate">{tp.nome}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${getTPStatoColor(tp.stato)}`}>
-                        {tp.stato === 'planned' ? 'Plan' : 
-                         tp.stato === 'in_progress' ? 'In Corso' : 
-                         tp.stato === 'passed' ? '✓' : 
-                         tp.stato === 'failed' ? '✗' : 
-                         tp.stato}
-                      </span>
-                    </div>
-                  )
-                })}
+                {testPackages.map((tp, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`px-3 py-2 border rounded-lg flex items-center gap-2 ${
+                      !tp.data_inizio_pianificata ? 'border-orange-300 bg-orange-50' : ''
+                    }`}
+                    style={{ borderLeftWidth: '3px', borderLeftColor: tp.colore || '#06B6D4' }}
+                    title={`${tp.codice} - ${tp.nome}\n${tp.pressione_test ? tp.pressione_test + ' bar / ' + tp.durata_holding_minuti + ' min' : ''}\n${tp.data_inizio_pianificata ? new Date(tp.data_inizio_pianificata).toLocaleDateString('it-IT') : '⚠️ Senza date'}`}
+                  >
+                    <span className="text-lg">{getTipoTestIcon(tp.tipo)}</span>
+                    <span className="font-mono text-sm font-bold text-cyan-600">{tp.codice}</span>
+                    <span className="text-sm text-gray-600 max-w-[150px] truncate">{tp.nome}</span>
+                    {!tp.data_inizio_pianificata && (
+                      <span className="text-xs text-orange-500">⚠️</span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal TP Senza Date */}
+      {showUnplannedTPModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowUnplannedTPModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b bg-gradient-to-r from-orange-500 to-amber-500 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold">⚠️ Test Packages Senza Date</h3>
+                  <p className="text-orange-100 mt-1">
+                    {tpSenzaDate.length} TP non hanno date pianificate
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowUnplannedTPModal(false)}
+                  className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-xl"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <p className="text-gray-600 mb-4">
+                Questi Test Packages non appariranno nel Gantt finché non avranno date di inizio e fine.
+                Vai su <strong>Test Packages</strong> e imposta le date pianificate.
+              </p>
+              
+              <div className="space-y-3">
+                {tpSenzaDate.map((tp, idx) => (
+                  <div 
+                    key={idx}
+                    className="border rounded-xl p-4 bg-orange-50 border-orange-200"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{getTipoTestIcon(tp.tipo)}</span>
+                        <div>
+                          <span className="font-mono font-bold text-orange-700">{tp.codice}</span>
+                          <p className="text-sm text-gray-600">{tp.nome}</p>
+                        </div>
+                      </div>
+                      <span className="px-2 py-1 rounded text-xs bg-gray-200 text-gray-600">
+                        {tp.stato}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-sm text-gray-500 flex flex-wrap gap-4">
+                      {tp.disciplina && <span>📁 {tp.disciplina.nome}</span>}
+                      {tp.pressione_test && <span>⏲️ {tp.pressione_test} bar</span>}
+                      {tp.squadra && <span>👥 {tp.squadra.nome}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setShowUnplannedTPModal(false)}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -847,13 +1006,18 @@ export default function GanttPage() {
       {selectedCW && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCW(null)}>
           <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            {/* Header */}
             <div className="p-6 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-2xl font-bold">{selectedCW.label} - {selectedCW.year}</h3>
                   <p className="text-blue-100 mt-1">
-                    {getActivitiesForCW(selectedCW.year, selectedCW.week).length} attività pianificate
+                    {ganttRows.reduce((acc, d) => 
+                      acc + d.items.filter(i => 
+                        i.annoInizio <= selectedCW.year && i.settimanaInizio <= selectedCW.week &&
+                        (!i.annoFine || i.annoFine >= selectedCW.year) && 
+                        (!i.settimanaFine || i.settimanaFine >= selectedCW.week || i.annoFine > selectedCW.year)
+                      ).length
+                    , 0)} attività in questa settimana
                   </p>
                 </div>
                 <button
@@ -866,109 +1030,72 @@ export default function GanttPage() {
               <div className="mt-4">
                 <input
                   type="text"
-                  placeholder="🔍 Cerca attività..."
+                  placeholder="🔍 Cerca..."
                   value={cwSearch}
                   onChange={e => setCwSearch(e.target.value)}
-                  className="w-full px-4 py-2 rounded-xl bg-white/20 placeholder-blue-200 text-white border border-white/30 focus:outline-none focus:bg-white/30"
+                  className="w-full px-4 py-2 rounded-xl bg-white/20 placeholder-blue-200 text-white border border-white/30"
                 />
               </div>
             </div>
             
-            {/* Content */}
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               {(() => {
-                const activities = getActivitiesForCW(selectedCW.year, selectedCW.week)
-                  .filter(a => {
-                    if (!cwSearch) return true
-                    const search = cwSearch.toLowerCase()
-                    return (
-                      a.codice?.toLowerCase().includes(search) ||
-                      a.nome?.toLowerCase().includes(search) ||
-                      a.squadra?.toLowerCase().includes(search) ||
-                      a.foreman?.toLowerCase().includes(search) ||
-                      a.disciplina?.nome?.toLowerCase().includes(search)
-                    )
-                  })
-                  .sort((a, b) => (a.priorita || 0) - (b.priorita || 0))
+                const cwItems = ganttRows.flatMap(d => d.items.filter(i => {
+                  // Item è in questa CW se:
+                  // (annoInizio, settimanaInizio) <= CW <= (annoFine, settimanaFine)
+                  const startOK = i.annoInizio < selectedCW.year || 
+                    (i.annoInizio === selectedCW.year && i.settimanaInizio <= selectedCW.week)
+                  const endOK = !i.annoFine || i.annoFine > selectedCW.year ||
+                    (i.annoFine === selectedCW.year && i.settimanaFine >= selectedCW.week)
+                  return startOK && endOK
+                })).filter(i => {
+                  if (!cwSearch) return true
+                  const s = cwSearch.toLowerCase()
+                  return i.codice?.toLowerCase().includes(s) || 
+                         i.nome?.toLowerCase().includes(s) ||
+                         i.squadra?.toLowerCase().includes(s)
+                })
                 
-                if (activities.length === 0) {
+                if (cwItems.length === 0) {
                   return (
                     <div className="text-center py-12">
                       <div className="text-5xl mb-4">📭</div>
-                      <p className="text-gray-500">
-                        {cwSearch ? 'Nessuna attività trovata' : 'Nessuna attività pianificata per questa settimana'}
-                      </p>
+                      <p className="text-gray-500">Nessuna attività in questa settimana</p>
                     </div>
                   )
                 }
                 
-                const byDisc = {}
-                activities.forEach(a => {
-                  const disc = a.disciplina?.nome || 'Senza Disciplina'
-                  if (!byDisc[disc]) byDisc[disc] = { nome: disc, colore: a.disciplina?.colore || '#6B7280', items: [] }
-                  byDisc[disc].items.push(a)
-                })
-                
                 return (
-                  <div className="space-y-6">
-                    {Object.values(byDisc).map((disc, dIdx) => (
-                      <div key={dIdx}>
-                        <div 
-                          className="flex items-center gap-2 mb-3 pb-2 border-b"
-                          style={{ borderColor: disc.colore }}
-                        >
-                          <div 
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: disc.colore }}
-                          ></div>
-                          <span className="font-semibold text-gray-700">{disc.nome}</span>
-                          <span className="text-sm text-gray-400">({disc.items.length})</span>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {cwItems.map((item, idx) => (
+                      <div 
+                        key={idx}
+                        className="border rounded-xl p-4 hover:shadow-md"
+                        style={item.tipo === 'TP' ? { borderLeftWidth: '4px', borderLeftColor: item.colore } : {}}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTPBadgeColor(item.tipo)}`}>
+                              {item.tipoIcona} {item.tipo}
+                            </span>
+                            <span className="font-mono font-semibold">{item.codice}</span>
+                          </div>
+                          <span className={`px-2 py-1 rounded-full text-xs text-white ${getStatusColor(item.statoTP || item.stato)}`}>
+                            {item.statoTP || item.stato}
+                          </span>
                         </div>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {disc.items.map((activity, aIdx) => (
-                            <div 
-                              key={aIdx}
-                              className="border rounded-xl p-4 hover:shadow-md transition-shadow"
-                              style={activity.tipo === 'TP' ? { borderLeftWidth: '4px', borderLeftColor: activity.colore || '#06B6D4' } : {}}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTPBadgeColor(activity.tipo)}`}>
-                                    {activity.tipoIcona} {activity.tipo}
-                                  </span>
-                                  <span className="font-mono font-semibold text-gray-800">
-                                    {activity.codice}
-                                  </span>
-                                </div>
-                                <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(activity.statoTP || activity.stato)} text-white`}>
-                                  {activity.statoTP || activity.stato}
-                                </span>
-                              </div>
-                              {activity.nome && (
-                                <p className="text-sm text-gray-600 mb-2">{activity.nome}</p>
-                              )}
-                              <div className="text-xs text-gray-500 space-y-1">
-                                {activity.tipo === 'TP' && activity.pressione_test && (
-                                  <div className="text-cyan-600 font-medium">⏲️ {activity.pressione_test} bar - {activity.tipo_test}</div>
-                                )}
-                                {activity.fase && (
-                                  <div className="flex items-center gap-1">
-                                    <span>{activity.fase.icona}</span>
-                                    <span>{activity.fase.nome}</span>
-                                  </div>
-                                )}
-                                {activity.squadra && (
-                                  <div>👥 {activity.squadra}</div>
-                                )}
-                                {activity.foreman && (
-                                  <div>👷 {activity.foreman}</div>
-                                )}
-                                {activity.azione && (
-                                  <div>🔧 {activity.azione}</div>
-                                )}
-                              </div>
+                        {item.nome && <p className="text-sm text-gray-600 mb-2">{item.nome}</p>}
+                        <div className="text-xs text-gray-500 space-y-1">
+                          {item.pressione_test && (
+                            <div className="text-cyan-600 font-medium">⏲️ {item.pressione_test} bar</div>
+                          )}
+                          {item.squadra && <div>👥 {item.squadra}</div>}
+                          {item.foreman && <div>👷 {item.foreman}</div>}
+                          {item.dataInizio && (
+                            <div>📅 {new Date(item.dataInizio).toLocaleDateString('it-IT')} 
+                              {item.dataFine && ` → ${new Date(item.dataFine).toLocaleDateString('it-IT')}`}
                             </div>
-                          ))}
+                          )}
                         </div>
                       </div>
                     ))}
