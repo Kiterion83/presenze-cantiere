@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
+import TestPackageDocumenti from './TestPackageDocumenti'
 
 export default function TestPackagesPage() {
   const { progettoId, progetto, isAtLeast } = useAuth()
@@ -1149,17 +1150,18 @@ export default function TestPackagesPage() {
             </div>
             
             {/* Tabs */}
-            <div className="flex border-b">
+            <div className="flex border-b overflow-x-auto">
               {[
                 { id: 'overview', label: '📋 Overview', icon: '📋' },
                 { id: 'fasi', label: '📈 Fasi', icon: '📈' },
+                { id: 'documenti', label: '📄 Documenti', icon: '📄' },
                 { id: 'componenti', label: '🔩 Componenti', icon: '🔩' },
                 { id: 'punch', label: '⚠️ Punch', icon: '⚠️' }
               ].map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                  className={`flex-1 min-w-[100px] px-4 py-3 text-sm font-medium transition-colors ${
                     activeTab === tab.id 
                       ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50' 
                       : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
@@ -1318,6 +1320,14 @@ export default function TestPackagesPage() {
                     )
                   })}
                 </div>
+              )}
+              
+              {activeTab === 'documenti' && (
+                <TestPackageDocumenti 
+                  testPackageId={showDetail.id}
+                  testPackageCode={showDetail.codice}
+                  canEdit={isAtLeast('foreman')}
+                />
               )}
               
               {activeTab === 'componenti' && (
