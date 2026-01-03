@@ -13,6 +13,7 @@ export default function GanttPage() {
   
   // Dati
   const [workPackages, setWorkPackages] = useState([])
+  const [testPackages, setTestPackages] = useState([]) // NUOVO
   const [pianificazioni, setPianificazioni] = useState([])
   
   // Range date
@@ -21,6 +22,9 @@ export default function GanttPage() {
   // Modal CW Detail
   const [selectedCW, setSelectedCW] = useState(null)
   const [cwSearch, setCwSearch] = useState('')
+  
+  // Filtro vista
+  const [viewFilter, setViewFilter] = useState('all') // all, wp, tp
   
   // Scroll ref
   const ganttRef = useRef(null)
@@ -69,7 +73,22 @@ export default function GanttPage() {
 
       setWorkPackages(wpData || [])
 
-      // Pianificazioni CW con componenti E work_packages
+      // NUOVO: Test Packages con disciplina
+      const { data: tpData } = await supabase
+        .from('test_packages')
+        .select(`
+          *,
+          disciplina:discipline(id, nome, colore, icona),
+          squadra:squadre(id, nome),
+          foreman:persone!test_packages_foreman_id_fkey(id, nome, cognome),
+          fase_corrente:test_package_fasi(id, nome, codice, icona, colore, ordine)
+        `)
+        .eq('progetto_id', progetto.id)
+        .order('data_inizio_pianificata')
+
+      setTestPackages(tpData || [])
+
+      // Pianificazioni CW con componenti, work_packages E test_packages
       const { data: pianData } = await supabase
         .from('pianificazione_cw')
         .select(`
@@ -79,10 +98,17 @@ export default function GanttPage() {
             disciplina:discipline(id, nome, colore, icona)
           ),
           work_package:work_packages(
-            id, codice, nome, descrizione,
+            id, codice, nome, descrizione, colore,
             disciplina:discipline(id, nome, colore, icona),
             squadra:squadre(id, nome),
             foreman:persone!work_packages_foreman_id_fkey(id, nome, cognome)
+          ),
+          test_package:test_packages(
+            id, codice, nome, descrizione, tipo, colore, stato,
+            pressione_test, durata_holding_minuti,
+            disciplina:discipline(id, nome, colore, icona),
+            squadra:squadre(id, nome),
+            foreman:persone!test_packages_foreman_id_fkey(id, nome, cognome)
           ),
           squadra:squadre(id, nome),
           fase:fasi_workflow(id, nome, icona, colore)
@@ -162,16 +188,25 @@ export default function GanttPage() {
     return Object.values(monthMap)
   }, [weeks])
 
-  // Raggruppa pianificazioni per disciplina
+  // Raggruppa pianificazioni per disciplina - AGGIORNATO con Test Packages
   const ganttRows = useMemo(() => {
     const byDiscipline = {}
     
-    pianificazioni.forEach(p => {
-      // Determina se è un WP o un componente
-      const isWP = p.work_package_id && !p.componente_id
-      const item = isWP ? p.work_package : p.componente
+    // Filtra in base a viewFilter
+    const filteredPian = pianificazioni.filter(p => {
+      if (viewFilter === 'all') return true
+      if (viewFilter === 'wp') return p.work_package_id && !p.test_package_id
+      if (viewFilter === 'tp') return p.test_package_id
+      return true
+    })
+    
+    filteredPian.forEach(p => {
+      // Determina se è un WP, TP o un componente
+      const isWP = p.work_package_id && !p.componente_id && !p.test_package_id
+      const isTP = p.test_package_id
+      const item = isTP ? p.test_package : (isWP ? p.work_package : p.componente)
       
-      // Disciplina dal WP o dal componente
+      // Disciplina dal TP, WP o dal componente
       const disc = item?.disciplina?.nome || 'Senza Disciplina'
       const color = item?.disciplina?.colore || '#6B7280'
       const icona = item?.disciplina?.icona || '📦'
@@ -186,45 +221,93 @@ export default function GanttPage() {
         }
       }
       
+      // Determina tipo e icona
+      let tipo = 'COMP'
+      let tipoIcona = '🔩'
+      if (isTP) {
+        tipo = 'TP'
+        tipoIcona = getTipoTestIcon(p.test_package?.tipo)
+      } else if (isWP) {
+        tipo = 'WP'
+        tipoIcona = '📦'
+      }
+      
       byDiscipline[disc].items.push({
         id: p.id,
-        tipo: isWP ? 'WP' : 'COMP',
-        codice: isWP ? p.work_package?.codice : p.componente?.codice,
-        nome: isWP ? p.work_package?.nome : p.componente?.descrizione,
-        descrizione: isWP ? p.work_package?.descrizione : p.componente?.descrizione,
+        tipo,
+        tipoIcona,
+        codice: isTP ? p.test_package?.codice : (isWP ? p.work_package?.codice : p.componente?.codice),
+        nome: isTP ? p.test_package?.nome : (isWP ? p.work_package?.nome : p.componente?.descrizione),
+        descrizione: isTP ? p.test_package?.descrizione : (isWP ? p.work_package?.descrizione : p.componente?.descrizione),
         stato: p.stato || 'pianificato',
+        statoTP: isTP ? p.test_package?.stato : null,
         anno: p.anno,
         settimana: p.settimana,
         azione: p.azione,
         priorita: p.priorita,
-        squadra: isWP ? p.work_package?.squadra?.nome : p.squadra?.nome,
-        foreman: isWP ? (p.work_package?.foreman ? `${p.work_package.foreman.nome} ${p.work_package.foreman.cognome}` : null) : null,
+        squadra: isTP ? p.test_package?.squadra?.nome : (isWP ? p.work_package?.squadra?.nome : p.squadra?.nome),
+        foreman: isTP 
+          ? (p.test_package?.foreman ? `${p.test_package.foreman.nome} ${p.test_package.foreman.cognome}` : null)
+          : (isWP ? (p.work_package?.foreman ? `${p.work_package.foreman.nome} ${p.work_package.foreman.cognome}` : null) : null),
         fase: p.fase,
         work_package: p.work_package,
-        componente: p.componente
+        test_package: p.test_package,
+        componente: p.componente,
+        colore: isTP ? (p.test_package?.colore || '#8B5CF6') : (isWP ? (p.work_package?.colore || '#3B82F6') : null),
+        // Info extra per TP
+        pressione_test: isTP ? p.test_package?.pressione_test : null,
+        durata_holding: isTP ? p.test_package?.durata_holding_minuti : null
       })
     })
     
     return Object.values(byDiscipline).sort((a, b) => a.name.localeCompare(b.name))
-  }, [pianificazioni])
+  }, [pianificazioni, viewFilter])
 
-  // Attività per una specifica CW (per il modal)
+  // Helper per icona tipo test
+  const getTipoTestIcon = (tipo) => {
+    const icons = {
+      hydrotest: '💧',
+      pneumatic: '💨',
+      leak_test: '🔍',
+      functional: '⚙️',
+      electrical: '⚡',
+      loop_check: '🔄',
+      cleaning: '🧹',
+      drying: '☀️'
+    }
+    return icons[tipo] || '🧪'
+  }
+
+  // Attività per una specifica CW (per il modal) - AGGIORNATO con TP
   const getActivitiesForCW = (year, week) => {
     return pianificazioni.filter(p => p.anno === year && p.settimana === week).map(p => {
-      const isWP = p.work_package_id && !p.componente_id
-      const item = isWP ? p.work_package : p.componente
+      const isWP = p.work_package_id && !p.componente_id && !p.test_package_id
+      const isTP = p.test_package_id
+      const item = isTP ? p.test_package : (isWP ? p.work_package : p.componente)
+      
+      let tipo = 'COMP'
+      if (isTP) tipo = 'TP'
+      else if (isWP) tipo = 'WP'
+      
       return {
         id: p.id,
-        tipo: isWP ? 'WP' : 'COMP',
-        codice: isWP ? p.work_package?.codice : p.componente?.codice,
-        nome: isWP ? p.work_package?.nome : p.componente?.descrizione,
+        tipo,
+        tipoIcona: isTP ? getTipoTestIcon(p.test_package?.tipo) : (isWP ? '📦' : '🔩'),
+        codice: isTP ? p.test_package?.codice : (isWP ? p.work_package?.codice : p.componente?.codice),
+        nome: isTP ? p.test_package?.nome : (isWP ? p.work_package?.nome : p.componente?.descrizione),
         stato: p.stato,
+        statoTP: isTP ? p.test_package?.stato : null,
         disciplina: item?.disciplina,
-        squadra: isWP ? p.work_package?.squadra?.nome : p.squadra?.nome,
-        foreman: isWP ? (p.work_package?.foreman ? `${p.work_package.foreman.nome} ${p.work_package.foreman.cognome}` : null) : null,
+        squadra: isTP ? p.test_package?.squadra?.nome : (isWP ? p.work_package?.squadra?.nome : p.squadra?.nome),
+        foreman: isTP 
+          ? (p.test_package?.foreman ? `${p.test_package.foreman.nome} ${p.test_package.foreman.cognome}` : null)
+          : (isWP ? (p.work_package?.foreman ? `${p.work_package.foreman.nome} ${p.work_package.foreman.cognome}` : null) : null),
         fase: p.fase,
         priorita: p.priorita,
-        azione: p.azione
+        azione: p.azione,
+        colore: isTP ? (p.test_package?.colore || '#8B5CF6') : (isWP ? (p.work_package?.colore || '#3B82F6') : null),
+        pressione_test: isTP ? p.test_package?.pressione_test : null,
+        tipo_test: isTP ? p.test_package?.tipo : null
       }
     })
   }
@@ -248,12 +331,28 @@ export default function GanttPage() {
   const getStatusColor = (stato) => {
     switch (stato) {
       case 'completato': return 'bg-green-500'
+      case 'passed': return 'bg-green-500'
       case 'in_corso': return 'bg-blue-500'
+      case 'in_progress': return 'bg-blue-500'
+      case 'holding': return 'bg-purple-500'
       case 'al_site': return 'bg-purple-500'
+      case 'ready': return 'bg-indigo-500'
       case 'in_warehouse': return 'bg-amber-500'
+      case 'planned': return 'bg-cyan-500'
       case 'pianificato': return 'bg-gray-400'
+      case 'draft': return 'bg-gray-300'
+      case 'failed': return 'bg-red-500'
       case 'da_ordinare': return 'bg-red-400'
       default: return 'bg-gray-400'
+    }
+  }
+  
+  // Badge per tipo TP
+  const getTPBadgeColor = (tipo) => {
+    switch (tipo) {
+      case 'TP': return 'bg-purple-100 text-purple-700'
+      case 'WP': return 'bg-blue-100 text-blue-700'
+      default: return 'bg-gray-100 text-gray-700'
     }
   }
 
@@ -267,7 +366,7 @@ export default function GanttPage() {
   }
 
   // Empty state
-  if (ganttRows.length === 0) {
+  if (ganttRows.length === 0 && workPackages.length === 0 && testPackages.length === 0) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">
@@ -299,174 +398,257 @@ export default function GanttPage() {
           </h1>
           <p className="text-gray-500">{progetto?.nome}</p>
         </div>
-        <div className="flex items-center gap-3">
+        
+        <div className="flex flex-wrap items-center gap-3">
+          {/* NUOVO: Filtro Vista */}
+          <div className="flex items-center bg-gray-100 rounded-xl p-1">
+            <button
+              onClick={() => setViewFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                viewFilter === 'all' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Tutti
+            </button>
+            <button
+              onClick={() => setViewFilter('wp')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                viewFilter === 'wp' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📦 WP
+            </button>
+            <button
+              onClick={() => setViewFilter('tp')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                viewFilter === 'tp' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              💧 TP
+            </button>
+          </div>
+          
           <button
             onClick={scrollToToday}
-            className="px-4 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 flex items-center gap-2"
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
             📍 Oggi
           </button>
-          <div className="flex bg-gray-100 rounded-xl p-1">
-            <button
-              onClick={() => setViewMode('weeks')}
-              className={`px-4 py-2 rounded-lg transition-all ${viewMode === 'weeks' ? 'bg-white shadow text-blue-600' : 'text-gray-600'}`}
-            >
-              Settimane
-            </button>
-            <button
-              onClick={() => setViewMode('months')}
-              className={`px-4 py-2 rounded-lg transition-all ${viewMode === 'months' ? 'bg-white shadow text-blue-600' : 'text-gray-600'}`}
-            >
-              Mesi
-            </button>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <input
               type="checkbox"
               checked={showCompleted}
-              onChange={e => setShowCompleted(e.target.checked)}
-              className="rounded"
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             Mostra completati
           </label>
         </div>
       </div>
 
-      {/* Legenda */}
-      <div className="bg-white rounded-xl shadow-sm border p-4 mb-6">
-        <div className="flex flex-wrap items-center gap-4 text-sm">
-          <span className="font-medium text-gray-600">Legenda:</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500"></span> Completato</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> In Lavorazione</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-purple-500"></span> Al Site</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-500"></span> In Warehouse</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-gray-400"></span> Pianificato</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-400"></span> Da Ordinare</span>
+      {/* Stats Cards - AGGIORNATO con TP */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div className="bg-white rounded-xl p-4 shadow-sm border">
+          <p className="text-2xl font-bold text-gray-800">{workPackages.length}</p>
+          <p className="text-sm text-gray-500">📦 Work Packages</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border">
+          <p className="text-2xl font-bold text-purple-600">{testPackages.length}</p>
+          <p className="text-sm text-gray-500">💧 Test Packages</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border">
+          <p className="text-2xl font-bold text-blue-600">{pianificazioni.length}</p>
+          <p className="text-sm text-gray-500">📅 Pianificazioni</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border">
+          <p className="text-2xl font-bold text-green-600">
+            {pianificazioni.filter(p => p.stato === 'completato').length}
+          </p>
+          <p className="text-sm text-gray-500">✅ Completate</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border">
+          <p className="text-2xl font-bold text-amber-600">
+            {testPackages.filter(tp => tp.stato === 'passed').length}
+          </p>
+          <p className="text-sm text-gray-500">🏆 Test Superati</p>
         </div>
       </div>
 
-      {/* Gantt Grid */}
+      {/* Gantt Chart */}
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        <div className="flex">
-          {/* Fixed left column - Attività */}
-          <div className="w-64 flex-shrink-0 border-r bg-gray-50">
-            <div className="h-16 border-b px-4 flex items-center font-semibold text-gray-700 bg-gray-100">
-              Attività
+        {/* Legend */}
+        <div className="p-4 border-b bg-gray-50 flex flex-wrap items-center gap-4">
+          <span className="text-sm font-medium text-gray-600">Legenda:</span>
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">WP</span>
+            <span className="text-xs text-gray-500">Work Package</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">TP</span>
+            <span className="text-xs text-gray-500">Test Package</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-700">COMP</span>
+            <span className="text-xs text-gray-500">Componente</span>
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-green-500 rounded"></div>
+              <span className="text-xs text-gray-500">Completato</span>
             </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-blue-500 rounded"></div>
+              <span className="text-xs text-gray-500">In corso</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-purple-500 rounded"></div>
+              <span className="text-xs text-gray-500">Holding</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-gray-400 rounded"></div>
+              <span className="text-xs text-gray-500">Pianificato</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Gantt Body */}
+        <div ref={ganttRef} className="overflow-x-auto">
+          <div style={{ minWidth: `${weeks.length * 60 + 300}px` }}>
+            {/* Header - Months */}
+            <div className="flex border-b bg-gray-50 sticky top-0 z-10">
+              <div className="w-[300px] flex-shrink-0 p-3 font-medium text-gray-600 border-r">
+                Attività
+              </div>
+              <div className="flex">
+                {months.map((month, idx) => (
+                  <div 
+                    key={idx}
+                    className="text-center py-2 px-1 border-r border-gray-200 text-sm font-medium text-gray-600 capitalize"
+                    style={{ width: `${month.count * 60}px` }}
+                  >
+                    {month.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Header - Weeks */}
+            <div className="flex border-b sticky top-[44px] z-10 bg-white">
+              <div className="w-[300px] flex-shrink-0 p-2 text-sm text-gray-500 border-r">
+                {ganttRows.reduce((acc, d) => acc + d.items.length, 0)} attività
+              </div>
+              <div className="flex">
+                {weeks.map((week, idx) => (
+                  <div 
+                    key={idx}
+                    className={`w-[60px] text-center py-2 text-xs border-r cursor-pointer transition-colors ${
+                      week.isCurrentWeek 
+                        ? 'bg-blue-100 text-blue-700 font-bold' 
+                        : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => { setSelectedCW(week); setCwSearch('') }}
+                    title={`Clicca per dettagli CW${week.week}`}
+                  >
+                    <div className="font-medium">{week.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Rows by Discipline */}
             {ganttRows.map((discipline, dIdx) => (
-              <div key={dIdx}>
-                <div
-                  className="h-10 px-4 flex items-center bg-gray-50 border-b"
-                  style={{ borderLeft: `4px solid ${discipline.color}` }}
+              <div key={dIdx} className="border-b last:border-b-0">
+                {/* Discipline Header */}
+                <div 
+                  className="flex items-center p-3 bg-gray-50 font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+                  onClick={() => {
+                    const newRows = [...ganttRows]
+                    newRows[dIdx].expanded = !newRows[dIdx].expanded
+                  }}
                 >
                   <span className="mr-2">{discipline.icona}</span>
-                  <span className="font-medium text-gray-700">{discipline.name}</span>
-                  <span className="ml-2 text-xs text-gray-400">({discipline.items.length})</span>
+                  <span 
+                    className="w-3 h-3 rounded-full mr-2"
+                    style={{ backgroundColor: discipline.color }}
+                  ></span>
+                  <span>{discipline.name}</span>
+                  <span className="ml-2 text-gray-400 text-sm">({discipline.items.length})</span>
                 </div>
-                {discipline.items
-                  .filter(item => showCompleted || item.stato !== 'completato')
-                  .map((item, iIdx) => (
-                  <div key={iIdx} className="h-10 px-4 flex items-center border-b text-sm truncate">
-                    <span className={`mr-2 px-1.5 py-0.5 rounded text-xs font-medium ${item.tipo === 'WP' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {item.tipo}
-                    </span>
-                    <span className="font-mono text-gray-700 truncate" title={`${item.codice} - ${item.nome}`}>
-                      {item.codice || '—'}
-                    </span>
-                  </div>
-                ))}
+
+                {/* Items */}
+                {discipline.expanded !== false && discipline.items
+                  .filter(item => showCompleted || (item.stato !== 'completato' && item.statoTP !== 'passed'))
+                  .map((item, iIdx) => {
+                    const weekIndex = weeks.findIndex(w => w.year === item.anno && w.week === item.settimana)
+                    
+                    return (
+                      <div key={iIdx} className="flex border-t border-gray-100 hover:bg-gray-50">
+                        {/* Item label */}
+                        <div className="w-[300px] flex-shrink-0 p-2 border-r flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${getTPBadgeColor(item.tipo)}`}>
+                            {item.tipoIcona}
+                          </span>
+                          <span className="font-mono text-sm font-medium text-gray-700 truncate">
+                            {item.codice}
+                          </span>
+                          {item.nome && (
+                            <span className="text-xs text-gray-400 truncate hidden lg:inline">
+                              {item.nome.substring(0, 20)}...
+                            </span>
+                          )}
+                          {item.pressione_test && (
+                            <span className="text-xs text-purple-500 ml-auto">
+                              {item.pressione_test} bar
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Timeline */}
+                        <div className="flex relative">
+                          {weeks.map((week, wIdx) => {
+                            const isActive = wIdx === weekIndex
+                            const isCurrent = week.isCurrentWeek
+                            
+                            return (
+                              <div 
+                                key={wIdx}
+                                className={`w-[60px] h-10 border-r border-gray-100 relative ${
+                                  isCurrent ? 'bg-blue-50' : ''
+                                }`}
+                              >
+                                {isActive && (
+                                  <div 
+                                    className={`absolute inset-1 rounded-lg flex items-center justify-center text-white text-xs font-medium ${
+                                      item.tipo === 'TP' 
+                                        ? getStatusColor(item.statoTP || item.stato)
+                                        : getStatusColor(item.stato)
+                                    }`}
+                                    style={item.colore && !['completato', 'passed', 'failed'].includes(item.stato) && !['completato', 'passed', 'failed'].includes(item.statoTP) ? {
+                                      backgroundColor: item.colore
+                                    } : {}}
+                                    title={`${item.codice} - ${item.nome || ''}\nStato: ${item.statoTP || item.stato}`}
+                                  >
+                                    {item.tipo === 'TP' ? item.tipoIcona : (item.stato === 'completato' ? '✓' : '')}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                          
+                          {/* Current week indicator line */}
+                          {currentWeekIndex >= 0 && (
+                            <div 
+                              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                              style={{ left: `${currentWeekIndex * 60 + 30}px` }}
+                            ></div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
               </div>
             ))}
-          </div>
-
-          {/* Scrollable timeline */}
-          <div className="flex-1 overflow-x-auto" ref={ganttRef}>
-            <div className="min-w-max relative">
-              {/* Months header */}
-              <div className="h-8 flex border-b bg-gray-100">
-                {months.map((m, i) => (
-                  <div
-                    key={i}
-                    className="text-xs font-medium text-gray-600 flex items-center justify-center border-r capitalize"
-                    style={{ width: m.count * 60 }}
-                  >
-                    {m.label}
-                  </div>
-                ))}
-              </div>
-
-              {/* Weeks header */}
-              <div className="h-8 flex border-b">
-                {weeks.map((w, i) => (
-                  <div
-                    key={i}
-                    className={`w-[60px] text-xs font-medium flex items-center justify-center border-r cursor-pointer hover:bg-blue-50 transition-colors ${
-                      w.isCurrentWeek ? 'bg-blue-100 text-blue-700 font-bold' : 'text-gray-600'
-                    }`}
-                    onClick={() => setSelectedCW({ year: w.year, week: w.week, label: w.label })}
-                    title={`Clicca per vedere le attività di ${w.label}`}
-                  >
-                    {w.label}
-                  </div>
-                ))}
-              </div>
-
-              {/* Grid rows */}
-              <div>
-                {ganttRows.map((discipline, dIdx) => (
-                  <div key={dIdx}>
-                    {/* Discipline row */}
-                    <div className="h-10 flex bg-gray-50 border-b">
-                      {weeks.map((w, wIdx) => (
-                        <div
-                          key={wIdx}
-                          className={`w-[60px] border-r cursor-pointer hover:bg-gray-100 ${w.isCurrentWeek ? 'bg-blue-50' : ''}`}
-                          onClick={() => setSelectedCW({ year: w.year, week: w.week, label: w.label })}
-                        ></div>
-                      ))}
-                    </div>
-                    {/* Item rows */}
-                    {discipline.items
-                      .filter(item => showCompleted || item.stato !== 'completato')
-                      .map((item, iIdx) => (
-                      <div key={iIdx} className="h-10 flex border-b">
-                        {weeks.map((w, wIdx) => {
-                          const hasItem = item.anno === w.year && item.settimana === w.week
-                          return (
-                            <div
-                              key={wIdx}
-                              className={`w-[60px] border-r flex items-center justify-center cursor-pointer hover:bg-gray-50 ${w.isCurrentWeek ? 'bg-blue-50/50' : ''}`}
-                              onClick={() => setSelectedCW({ year: w.year, week: w.week, label: w.label })}
-                            >
-                              {hasItem && (
-                                <div
-                                  className={`w-10 h-6 rounded ${getStatusColor(item.stato)} flex items-center justify-center`}
-                                  title={`${item.codice} - ${item.nome}\nStato: ${item.stato}\n${w.label}`}
-                                >
-                                  <span className="text-white text-xs">
-                                    {item.tipo === 'WP' ? '📦' : '•'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-
-              {/* Today Line - solo se la settimana corrente è visibile */}
-              {currentWeekIndex >= 0 && (
-                <div
-                  className="absolute top-16 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
-                  style={{ left: currentWeekIndex * 60 + 30 }}
-                >
-                  <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full"></div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -502,172 +684,4 @@ export default function GanttPage() {
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 mb-2 space-y-1">
-                    {wp.squadra && <div>👥 {wp.squadra.nome}</div>}
-                    {wp.foreman && <div>👷 {wp.foreman.nome} {wp.foreman.cognome}</div>}
-                    {wp.data_inizio_pianificata && (
-                      <div>📅 {new Date(wp.data_inizio_pianificata).toLocaleDateString('it-IT')} - {wp.data_fine_pianificata ? new Date(wp.data_fine_pianificata).toLocaleDateString('it-IT') : '?'}</div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-500 ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
-                        style={{ width: `${progress}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-sm font-medium text-gray-600">{progress}%</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Modal CW Detail */}
-      {selectedCW && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCW(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="p-6 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-2xl font-bold">{selectedCW.label} - {selectedCW.year}</h3>
-                  <p className="text-blue-100 mt-1">
-                    {getActivitiesForCW(selectedCW.year, selectedCW.week).length} attività pianificate
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedCW(null)}
-                  className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-xl"
-                >
-                  ✕
-                </button>
-              </div>
-              {/* Search */}
-              <div className="mt-4">
-                <input
-                  type="text"
-                  placeholder="🔍 Cerca attività..."
-                  value={cwSearch}
-                  onChange={e => setCwSearch(e.target.value)}
-                  className="w-full px-4 py-2 rounded-xl bg-white/20 placeholder-blue-200 text-white border border-white/30 focus:outline-none focus:bg-white/30"
-                />
-              </div>
-            </div>
-            
-            {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {(() => {
-                const activities = getActivitiesForCW(selectedCW.year, selectedCW.week)
-                  .filter(a => {
-                    if (!cwSearch) return true
-                    const search = cwSearch.toLowerCase()
-                    return (
-                      a.codice?.toLowerCase().includes(search) ||
-                      a.nome?.toLowerCase().includes(search) ||
-                      a.squadra?.toLowerCase().includes(search) ||
-                      a.foreman?.toLowerCase().includes(search) ||
-                      a.disciplina?.nome?.toLowerCase().includes(search)
-                    )
-                  })
-                  .sort((a, b) => (a.priorita || 0) - (b.priorita || 0))
-                
-                if (activities.length === 0) {
-                  return (
-                    <div className="text-center py-12">
-                      <div className="text-5xl mb-4">📭</div>
-                      <p className="text-gray-500">
-                        {cwSearch ? 'Nessuna attività trovata' : 'Nessuna attività pianificata per questa settimana'}
-                      </p>
-                    </div>
-                  )
-                }
-                
-                // Raggruppa per disciplina
-                const byDisc = {}
-                activities.forEach(a => {
-                  const disc = a.disciplina?.nome || 'Senza Disciplina'
-                  if (!byDisc[disc]) byDisc[disc] = { nome: disc, colore: a.disciplina?.colore || '#6B7280', items: [] }
-                  byDisc[disc].items.push(a)
-                })
-                
-                return (
-                  <div className="space-y-6">
-                    {Object.values(byDisc).map((disc, dIdx) => (
-                      <div key={dIdx}>
-                        <div 
-                          className="flex items-center gap-2 mb-3 pb-2 border-b"
-                          style={{ borderColor: disc.colore }}
-                        >
-                          <div 
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: disc.colore }}
-                          ></div>
-                          <span className="font-semibold text-gray-700">{disc.nome}</span>
-                          <span className="text-sm text-gray-400">({disc.items.length})</span>
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {disc.items.map((activity, aIdx) => (
-                            <div 
-                              key={aIdx}
-                              className="border rounded-xl p-4 hover:shadow-md transition-shadow"
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${activity.tipo === 'WP' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {activity.tipo}
-                                  </span>
-                                  <span className="font-mono font-semibold text-gray-800">
-                                    {activity.codice}
-                                  </span>
-                                </div>
-                                <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(activity.stato)} text-white`}>
-                                  {activity.stato}
-                                </span>
-                              </div>
-                              {activity.nome && (
-                                <p className="text-sm text-gray-600 mb-2">{activity.nome}</p>
-                              )}
-                              <div className="text-xs text-gray-500 space-y-1">
-                                {activity.fase && (
-                                  <div className="flex items-center gap-1">
-                                    <span>{activity.fase.icona}</span>
-                                    <span>{activity.fase.nome}</span>
-                                  </div>
-                                )}
-                                {activity.squadra && (
-                                  <div>👥 {activity.squadra}</div>
-                                )}
-                                {activity.foreman && (
-                                  <div>👷 {activity.foreman}</div>
-                                )}
-                                {activity.azione && (
-                                  <div>🔧 {activity.azione}</div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
-            </div>
-            
-            {/* Footer */}
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
-              <button
-                onClick={() => setSelectedCW(null)}
-                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300"
-              >
-                Chiudi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+                    {wp.squadra && <div>👥 {wp.squadra.nome}</div
