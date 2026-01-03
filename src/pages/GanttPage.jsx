@@ -8,15 +8,19 @@ export default function GanttPage() {
   const { t } = useI18n()
   
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState('weeks') // weeks, months
   const [showCompleted, setShowCompleted] = useState(true)
   
   // Dati
   const [workPackages, setWorkPackages] = useState([])
-  const [testPackages, setTestPackages] = useState([]) // NUOVO
+  const [testPackages, setTestPackages] = useState([])
   const [pianificazioni, setPianificazioni] = useState([])
   
-  // Range date
+  // Range date - NUOVO: controlli flessibili
+  const [rangePreset, setRangePreset] = useState('6months') // 3months, 6months, 1year, custom
+  const [customRange, setCustomRange] = useState({
+    startDate: '',
+    endDate: ''
+  })
   const [dateRange, setDateRange] = useState({ start: null, end: null })
   
   // Modal CW Detail
@@ -29,7 +33,7 @@ export default function GanttPage() {
   // Scroll ref
   const ganttRef = useRef(null)
 
-  // === FUNZIONI HELPER (definite prima dell'uso) ===
+  // === FUNZIONI HELPER ===
   function getWeekNumber(d) {
     const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
     const dayNum = date.getUTCDay() || 7
@@ -44,14 +48,62 @@ export default function GanttPage() {
     const checkWeek = getWeekNumber(date)
     return currentWeek === checkWeek && now.getFullYear() === date.getFullYear()
   }
-  
-  function getCurrentWeek() {
-    return getWeekNumber(new Date())
-  }
-  
-  function getCurrentYear() {
-    return new Date().getFullYear()
-  }
+
+  // Calcola range basato su preset
+  const calculateDateRange = useCallback(() => {
+    const oggi = new Date()
+    let start, end
+    
+    switch (rangePreset) {
+      case '3months':
+        start = new Date(oggi)
+        start.setMonth(start.getMonth() - 1)
+        end = new Date(oggi)
+        end.setMonth(end.getMonth() + 2)
+        break
+      case '6months':
+        start = new Date(oggi)
+        start.setMonth(start.getMonth() - 2)
+        end = new Date(oggi)
+        end.setMonth(end.getMonth() + 4)
+        break
+      case '1year':
+        start = new Date(oggi)
+        start.setMonth(start.getMonth() - 3)
+        end = new Date(oggi)
+        end.setMonth(end.getMonth() + 9)
+        break
+      case 'project':
+        start = progetto?.data_inizio ? new Date(progetto.data_inizio) : new Date(oggi)
+        start.setMonth(start.getMonth() - 1)
+        end = progetto?.data_fine_prevista ? new Date(progetto.data_fine_prevista) : new Date(oggi)
+        end.setMonth(end.getMonth() + 1)
+        break
+      case 'lastyear':
+        start = new Date(oggi.getFullYear() - 1, 0, 1) // 1 Jan anno scorso
+        end = new Date(oggi) // oggi
+        break
+      case 'custom':
+        start = customRange.startDate ? new Date(customRange.startDate) : new Date(oggi)
+        end = customRange.endDate ? new Date(customRange.endDate) : new Date(oggi)
+        end.setMonth(end.getMonth() + 6)
+        break
+      default:
+        start = new Date(oggi)
+        start.setMonth(start.getMonth() - 2)
+        end = new Date(oggi)
+        end.setMonth(end.getMonth() + 4)
+    }
+    
+    // Imposta al primo del mese per start
+    start.setDate(1)
+    
+    setDateRange({ start, end })
+  }, [rangePreset, customRange, progetto])
+
+  useEffect(() => {
+    calculateDateRange()
+  }, [calculateDateRange])
 
   // Carica dati
   const loadData = useCallback(async () => {
@@ -73,7 +125,7 @@ export default function GanttPage() {
 
       setWorkPackages(wpData || [])
 
-      // NUOVO: Test Packages con disciplina
+      // Test Packages con disciplina
       const { data: tpData } = await supabase
         .from('test_packages')
         .select(`
@@ -117,18 +169,8 @@ export default function GanttPage() {
         .order('anno')
         .order('settimana')
 
+      console.log('Pianificazioni caricate:', pianData?.length, pianData?.filter(p => p.test_package_id))
       setPianificazioni(pianData || [])
-
-      // Calcola range date
-      const oggi = new Date()
-      const inizio = new Date(progetto.data_inizio || oggi)
-      inizio.setDate(1) // Primo del mese
-      inizio.setMonth(inizio.getMonth() - 1) // Un mese prima
-      
-      const fine = new Date(progetto.data_fine_prevista || oggi)
-      fine.setMonth(fine.getMonth() + 3)
-      
-      setDateRange({ start: inizio, end: fine })
 
     } catch (error) {
       console.error('Errore caricamento:', error)
@@ -188,23 +230,45 @@ export default function GanttPage() {
     return Object.values(monthMap)
   }, [weeks])
 
-  // Raggruppa pianificazioni per disciplina - AGGIORNATO con Test Packages
+  // Helper per icona tipo test
+  const getTipoTestIcon = (tipo) => {
+    const icons = {
+      hydrotest: '💧',
+      pneumatic: '💨',
+      leak_test: '🔍',
+      functional: '⚙️',
+      electrical: '⚡',
+      loop_check: '🔄',
+      cleaning: '🧹',
+      drying: '☀️'
+    }
+    return icons[tipo] || '🧪'
+  }
+
+  // Raggruppa pianificazioni per disciplina - CON FIX PER TP
   const ganttRows = useMemo(() => {
     const byDiscipline = {}
     
     // Filtra in base a viewFilter
     const filteredPian = pianificazioni.filter(p => {
       if (viewFilter === 'all') return true
-      if (viewFilter === 'wp') return p.work_package_id && !p.test_package_id
+      if (viewFilter === 'wp') return p.work_package_id && !p.test_package_id && !p.componente_id
       if (viewFilter === 'tp') return p.test_package_id
       return true
     })
     
+    console.log('Filtrate per', viewFilter, ':', filteredPian.length)
+    
     filteredPian.forEach(p => {
       // Determina se è un WP, TP o un componente
-      const isWP = p.work_package_id && !p.componente_id && !p.test_package_id
-      const isTP = p.test_package_id
+      const isTP = !!p.test_package_id
+      const isWP = !!p.work_package_id && !p.componente_id && !p.test_package_id
       const item = isTP ? p.test_package : (isWP ? p.work_package : p.componente)
+      
+      if (!item) {
+        console.log('Item null per pianificazione:', p.id, 'TP:', p.test_package_id, 'WP:', p.work_package_id)
+        return // Skip se non c'è item
+      }
       
       // Disciplina dal TP, WP o dal componente
       const disc = item?.disciplina?.nome || 'Senza Disciplina'
@@ -236,9 +300,9 @@ export default function GanttPage() {
         id: p.id,
         tipo,
         tipoIcona,
-        codice: isTP ? p.test_package?.codice : (isWP ? p.work_package?.codice : p.componente?.codice),
-        nome: isTP ? p.test_package?.nome : (isWP ? p.work_package?.nome : p.componente?.descrizione),
-        descrizione: isTP ? p.test_package?.descrizione : (isWP ? p.work_package?.descrizione : p.componente?.descrizione),
+        codice: item?.codice || 'N/D',
+        nome: isTP ? item?.nome : (isWP ? item?.nome : item?.descrizione),
+        descrizione: item?.descrizione,
         stato: p.stato || 'pianificato',
         statoTP: isTP ? p.test_package?.stato : null,
         anno: p.anno,
@@ -253,7 +317,7 @@ export default function GanttPage() {
         work_package: p.work_package,
         test_package: p.test_package,
         componente: p.componente,
-        colore: isTP ? (p.test_package?.colore || '#8B5CF6') : (isWP ? (p.work_package?.colore || '#3B82F6') : null),
+        colore: isTP ? (p.test_package?.colore || '#06B6D4') : (isWP ? (p.work_package?.colore || '#3B82F6') : null),
         // Info extra per TP
         pressione_test: isTP ? p.test_package?.pressione_test : null,
         durata_holding: isTP ? p.test_package?.durata_holding_minuti : null
@@ -263,26 +327,11 @@ export default function GanttPage() {
     return Object.values(byDiscipline).sort((a, b) => a.name.localeCompare(b.name))
   }, [pianificazioni, viewFilter])
 
-  // Helper per icona tipo test
-  const getTipoTestIcon = (tipo) => {
-    const icons = {
-      hydrotest: '💧',
-      pneumatic: '💨',
-      leak_test: '🔍',
-      functional: '⚙️',
-      electrical: '⚡',
-      loop_check: '🔄',
-      cleaning: '🧹',
-      drying: '☀️'
-    }
-    return icons[tipo] || '🧪'
-  }
-
-  // Attività per una specifica CW (per il modal) - AGGIORNATO con TP
+  // Attività per una specifica CW (per il modal)
   const getActivitiesForCW = (year, week) => {
     return pianificazioni.filter(p => p.anno === year && p.settimana === week).map(p => {
-      const isWP = p.work_package_id && !p.componente_id && !p.test_package_id
-      const isTP = p.test_package_id
+      const isTP = !!p.test_package_id
+      const isWP = !!p.work_package_id && !p.componente_id && !p.test_package_id
       const item = isTP ? p.test_package : (isWP ? p.work_package : p.componente)
       
       let tipo = 'COMP'
@@ -293,8 +342,8 @@ export default function GanttPage() {
         id: p.id,
         tipo,
         tipoIcona: isTP ? getTipoTestIcon(p.test_package?.tipo) : (isWP ? '📦' : '🔩'),
-        codice: isTP ? p.test_package?.codice : (isWP ? p.work_package?.codice : p.componente?.codice),
-        nome: isTP ? p.test_package?.nome : (isWP ? p.work_package?.nome : p.componente?.descrizione),
+        codice: item?.codice || 'N/D',
+        nome: isTP ? item?.nome : (isWP ? item?.nome : item?.descrizione),
         stato: p.stato,
         statoTP: isTP ? p.test_package?.stato : null,
         disciplina: item?.disciplina,
@@ -305,7 +354,7 @@ export default function GanttPage() {
         fase: p.fase,
         priorita: p.priorita,
         azione: p.azione,
-        colore: isTP ? (p.test_package?.colore || '#8B5CF6') : (isWP ? (p.work_package?.colore || '#3B82F6') : null),
+        colore: isTP ? (p.test_package?.colore || '#06B6D4') : (isWP ? (p.work_package?.colore || '#3B82F6') : null),
         pressione_test: isTP ? p.test_package?.pressione_test : null,
         tipo_test: isTP ? p.test_package?.tipo : null
       }
@@ -347,11 +396,11 @@ export default function GanttPage() {
     }
   }
   
-  // Badge per tipo TP
+  // Badge per tipo
   const getTPBadgeColor = (tipo) => {
     switch (tipo) {
-      case 'TP': return 'bg-purple-100 text-purple-700'
-      case 'WP': return 'bg-blue-100 text-blue-700'
+      case 'TP': return 'bg-cyan-100 text-cyan-700'
+      case 'WP': return 'bg-purple-100 text-purple-700'
       default: return 'bg-gray-100 text-gray-700'
     }
   }
@@ -361,27 +410,6 @@ export default function GanttPage() {
     return (
       <div className="p-8 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  // Empty state
-  if (ganttRows.length === 0 && workPackages.length === 0 && testPackages.length === 0) {
-    return (
-      <div className="p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              📊 Gantt Chart
-            </h1>
-            <p className="text-gray-500">{progetto?.nome}</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
-          <div className="text-6xl mb-4">📅</div>
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">Nessuna attività pianificata</h3>
-          <p className="text-gray-500">Vai alla sezione Pianificazione per assegnare attività alle settimane</p>
-        </div>
       </div>
     )
   }
@@ -400,7 +428,7 @@ export default function GanttPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {/* NUOVO: Filtro Vista */}
+          {/* Filtro Vista */}
           <div className="flex items-center bg-gray-100 rounded-xl p-1">
             <button
               onClick={() => setViewFilter('all')}
@@ -413,7 +441,7 @@ export default function GanttPage() {
             <button
               onClick={() => setViewFilter('wp')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                viewFilter === 'wp' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'
+                viewFilter === 'wp' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               📦 WP
@@ -421,7 +449,7 @@ export default function GanttPage() {
             <button
               onClick={() => setViewFilter('tp')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                viewFilter === 'tp' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'
+                viewFilter === 'tp' ? 'bg-white shadow text-cyan-600' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               💧 TP
@@ -447,14 +475,65 @@ export default function GanttPage() {
         </div>
       </div>
 
-      {/* Stats Cards - AGGIORNATO con TP */}
+      {/* NUOVO: Controllo Range Date */}
+      <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">📅 Vista:</span>
+            <select
+              value={rangePreset}
+              onChange={(e) => setRangePreset(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm bg-white"
+            >
+              <option value="3months">3 Mesi</option>
+              <option value="6months">6 Mesi</option>
+              <option value="1year">1 Anno</option>
+              <option value="project">Durata Progetto</option>
+              <option value="lastyear">Anno Scorso → Oggi</option>
+              <option value="custom">Personalizzato</option>
+            </select>
+          </div>
+          
+          {rangePreset === 'custom' && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-gray-500">Da:</span>
+              <input
+                type="date"
+                value={customRange.startDate}
+                onChange={(e) => setCustomRange({...customRange, startDate: e.target.value})}
+                className="px-3 py-2 border rounded-lg text-sm"
+              />
+              <span className="text-sm text-gray-500">A:</span>
+              <input
+                type="date"
+                value={customRange.endDate}
+                onChange={(e) => setCustomRange({...customRange, endDate: e.target.value})}
+                className="px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+          )}
+          
+          <div className="ml-auto text-sm text-gray-500">
+            {dateRange.start && dateRange.end && (
+              <span>
+                {dateRange.start.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' })} 
+                {' → '}
+                {dateRange.end.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' })}
+                {' • '}{weeks.length} settimane
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <div className="bg-white rounded-xl p-4 shadow-sm border">
           <p className="text-2xl font-bold text-gray-800">{workPackages.length}</p>
           <p className="text-sm text-gray-500">📦 Work Packages</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border">
-          <p className="text-2xl font-bold text-purple-600">{testPackages.length}</p>
+          <p className="text-2xl font-bold text-cyan-600">{testPackages.length}</p>
           <p className="text-sm text-gray-500">💧 Test Packages</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border">
@@ -475,183 +554,195 @@ export default function GanttPage() {
         </div>
       </div>
 
-      {/* Gantt Chart */}
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        {/* Legend */}
-        <div className="p-4 border-b bg-gray-50 flex flex-wrap items-center gap-4">
-          <span className="text-sm font-medium text-gray-600">Legenda:</span>
-          <div className="flex items-center gap-1">
-            <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">WP</span>
-            <span className="text-xs text-gray-500">Work Package</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">TP</span>
-            <span className="text-xs text-gray-500">Test Package</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-700">COMP</span>
-            <span className="text-xs text-gray-500">Componente</span>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-green-500 rounded"></div>
-              <span className="text-xs text-gray-500">Completato</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-blue-500 rounded"></div>
-              <span className="text-xs text-gray-500">In corso</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-purple-500 rounded"></div>
-              <span className="text-xs text-gray-500">Holding</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-gray-400 rounded"></div>
-              <span className="text-xs text-gray-500">Pianificato</span>
-            </div>
-          </div>
+      {/* Empty state per Gantt */}
+      {ganttRows.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow-sm border p-12 text-center">
+          <div className="text-6xl mb-4">📅</div>
+          <h3 className="text-xl font-semibold text-gray-700 mb-2">
+            {viewFilter === 'tp' ? 'Nessun Test Package pianificato' : 
+             viewFilter === 'wp' ? 'Nessun Work Package pianificato' :
+             'Nessuna attività pianificata'}
+          </h3>
+          <p className="text-gray-500">
+            Vai alla sezione Pianificazione per assegnare {viewFilter === 'tp' ? 'Test Packages' : 'attività'} alle settimane
+          </p>
+          {pianificazioni.length > 0 && (
+            <p className="text-sm text-gray-400 mt-2">
+              (Ci sono {pianificazioni.length} pianificazioni totali, di cui {pianificazioni.filter(p => p.test_package_id).length} Test Packages)
+            </p>
+          )}
         </div>
-        
-        {/* Gantt Body */}
-        <div ref={ganttRef} className="overflow-x-auto">
-          <div style={{ minWidth: `${weeks.length * 60 + 300}px` }}>
-            {/* Header - Months */}
-            <div className="flex border-b bg-gray-50 sticky top-0 z-10">
-              <div className="w-[300px] flex-shrink-0 p-3 font-medium text-gray-600 border-r">
-                Attività
+      ) : (
+        /* Gantt Chart */
+        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+          {/* Legend */}
+          <div className="p-4 border-b bg-gray-50 flex flex-wrap items-center gap-4">
+            <span className="text-sm font-medium text-gray-600">Legenda:</span>
+            <div className="flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">📦 WP</span>
+              <span className="text-xs text-gray-500">Work Package</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded text-xs font-bold bg-cyan-100 text-cyan-700">💧 TP</span>
+              <span className="text-xs text-gray-500">Test Package</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-700">🔩 COMP</span>
+              <span className="text-xs text-gray-500">Componente</span>
+            </div>
+            <div className="ml-auto flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-green-500 rounded"></div>
+                <span className="text-xs text-gray-500">Completato</span>
               </div>
-              <div className="flex">
-                {months.map((month, idx) => (
-                  <div 
-                    key={idx}
-                    className="text-center py-2 px-1 border-r border-gray-200 text-sm font-medium text-gray-600 capitalize"
-                    style={{ width: `${month.count * 60}px` }}
-                  >
-                    {month.label}
-                  </div>
-                ))}
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                <span className="text-xs text-gray-500">In corso</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-cyan-500 rounded"></div>
+                <span className="text-xs text-gray-500">Pianificato</span>
               </div>
             </div>
-
-            {/* Header - Weeks */}
-            <div className="flex border-b sticky top-[44px] z-10 bg-white">
-              <div className="w-[300px] flex-shrink-0 p-2 text-sm text-gray-500 border-r">
-                {ganttRows.reduce((acc, d) => acc + d.items.length, 0)} attività
-              </div>
-              <div className="flex">
-                {weeks.map((week, idx) => (
-                  <div 
-                    key={idx}
-                    className={`w-[60px] text-center py-2 text-xs border-r cursor-pointer transition-colors ${
-                      week.isCurrentWeek 
-                        ? 'bg-blue-100 text-blue-700 font-bold' 
-                        : 'hover:bg-gray-50'
-                    }`}
-                    onClick={() => { setSelectedCW(week); setCwSearch('') }}
-                    title={`Clicca per dettagli CW${week.week}`}
-                  >
-                    <div className="font-medium">{week.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Rows by Discipline */}
-            {ganttRows.map((discipline, dIdx) => (
-              <div key={dIdx} className="border-b last:border-b-0">
-                {/* Discipline Header */}
-                <div 
-                  className="flex items-center p-3 bg-gray-50 font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => {
-                    const newRows = [...ganttRows]
-                    newRows[dIdx].expanded = !newRows[dIdx].expanded
-                  }}
-                >
-                  <span className="mr-2">{discipline.icona}</span>
-                  <span 
-                    className="w-3 h-3 rounded-full mr-2"
-                    style={{ backgroundColor: discipline.color }}
-                  ></span>
-                  <span>{discipline.name}</span>
-                  <span className="ml-2 text-gray-400 text-sm">({discipline.items.length})</span>
+          </div>
+          
+          {/* Gantt Body */}
+          <div ref={ganttRef} className="overflow-x-auto">
+            <div style={{ minWidth: `${weeks.length * 60 + 300}px` }}>
+              {/* Header - Months */}
+              <div className="flex border-b bg-gray-50 sticky top-0 z-10">
+                <div className="w-[300px] flex-shrink-0 p-3 font-medium text-gray-600 border-r">
+                  Attività
                 </div>
-
-                {/* Items */}
-                {discipline.expanded !== false && discipline.items
-                  .filter(item => showCompleted || (item.stato !== 'completato' && item.statoTP !== 'passed'))
-                  .map((item, iIdx) => {
-                    const weekIndex = weeks.findIndex(w => w.year === item.anno && w.week === item.settimana)
-                    
-                    return (
-                      <div key={iIdx} className="flex border-t border-gray-100 hover:bg-gray-50">
-                        {/* Item label */}
-                        <div className="w-[300px] flex-shrink-0 p-2 border-r flex items-center gap-2">
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${getTPBadgeColor(item.tipo)}`}>
-                            {item.tipoIcona}
-                          </span>
-                          <span className="font-mono text-sm font-medium text-gray-700 truncate">
-                            {item.codice}
-                          </span>
-                          {item.nome && (
-                            <span className="text-xs text-gray-400 truncate hidden lg:inline">
-                              {item.nome.substring(0, 20)}...
-                            </span>
-                          )}
-                          {item.pressione_test && (
-                            <span className="text-xs text-purple-500 ml-auto">
-                              {item.pressione_test} bar
-                            </span>
-                          )}
-                        </div>
-                        
-                        {/* Timeline */}
-                        <div className="flex relative">
-                          {weeks.map((week, wIdx) => {
-                            const isActive = wIdx === weekIndex
-                            const isCurrent = week.isCurrentWeek
-                            
-                            return (
-                              <div 
-                                key={wIdx}
-                                className={`w-[60px] h-10 border-r border-gray-100 relative ${
-                                  isCurrent ? 'bg-blue-50' : ''
-                                }`}
-                              >
-                                {isActive && (
-                                  <div 
-                                    className={`absolute inset-1 rounded-lg flex items-center justify-center text-white text-xs font-medium ${
-                                      item.tipo === 'TP' 
-                                        ? getStatusColor(item.statoTP || item.stato)
-                                        : getStatusColor(item.stato)
-                                    }`}
-                                    style={item.colore && !['completato', 'passed', 'failed'].includes(item.stato) && !['completato', 'passed', 'failed'].includes(item.statoTP) ? {
-                                      backgroundColor: item.colore
-                                    } : {}}
-                                    title={`${item.codice} - ${item.nome || ''}\nStato: ${item.statoTP || item.stato}`}
-                                  >
-                                    {item.tipo === 'TP' ? item.tipoIcona : (item.stato === 'completato' ? '✓' : '')}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                          
-                          {/* Current week indicator line */}
-                          {currentWeekIndex >= 0 && (
-                            <div 
-                              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-                              style={{ left: `${currentWeekIndex * 60 + 30}px` }}
-                            ></div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
+                <div className="flex">
+                  {months.map((month, idx) => (
+                    <div 
+                      key={idx}
+                      className="text-center py-2 px-1 border-r border-gray-200 text-sm font-medium text-gray-600 capitalize"
+                      style={{ width: `${month.count * 60}px` }}
+                    >
+                      {month.label}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+
+              {/* Header - Weeks */}
+              <div className="flex border-b sticky top-[44px] z-10 bg-white">
+                <div className="w-[300px] flex-shrink-0 p-2 text-sm text-gray-500 border-r">
+                  {ganttRows.reduce((acc, d) => acc + d.items.length, 0)} attività
+                </div>
+                <div className="flex">
+                  {weeks.map((week, idx) => (
+                    <div 
+                      key={idx}
+                      className={`w-[60px] text-center py-2 text-xs border-r cursor-pointer transition-colors ${
+                        week.isCurrentWeek 
+                          ? 'bg-blue-100 text-blue-700 font-bold' 
+                          : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => { setSelectedCW(week); setCwSearch('') }}
+                      title={`Clicca per dettagli CW${week.week}`}
+                    >
+                      <div className="font-medium">{week.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rows by Discipline */}
+              {ganttRows.map((discipline, dIdx) => (
+                <div key={dIdx} className="border-b last:border-b-0">
+                  {/* Discipline Header */}
+                  <div 
+                    className="flex items-center p-3 bg-gray-50 font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+                  >
+                    <span className="mr-2">{discipline.icona}</span>
+                    <span 
+                      className="w-3 h-3 rounded-full mr-2"
+                      style={{ backgroundColor: discipline.color }}
+                    ></span>
+                    <span>{discipline.name}</span>
+                    <span className="ml-2 text-gray-400 text-sm">({discipline.items.length})</span>
+                  </div>
+
+                  {/* Items */}
+                  {discipline.items
+                    .filter(item => showCompleted || (item.stato !== 'completato' && item.statoTP !== 'passed'))
+                    .map((item, iIdx) => {
+                      const weekIndex = weeks.findIndex(w => w.year === item.anno && w.week === item.settimana)
+                      
+                      return (
+                        <div key={iIdx} className="flex border-t border-gray-100 hover:bg-gray-50">
+                          {/* Item label */}
+                          <div className="w-[300px] flex-shrink-0 p-2 border-r flex items-center gap-2">
+                            <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${getTPBadgeColor(item.tipo)}`}>
+                              {item.tipoIcona}
+                            </span>
+                            <span className="font-mono text-sm font-medium text-gray-700 truncate">
+                              {item.codice}
+                            </span>
+                            {item.nome && (
+                              <span className="text-xs text-gray-400 truncate hidden lg:inline">
+                                {item.nome.length > 20 ? item.nome.substring(0, 20) + '...' : item.nome}
+                              </span>
+                            )}
+                            {item.pressione_test && (
+                              <span className="text-xs text-cyan-500 ml-auto">
+                                {item.pressione_test} bar
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Timeline */}
+                          <div className="flex relative">
+                            {weeks.map((week, wIdx) => {
+                              const isActive = wIdx === weekIndex
+                              const isCurrent = week.isCurrentWeek
+                              
+                              return (
+                                <div 
+                                  key={wIdx}
+                                  className={`w-[60px] h-10 border-r border-gray-100 relative ${
+                                    isCurrent ? 'bg-blue-50' : ''
+                                  }`}
+                                >
+                                  {isActive && (
+                                    <div 
+                                      className={`absolute inset-1 rounded-lg flex items-center justify-center text-white text-xs font-medium ${
+                                        item.tipo === 'TP' 
+                                          ? getStatusColor(item.statoTP || item.stato)
+                                          : getStatusColor(item.stato)
+                                      }`}
+                                      style={item.colore && !['completato', 'passed', 'failed'].includes(item.stato) && !['completato', 'passed', 'failed'].includes(item.statoTP) ? {
+                                        backgroundColor: item.colore
+                                      } : {}}
+                                      title={`${item.codice} - ${item.nome || ''}\nStato: ${item.statoTP || item.stato}`}
+                                    >
+                                      {item.tipo === 'TP' ? item.tipoIcona : (item.stato === 'completato' ? '✓' : '')}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                            
+                            {/* Current week indicator line */}
+                            {currentWeekIndex >= 0 && (
+                              <div 
+                                className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                                style={{ left: `${currentWeekIndex * 60 + 30}px` }}
+                              ></div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Work Packages Summary */}
       {workPackages.length > 0 && (
@@ -661,7 +752,6 @@ export default function GanttPage() {
           </h3>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {workPackages.map((wp, idx) => {
-              // Calcola progresso reale
               const wpPianificazioni = pianificazioni.filter(p => p.work_package_id === wp.id)
               const completati = wpPianificazioni.filter(p => p.stato === 'completato').length
               const progress = wpPianificazioni.length > 0 ? Math.round((completati / wpPianificazioni.length) * 100) : 0
@@ -670,7 +760,7 @@ export default function GanttPage() {
                 <div key={idx} className="border rounded-xl p-4 hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <span className="font-mono font-bold text-blue-600">{wp.codice}</span>
+                      <span className="font-mono font-bold text-purple-600">{wp.codice}</span>
                       <p className="text-sm text-gray-600 mt-0.5">{wp.nome}</p>
                     </div>
                     <span 
@@ -693,7 +783,7 @@ export default function GanttPage() {
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div 
-                        className={`h-full transition-all duration-500 ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+                        className={`h-full transition-all duration-500 ${progress === 100 ? 'bg-green-500' : 'bg-purple-500'}`}
                         style={{ width: `${progress}%` }}
                       ></div>
                     </div>
@@ -706,7 +796,7 @@ export default function GanttPage() {
         </div>
       )}
 
-      {/* NUOVO: Test Packages Summary */}
+      {/* Test Packages Summary */}
       {testPackages.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border p-6 mt-6">
           <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -733,13 +823,13 @@ export default function GanttPage() {
                 <div 
                   key={idx} 
                   className="border rounded-xl p-4 hover:shadow-md transition-shadow"
-                  style={{ borderLeftWidth: '4px', borderLeftColor: tp.colore || '#8B5CF6' }}
+                  style={{ borderLeftWidth: '4px', borderLeftColor: tp.colore || '#06B6D4' }}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xl">{getTipoTestIcon(tp.tipo)}</span>
                       <div>
-                        <span className="font-mono font-bold text-purple-600">{tp.codice}</span>
+                        <span className="font-mono font-bold text-cyan-600">{tp.codice}</span>
                         <p className="text-sm text-gray-600 mt-0.5">{tp.nome}</p>
                       </div>
                     </div>
@@ -755,7 +845,6 @@ export default function GanttPage() {
                       <div>📅 {new Date(tp.data_inizio_pianificata).toLocaleDateString('it-IT')} - {tp.data_fine_pianificata ? new Date(tp.data_fine_pianificata).toLocaleDateString('it-IT') : '?'}</div>
                     )}
                   </div>
-                  {/* Progress bar per fasi */}
                   {tp.fase_corrente && (
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -763,7 +852,7 @@ export default function GanttPage() {
                           className="h-full transition-all duration-500"
                           style={{ 
                             width: `${(tp.fase_corrente.ordine / 11) * 100}%`,
-                            backgroundColor: tp.stato === 'passed' ? '#22C55E' : (tp.colore || '#8B5CF6')
+                            backgroundColor: tp.stato === 'passed' ? '#22C55E' : (tp.colore || '#06B6D4')
                           }}
                         ></div>
                       </div>
@@ -777,7 +866,7 @@ export default function GanttPage() {
         </div>
       )}
 
-      {/* Modal CW Detail - AGGIORNATO con TP */}
+      {/* Modal CW Detail */}
       {selectedCW && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCW(null)}>
           <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -797,7 +886,6 @@ export default function GanttPage() {
                   ✕
                 </button>
               </div>
-              {/* Search */}
               <div className="mt-4">
                 <input
                   type="text"
@@ -837,7 +925,6 @@ export default function GanttPage() {
                   )
                 }
                 
-                // Raggruppa per disciplina
                 const byDisc = {}
                 activities.forEach(a => {
                   const disc = a.disciplina?.nome || 'Senza Disciplina'
@@ -865,7 +952,7 @@ export default function GanttPage() {
                             <div 
                               key={aIdx}
                               className="border rounded-xl p-4 hover:shadow-md transition-shadow"
-                              style={activity.tipo === 'TP' ? { borderLeftWidth: '4px', borderLeftColor: activity.colore || '#8B5CF6' } : {}}
+                              style={activity.tipo === 'TP' ? { borderLeftWidth: '4px', borderLeftColor: activity.colore || '#06B6D4' } : {}}
                             >
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex items-center gap-2">
@@ -885,7 +972,7 @@ export default function GanttPage() {
                               )}
                               <div className="text-xs text-gray-500 space-y-1">
                                 {activity.tipo === 'TP' && activity.pressione_test && (
-                                  <div className="text-purple-600 font-medium">⏲️ {activity.pressione_test} bar - {activity.tipo_test}</div>
+                                  <div className="text-cyan-600 font-medium">⏲️ {activity.pressione_test} bar - {activity.tipo_test}</div>
                                 )}
                                 {activity.fase && (
                                   <div className="flex items-center gap-1">
@@ -913,7 +1000,6 @@ export default function GanttPage() {
               })()}
             </div>
             
-            {/* Footer */}
             <div className="p-4 border-t bg-gray-50 flex justify-end">
               <button
                 onClick={() => setSelectedCW(null)}
