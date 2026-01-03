@@ -15,6 +15,7 @@ export default function PianificazionePage() {
   const [fasiWorkflow, setFasiWorkflow] = useState([])
   const [squadre, setSquadre] = useState([])
   const [ditte, setDitte] = useState([]) // NUOVO: ditte esterne
+  const [testPackages, setTestPackages] = useState([]) // NUOVO: Test Packages
   const [tipiAzioneCorrettiva, setTipiAzioneCorrettiva] = useState([]) // NUOVO
   const [loading, setLoading] = useState(true)
   
@@ -37,6 +38,7 @@ export default function PianificazionePage() {
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
   const [showWPAssignModal, setShowWPAssignModal] = useState(false)
   const [showAzioneCorrettivaModal, setShowAzioneCorrettivaModal] = useState(false) // NUOVO
+  const [showTPAssignModal, setShowTPAssignModal] = useState(false) // NUOVO: Test Packages
   
   // Form assegnazione componente singolo
   const [assignForm, setAssignForm] = useState({
@@ -64,6 +66,13 @@ export default function PianificazionePage() {
     fase_target_id: '',
     priorita: 1,
     squadra_id: '',
+    istruzioni: ''
+  })
+  
+  // Form assegnazione Test Package - NUOVO
+  const [tpAssignForm, setTpAssignForm] = useState({
+    test_package_id: '',
+    priorita: 1,
     istruzioni: ''
   })
   
@@ -141,6 +150,7 @@ export default function PianificazionePage() {
         { data: pianData },
         { data: compData },
         { data: wpData },
+        { data: tpData },
         { data: discData },
         { data: fasiData },
         { data: squadreData },
@@ -172,6 +182,13 @@ export default function PianificazionePage() {
             work_package:work_packages(
               id, codice, nome, descrizione,
               disciplina:discipline(id, nome, codice, icona, colore)
+            ),
+            test_package:test_packages(
+              id, codice, nome, descrizione, tipo, colore, stato,
+              pressione_test, durata_holding_minuti, fluido_test,
+              disciplina:discipline(id, nome, codice, icona, colore),
+              squadra:squadre(id, nome),
+              foreman:persone!test_packages_foreman_id_fkey(id, nome, cognome)
             ),
             fase:fasi_workflow(id, nome, icona, colore),
             squadra:squadre(id, nome),
@@ -219,6 +236,19 @@ export default function PianificazionePage() {
           .eq('progetto_id', progettoId)
           .eq('attivo', true)
           .order('codice'),
+        // Test Packages attivi - NUOVO
+        supabase
+          .from('test_packages')
+          .select(`
+            id, codice, nome, descrizione, tipo, colore, stato,
+            pressione_test, durata_holding_minuti, fluido_test,
+            data_inizio_pianificata, data_fine_pianificata,
+            disciplina:discipline(id, nome, codice, icona, colore),
+            squadra:squadre(id, nome)
+          `)
+          .eq('progetto_id', progettoId)
+          .in('stato', ['draft', 'planned', 'ready', 'in_progress', 'holding'])
+          .order('codice'),
         // Discipline
         supabase
           .from('discipline')
@@ -256,6 +286,7 @@ export default function PianificazionePage() {
       setPianificazioni(pianData || [])
       setComponenti(compData || [])
       setWorkPackages(wpData || [])
+      setTestPackages(tpData || [])
       setDiscipline(discData || [])
       setFasiWorkflow(fasiData || [])
       setSquadre(squadreData || [])
@@ -281,17 +312,18 @@ export default function PianificazionePage() {
     const bloccate = pianificazioni.filter(p => p.stato === 'bloccato').length
     
     // Conta per tipo
-    const wpCount = pianificazioni.filter(p => p.work_package_id && !p.componente_id).length
+    const wpCount = pianificazioni.filter(p => p.work_package_id && !p.componente_id && !p.test_package_id).length
     const compCount = pianificazioni.filter(p => p.componente_id && !p.is_azione_correttiva).length
     const azioniCorrettiveCount = pianificazioni.filter(p => p.is_azione_correttiva).length
+    const tpCount = pianificazioni.filter(p => p.test_package_id).length
     
     const percentuale = totale > 0 ? Math.round((completate / totale) * 100) : 0
     
     // Per disciplina
     const byDisciplina = {}
     pianificazioni.forEach(p => {
-      const discNome = p.componente?.disciplina?.nome || p.work_package?.disciplina?.nome || 'N/D'
-      const colore = p.componente?.disciplina?.colore || p.work_package?.disciplina?.colore || '#6B7280'
+      const discNome = p.componente?.disciplina?.nome || p.work_package?.disciplina?.nome || p.test_package?.disciplina?.nome || 'N/D'
+      const colore = p.componente?.disciplina?.colore || p.work_package?.disciplina?.colore || p.test_package?.disciplina?.colore || '#6B7280'
       if (!byDisciplina[discNome]) {
         byDisciplina[discNome] = { totale: 0, completate: 0, colore }
       }
@@ -301,19 +333,20 @@ export default function PianificazionePage() {
     
     return { 
       totale, completate, inCorso, pianificate, problemi, bloccate, 
-      percentuale, byDisciplina, wpCount, compCount, azioniCorrettiveCount 
+      percentuale, byDisciplina, wpCount, compCount, azioniCorrettiveCount, tpCount 
     }
   }, [pianificazioni])
   
   // Filtra attività
   const attivitaFiltrate = useMemo(() => {
     return pianificazioni.filter(p => {
-      const disc = p.componente?.disciplina || p.work_package?.disciplina
+      const disc = p.componente?.disciplina || p.work_package?.disciplina || p.test_package?.disciplina
       if (filtri.disciplina && disc?.id !== filtri.disciplina) return false
       if (filtri.stato && p.stato !== filtri.stato) return false
       if (filtri.squadra && p.squadra_id !== filtri.squadra) return false
       if (filtri.tipo) {
-        if (filtri.tipo === 'wp' && !(p.work_package_id && !p.componente_id)) return false
+        if (filtri.tipo === 'wp' && !(p.work_package_id && !p.componente_id && !p.test_package_id)) return false
+        if (filtri.tipo === 'tp' && !p.test_package_id) return false
         if (filtri.tipo === 'componente' && !(p.componente_id && !p.is_azione_correttiva)) return false
         if (filtri.tipo === 'azione_correttiva' && !p.is_azione_correttiva) return false
       }
@@ -368,6 +401,32 @@ export default function PianificazionePage() {
     const wpAssegnatiIds = new Set(pianificazioni.filter(p => p.work_package_id && !p.componente_id).map(p => p.work_package_id))
     return workPackages.filter(wp => !wpAssegnatiIds.has(wp.id))
   }, [workPackages, pianificazioni])
+  
+  // Test Packages disponibili per assegnazione - NUOVO
+  const tpDisponibili = useMemo(() => {
+    const tpAssegnatiIds = new Set(
+      pianificazioni
+        .filter(p => p.test_package_id)
+        .filter(p => p.anno === selectedYear && p.settimana === selectedWeek)
+        .map(p => p.test_package_id)
+    )
+    return testPackages.filter(tp => !tpAssegnatiIds.has(tp.id))
+  }, [testPackages, pianificazioni, selectedYear, selectedWeek])
+  
+  // Helper per icona tipo test - NUOVO
+  const getTipoTestIcon = (tipo) => {
+    const icons = {
+      hydrotest: '💧',
+      pneumatic: '💨',
+      leak_test: '🔍',
+      functional: '⚙️',
+      electrical: '⚡',
+      loop_check: '🔄',
+      cleaning: '🧹',
+      drying: '☀️'
+    }
+    return icons[tipo] || '🧪'
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // AZIONI
@@ -427,6 +486,47 @@ export default function PianificazionePage() {
       istruzioni: ''
     })
     setShowAzioneCorrettivaModal(true)
+  }
+  
+  // NUOVO: Apri modal assegnazione Test Package
+  const openTPAssignModal = () => {
+    setTpAssignForm({
+      test_package_id: '',
+      priorita: pianificazioni.length + 1,
+      istruzioni: ''
+    })
+    setShowTPAssignModal(true)
+  }
+  
+  // NUOVO: Assegna Test Package a CW
+  const handleTPAssign = async () => {
+    if (!tpAssignForm.test_package_id) {
+      alert('Seleziona un Test Package')
+      return
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('pianificazione_cw')
+        .insert({
+          progetto_id: progettoId,
+          test_package_id: tpAssignForm.test_package_id,
+          anno: selectedYear,
+          settimana: selectedWeek,
+          stato: 'pianificato',
+          priorita: tpAssignForm.priorita,
+          istruzioni: tpAssignForm.istruzioni || null,
+          created_by: persona?.id
+        })
+      
+      if (error) throw error
+      
+      setShowTPAssignModal(false)
+      loadData()
+    } catch (error) {
+      console.error('Error assigning TP:', error)
+      alert(t('error') + ': ' + error.message)
+    }
   }
   
   const openBulkAssignModal = () => {
@@ -761,6 +861,12 @@ export default function PianificazionePage() {
                 📦 {t('assignWP') || 'Assegna WP'}
               </button>
               <button
+                onClick={openTPAssignModal}
+                className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 flex items-center gap-2"
+              >
+                💧 {t('assignTP') || 'Assegna TP'}
+              </button>
+              <button
                 onClick={openBulkAssignModal}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
@@ -973,6 +1079,7 @@ export default function PianificazionePage() {
           >
             <option value="">{t('allTypes') || 'Tutti i tipi'}</option>
             <option value="wp">📦 Work Package</option>
+            <option value="tp">💧 Test Package</option>
             <option value="componente">🔧 {t('components')}</option>
             <option value="azione_correttiva">⚠️ {t('correctiveActions') || 'Azioni Correttive'}</option>
           </select>
@@ -1612,6 +1719,112 @@ export default function PianificazionePage() {
       )}
       
       {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: Assegna Test Package a CW - NUOVO
+          ══════════════════════════════════════════════════════════════════════ */}
+      {showTPAssignModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="p-4 border-b bg-cyan-50">
+              <h3 className="text-lg font-semibold text-cyan-800">💧 Assegna Test Package a CW{selectedWeek}</h3>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Test Package selection */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Test Package *</label>
+                <select
+                  value={tpAssignForm.test_package_id}
+                  onChange={e => setTpAssignForm({...tpAssignForm, test_package_id: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="">Seleziona Test Package...</option>
+                  {tpDisponibili.map(tp => (
+                    <option key={tp.id} value={tp.id}>
+                      {getTipoTestIcon(tp.tipo)} {tp.codice} - {tp.nome}
+                    </option>
+                  ))}
+                </select>
+                {tpDisponibili.length === 0 && (
+                  <p className="text-sm text-orange-600 mt-1">
+                    Tutti i Test Package sono già assegnati a questa settimana
+                  </p>
+                )}
+              </div>
+              
+              {/* TP Info */}
+              {tpAssignForm.test_package_id && (() => {
+                const selectedTP = testPackages.find(tp => tp.id === tpAssignForm.test_package_id)
+                if (!selectedTP) return null
+                return (
+                  <div className="p-3 bg-cyan-50 rounded-lg border border-cyan-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">{getTipoTestIcon(selectedTP.tipo)}</span>
+                      <div>
+                        <p className="font-semibold text-cyan-800">{selectedTP.codice}</p>
+                        <p className="text-sm text-cyan-600">{selectedTP.nome}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {selectedTP.pressione_test && (
+                        <div>⏲️ {selectedTP.pressione_test} bar</div>
+                      )}
+                      {selectedTP.durata_holding_minuti && (
+                        <div>⏱️ {selectedTP.durata_holding_minuti} min</div>
+                      )}
+                      {selectedTP.fluido_test && (
+                        <div>💧 {selectedTP.fluido_test}</div>
+                      )}
+                      {selectedTP.disciplina && (
+                        <div>{selectedTP.disciplina.icona} {selectedTP.disciplina.nome}</div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
+              
+              {/* Priorità */}
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('priority')}</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={tpAssignForm.priorita}
+                  onChange={e => setTpAssignForm({...tpAssignForm, priorita: parseInt(e.target.value) || 1})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              
+              {/* Istruzioni */}
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('instructions')}</label>
+                <textarea
+                  value={tpAssignForm.istruzioni}
+                  onChange={e => setTpAssignForm({...tpAssignForm, istruzioni: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows="2"
+                  placeholder={t('instructionsPlaceholder') || 'Note aggiuntive...'}
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setShowTPAssignModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleTPAssign}
+                disabled={!tpAssignForm.test_package_id}
+                className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50"
+              >
+                💧 {t('assign')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ══════════════════════════════════════════════════════════════════════
           MODAL: Dettaglio attività
           ══════════════════════════════════════════════════════════════════════ */}
       {showDetailModal && selectedActivity && (
@@ -1639,41 +1852,80 @@ export default function PianificazionePage() {
 // ══════════════════════════════════════════════════════════════════════
 
 function ActivityCard({ activity, onClick, onStatusChange, onResolve, showProblem, canEdit, t }) {
-  const isWP = !!activity.work_package_id && !activity.componente_id
+  const isWP = !!activity.work_package_id && !activity.componente_id && !activity.test_package_id
+  const isTP = !!activity.test_package_id
   const isAzioneCorrettiva = activity.is_azione_correttiva
-  const item = isWP ? activity.work_package : activity.componente
+  const item = isTP ? activity.test_package : (isWP ? activity.work_package : activity.componente)
   const disc = item?.disciplina
+  
+  // Helper per icona tipo test
+  const getTipoTestIconLocal = (tipo) => {
+    const icons = {
+      hydrotest: '💧',
+      pneumatic: '💨',
+      leak_test: '🔍',
+      functional: '⚙️',
+      electrical: '⚡',
+      loop_check: '🔄',
+      cleaning: '🧹',
+      drying: '☀️'
+    }
+    return icons[tipo] || '🧪'
+  }
   
   // Per azioni correttive, mostra info WP di appartenenza
   const wpAppartenenza = isAzioneCorrettiva ? activity.componente?.work_package : null
+  
+  // Colore bordo per tipo
+  const borderColor = isTP ? 'border-l-cyan-500' : 
+                      isWP ? 'border-l-purple-500' : 
+                      isAzioneCorrettiva ? 'border-l-orange-500' : ''
   
   return (
     <div
       onClick={onClick}
       className={`bg-white rounded-lg p-3 border shadow-sm hover:shadow-md cursor-pointer transition-all ${
-        isWP ? 'border-l-4 border-l-purple-500' : 
-        isAzioneCorrettiva ? 'border-l-4 border-l-orange-500' : ''
+        (isTP || isWP || isAzioneCorrettiva) ? `border-l-4 ${borderColor}` : ''
       }`}
     >
       {/* Header */}
       <div className="flex items-start gap-2 mb-2">
         <span 
           className="text-xl w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: (disc?.colore || '#6B7280') + '20' }}
+          style={{ backgroundColor: (disc?.colore || (isTP ? '#06B6D4' : '#6B7280')) + '20' }}
         >
-          {isWP ? '📦' : isAzioneCorrettiva ? '⚠️' : (disc?.icona || '🔧')}
+          {isTP ? getTipoTestIconLocal(activity.test_package?.tipo) : 
+           isWP ? '📦' : 
+           isAzioneCorrettiva ? '⚠️' : (disc?.icona || '🔧')}
         </span>
         <div className="flex-1 min-w-0">
           <div className="font-mono text-sm font-medium truncate">
+            {isTP && <span className="text-cyan-600 mr-1">[TP]</span>}
             {isWP && <span className="text-purple-600 mr-1">[WP]</span>}
             {isAzioneCorrettiva && <span className="text-orange-600 mr-1">[AC]</span>}
             {item?.codice}
           </div>
           <div className="text-xs text-gray-500 truncate">
-            {isWP ? item?.nome : item?.descrizione}
+            {isTP ? item?.nome : isWP ? item?.nome : item?.descrizione}
           </div>
         </div>
       </div>
+      
+      {/* Info Test Package */}
+      {isTP && activity.test_package && (
+        <div className="mb-2 flex flex-wrap gap-1">
+          {activity.test_package.pressione_test && (
+            <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded text-xs">
+              ⏲️ {activity.test_package.pressione_test} bar
+            </span>
+          )}
+          {activity.test_package.durata_holding_minuti && (
+            <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded text-xs">
+              ⏱️ {activity.test_package.durata_holding_minuti} min
+            </span>
+          )}
+        </div>
+      )}
       
       {/* Badge WP di appartenenza per azioni correttive */}
       {isAzioneCorrettiva && wpAppartenenza && (
@@ -1778,11 +2030,27 @@ function ActivityDetailModal({
   const [showProblemForm, setShowProblemForm] = useState(false)
   const [problemDescription, setProblemDescription] = useState('')
   
-  const isWP = !!activity.work_package_id && !activity.componente_id
+  const isWP = !!activity.work_package_id && !activity.componente_id && !activity.test_package_id
+  const isTP = !!activity.test_package_id
   const isAzioneCorrettiva = activity.is_azione_correttiva
-  const item = isWP ? activity.work_package : activity.componente
+  const item = isTP ? activity.test_package : (isWP ? activity.work_package : activity.componente)
   const disc = item?.disciplina
   const locale = language === 'en' ? 'en-GB' : 'it-IT'
+  
+  // Helper per icona tipo test
+  const getTipoTestIconLocal = (tipo) => {
+    const icons = {
+      hydrotest: '💧',
+      pneumatic: '💨',
+      leak_test: '🔍',
+      functional: '⚙️',
+      electrical: '⚡',
+      loop_check: '🔄',
+      cleaning: '🧹',
+      drying: '☀️'
+    }
+    return icons[tipo] || '🧪'
+  }
   
   // Per azioni correttive
   const wpAppartenenza = isAzioneCorrettiva ? activity.componente?.work_package : null
@@ -1792,8 +2060,8 @@ function ActivityDetailModal({
     onReportProblem(activity.id, problemDescription)
   }
   
-  const headerBg = isWP ? 'bg-purple-50' : isAzioneCorrettiva ? 'bg-orange-50' : ''
-  const headerIcon = isWP ? '📦 Work Package' : isAzioneCorrettiva ? '⚠️ Azione Correttiva' : t('details')
+  const headerBg = isTP ? 'bg-cyan-50' : isWP ? 'bg-purple-50' : isAzioneCorrettiva ? 'bg-orange-50' : ''
+  const headerIcon = isTP ? '💧 Test Package' : isWP ? '📦 Work Package' : isAzioneCorrettiva ? '⚠️ Azione Correttiva' : t('details')
   
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1807,13 +2075,14 @@ function ActivityDetailModal({
         {/* Content */}
         <div className="p-4 overflow-y-auto max-h-[calc(90vh-200px)]">
           {/* Item info */}
-          <div className={`mb-4 p-4 rounded-xl ${isWP ? 'bg-purple-50' : isAzioneCorrettiva ? 'bg-orange-50' : 'bg-gray-50'}`}>
+          <div className={`mb-4 p-4 rounded-xl ${isTP ? 'bg-cyan-50' : isWP ? 'bg-purple-50' : isAzioneCorrettiva ? 'bg-orange-50' : 'bg-gray-50'}`}>
             <div className="flex items-center gap-3 mb-3">
               <span 
                 className="text-2xl w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: (disc?.colore || '#6B7280') + '20' }}
+                style={{ backgroundColor: (disc?.colore || (isTP ? '#06B6D4' : '#6B7280')) + '20' }}
               >
-                {isWP ? '📦' : isAzioneCorrettiva ? '⚠️' : (disc?.icona || '🔧')}
+                {isTP ? getTipoTestIconLocal(activity.test_package?.tipo) : 
+                 isWP ? '📦' : isAzioneCorrettiva ? '⚠️' : (disc?.icona || '🔧')}
               </span>
               <div>
                 <div className="font-mono font-bold">
