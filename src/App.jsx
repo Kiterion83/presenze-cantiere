@@ -25,8 +25,9 @@ import MaterialiPage from './pages/MaterialiPage'  // Rinominato da ComponentiPa
 import PianificazionePage from './pages/PianificazionePage'
 import ForemanPage from './pages/ForemanPage'
 import OreComponentiPage from './pages/OreComponentiPage'
-import WorkPackagesPage from './components/WorkPackagesPage'  // NUOVO - Work Packages
-import AvanzamentoPage from './pages/AvanzamentoPage'  // NUOVO - Dashboard Avanzamento
+import WorkPackagesPage from './components/WorkPackagesPage'  // Work Packages
+import TestPackagesPage from './components/TestPackagesPage'  // NUOVO - Test Packages & Commissioning
+import AvanzamentoPage from './pages/AvanzamentoPage'  // Dashboard Avanzamento
 // NUOVE PAGINE - Statistiche e AI
 import GanttPage from './pages/GanttPage'
 import AIInsightsPage from './pages/AIInsightsPage'
@@ -121,6 +122,7 @@ function AppRoutes() {
       <Route path="/foreman" element={<ProtectedRoute requiredAccess="foreman"><ForemanPage /></ProtectedRoute>} />
       <Route path="/ore-componenti" element={<ProtectedRoute requiredAccess="ore-componenti"><OreComponentiPage /></ProtectedRoute>} />
       <Route path="/work-packages" element={<ProtectedRoute requiredAccess="work-packages"><WorkPackagesPage /></ProtectedRoute>} />
+      <Route path="/test-packages" element={<ProtectedRoute requiredAccess="test-packages"><TestPackagesPage /></ProtectedRoute>} />
       <Route path="/avanzamento" element={<ProtectedRoute requiredAccess="avanzamento"><AvanzamentoPage /></ProtectedRoute>} />
 
       {/* Protected Routes - Supervisor+ */}
