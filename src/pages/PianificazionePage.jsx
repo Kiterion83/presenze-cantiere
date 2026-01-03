@@ -73,7 +73,11 @@ export default function PianificazionePage() {
   const [tpAssignForm, setTpAssignForm] = useState({
     test_package_id: '',
     priorita: 1,
-    istruzioni: ''
+    istruzioni: '',
+    target_year: null,
+    target_week: null,
+    suggested_year: null,
+    suggested_week: null
   })
   
   // Selezione multipla per assegnazione bulk
@@ -493,7 +497,11 @@ export default function PianificazionePage() {
     setTpAssignForm({
       test_package_id: '',
       priorita: pianificazioni.length + 1,
-      istruzioni: ''
+      istruzioni: '',
+      target_year: selectedYear,
+      target_week: selectedWeek,
+      suggested_year: null,
+      suggested_week: null
     })
     setShowTPAssignModal(true)
   }
@@ -505,14 +513,18 @@ export default function PianificazionePage() {
       return
     }
     
+    // Usa target_year/week dal form (se impostati) altrimenti usa selectedYear/Week
+    const targetYear = tpAssignForm.target_year || selectedYear
+    const targetWeek = tpAssignForm.target_week || selectedWeek
+    
     try {
       const { error } = await supabase
         .from('pianificazione_cw')
         .insert({
           progetto_id: progettoId,
           test_package_id: tpAssignForm.test_package_id,
-          anno: selectedYear,
-          settimana: selectedWeek,
+          anno: targetYear,
+          settimana: targetWeek,
           stato: 'pianificato',
           priorita: tpAssignForm.priorita,
           istruzioni: tpAssignForm.istruzioni || null,
@@ -1725,7 +1737,7 @@ export default function PianificazionePage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md">
             <div className="p-4 border-b bg-cyan-50">
-              <h3 className="text-lg font-semibold text-cyan-800">💧 Assegna Test Package a CW{selectedWeek}</h3>
+              <h3 className="text-lg font-semibold text-cyan-800">💧 Assegna Test Package</h3>
             </div>
             <div className="p-4 space-y-4">
               {/* Test Package selection */}
@@ -1733,13 +1745,44 @@ export default function PianificazionePage() {
                 <label className="block text-sm font-medium mb-1">Test Package *</label>
                 <select
                   value={tpAssignForm.test_package_id}
-                  onChange={e => setTpAssignForm({...tpAssignForm, test_package_id: e.target.value})}
+                  onChange={e => {
+                    const tpId = e.target.value
+                    const selectedTP = testPackages.find(tp => tp.id === tpId)
+                    
+                    // Se il TP ha date pianificate, calcola la CW giusta
+                    if (selectedTP?.data_inizio_pianificata) {
+                      const d = new Date(selectedTP.data_inizio_pianificata)
+                      const startOfYear = new Date(d.getFullYear(), 0, 1)
+                      const days = Math.floor((d - startOfYear) / (24 * 60 * 60 * 1000))
+                      const suggestedWeek = Math.ceil((days + startOfYear.getDay() + 1) / 7)
+                      const suggestedYear = d.getFullYear()
+                      
+                      setTpAssignForm({
+                        ...tpAssignForm, 
+                        test_package_id: tpId,
+                        suggested_year: suggestedYear,
+                        suggested_week: suggestedWeek,
+                        target_year: suggestedYear,
+                        target_week: suggestedWeek
+                      })
+                    } else {
+                      setTpAssignForm({
+                        ...tpAssignForm, 
+                        test_package_id: tpId,
+                        suggested_year: null,
+                        suggested_week: null,
+                        target_year: selectedYear,
+                        target_week: selectedWeek
+                      })
+                    }
+                  }}
                   className="w-full px-3 py-2 border rounded-lg"
                 >
                   <option value="">Seleziona Test Package...</option>
                   {tpDisponibili.map(tp => (
                     <option key={tp.id} value={tp.id}>
                       {getTipoTestIcon(tp.tipo)} {tp.codice} - {tp.nome}
+                      {tp.data_inizio_pianificata && ` (${new Date(tp.data_inizio_pianificata).toLocaleDateString('it-IT')})`}
                     </option>
                   ))}
                 </select>
@@ -1777,9 +1820,66 @@ export default function PianificazionePage() {
                         <div>{selectedTP.disciplina.icona} {selectedTP.disciplina.nome}</div>
                       )}
                     </div>
+                    {/* Date pianificate */}
+                    {selectedTP.data_inizio_pianificata && (
+                      <div className="mt-2 pt-2 border-t border-cyan-200 text-xs">
+                        <span className="text-cyan-700 font-medium">📅 Date pianificate:</span>
+                        <span className="ml-2">
+                          {new Date(selectedTP.data_inizio_pianificata).toLocaleDateString('it-IT')}
+                          {selectedTP.data_fine_pianificata && ` → ${new Date(selectedTP.data_fine_pianificata).toLocaleDateString('it-IT')}`}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )
               })()}
+              
+              {/* Selezione CW destinazione */}
+              <div>
+                <label className="block text-sm font-medium mb-1">📅 Settimana Destinazione *</label>
+                <div className="flex gap-2">
+                  <select
+                    value={tpAssignForm.target_year || selectedYear}
+                    onChange={e => setTpAssignForm({...tpAssignForm, target_year: parseInt(e.target.value)})}
+                    className="px-3 py-2 border rounded-lg text-sm"
+                  >
+                    {[2024, 2025, 2026, 2027].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={tpAssignForm.target_week || selectedWeek}
+                    onChange={e => setTpAssignForm({...tpAssignForm, target_week: parseInt(e.target.value)})}
+                    className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                  >
+                    {Array.from({ length: 52 }, (_, i) => i + 1).map(w => (
+                      <option key={w} value={w}>CW {String(w).padStart(2, '0')}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* Warning se CW diversa da suggerita */}
+                {tpAssignForm.suggested_week && (
+                  (tpAssignForm.target_week !== tpAssignForm.suggested_week || 
+                   tpAssignForm.target_year !== tpAssignForm.suggested_year) ? (
+                    <div className="mt-2 p-2 bg-orange-100 border border-orange-300 rounded-lg text-xs text-orange-700">
+                      ⚠️ <strong>Attenzione:</strong> Il TP ha date pianificate per <strong>CW{tpAssignForm.suggested_week}/{tpAssignForm.suggested_year}</strong>, 
+                      ma stai assegnando a <strong>CW{tpAssignForm.target_week}/{tpAssignForm.target_year}</strong>
+                    </div>
+                  ) : (
+                    <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded-lg text-xs text-green-700">
+                      ✅ CW corretta in base alle date pianificate del TP
+                    </div>
+                  )
+                )}
+                
+                {/* Info se TP senza date */}
+                {tpAssignForm.test_package_id && !tpAssignForm.suggested_week && (
+                  <div className="mt-2 p-2 bg-gray-100 border border-gray-300 rounded-lg text-xs text-gray-600">
+                    ℹ️ Questo TP non ha date pianificate. Considera di impostarle nella pagina Test Packages.
+                  </div>
+                )}
+              </div>
               
               {/* Priorità */}
               <div>
@@ -1817,7 +1917,7 @@ export default function PianificazionePage() {
                 disabled={!tpAssignForm.test_package_id}
                 className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50"
               >
-                💧 {t('assign')}
+                💧 Assegna a CW{tpAssignForm.target_week || selectedWeek}
               </button>
             </div>
           </div>
