@@ -675,22 +675,30 @@ export default function TestPackagesPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
         <div className="bg-white rounded-xl p-4 shadow-sm border">
           <p className="text-2xl font-bold text-gray-800">{testPackages.length}</p>
-          <p className="text-sm text-gray-500">Totale</p>
+          <p className="text-sm text-gray-500">🧪 Totale TP</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border">
+          <p className="text-2xl font-bold text-gray-400">{testPackages.filter(t => t.stato === 'draft' || !t.stato).length}</p>
+          <p className="text-sm text-gray-500">📝 Bozza</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-cyan-200 bg-cyan-50">
           <p className="text-2xl font-bold text-cyan-600">{testPackages.filter(t => t.stato === 'planned').length}</p>
-          <p className="text-sm text-gray-500">Pianificati</p>
+          <p className="text-sm text-gray-500">📋 Pianificati</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border">
-          <p className="text-2xl font-bold text-amber-600">{testPackages.filter(t => ['in_progress', 'holding'].includes(t.stato)).length}</p>
-          <p className="text-sm text-gray-500">In Corso</p>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-amber-200 bg-amber-50">
+          <p className="text-2xl font-bold text-amber-600">{testPackages.filter(t => ['in_progress', 'holding', 'ready'].includes(t.stato)).length}</p>
+          <p className="text-sm text-gray-500">🔄 In Corso</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-green-200 bg-green-50">
           <p className="text-2xl font-bold text-green-600">{testPackages.filter(t => t.stato === 'passed').length}</p>
-          <p className="text-sm text-gray-500">Completati</p>
+          <p className="text-sm text-gray-500">✅ Superati</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-red-200 bg-red-50">
+          <p className="text-2xl font-bold text-red-600">{testPackages.filter(t => t.stato === 'failed').length}</p>
+          <p className="text-sm text-gray-500">❌ Falliti</p>
         </div>
       </div>
 
