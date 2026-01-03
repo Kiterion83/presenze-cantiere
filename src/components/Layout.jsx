@@ -8,6 +8,17 @@ export default function Layout({ children }) {
   const { persona, progetto, assegnazioni, assegnazione, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast, canAccess, cambiaProgetto } = useAuth()
   const { t, language } = useI18n()
   
+  // === NUOVA FUNZIONALITÀ: Sidebar Resizable ===
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebar_width')
+    return saved ? parseInt(saved) : 256
+  })
+  const [isResizing, setIsResizing] = useState(false)
+  const sidebarRef = useRef(null)
+  const MIN_WIDTH = 72 // Collapsed
+  const MAX_WIDTH = 400
+  const COLLAPSE_THRESHOLD = 120
+  
   // Sidebar collapsata (solo icone) vs espansa
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed')
@@ -34,6 +45,49 @@ export default function Layout({ children }) {
     return () => window.removeEventListener('resize', handleResize)
   }, [isCollapsed])
 
+  // === RESIZE HANDLERS (NUOVA FUNZIONALITÀ) ===
+  const startResizing = (e) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return
+      
+      const newWidth = e.clientX
+      if (newWidth < COLLAPSE_THRESHOLD) {
+        setIsCollapsed(true)
+        setSidebarWidth(MIN_WIDTH)
+        localStorage.setItem('sidebar_width', MIN_WIDTH.toString())
+        localStorage.setItem('sidebar_collapsed', 'true')
+      } else if (newWidth >= COLLAPSE_THRESHOLD && newWidth <= MAX_WIDTH) {
+        setIsCollapsed(false)
+        setSidebarWidth(newWidth)
+        localStorage.setItem('sidebar_width', newWidth.toString())
+        localStorage.setItem('sidebar_collapsed', 'false')
+      }
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing])
+
   // Sezioni collassabili
   const [sectionsOpen, setSectionsOpen] = useState(() => {
     const saved = localStorage.getItem('menu_sections')
@@ -54,6 +108,10 @@ export default function Layout({ children }) {
   )
 
   // Menu items organizzati per sezione
+  // MODIFICHE: 
+  // 1. Aggiunto /conferma-presenze nella sezione core
+  // 2. Aggiunto /attivita nella sezione construction (path corretto)
+  // 3. WP ora richiede supervisor invece di foreman
   const menuSections = [
     {
       id: 'core',
@@ -62,6 +120,7 @@ export default function Layout({ children }) {
       items: [
         { path: '/', labelKey: 'home', emoji: '🏠', minRole: 'helper' },
         { path: '/checkin', labelKey: 'checkIn', emoji: '📍', minRole: 'helper' },
+        { path: '/conferma-presenze', labelKey: 'confirmAttendance', emoji: '✅', minRole: 'foreman' }, // NUOVO
         { path: '/calendario', labelKey: 'calendar', emoji: '📅', minRole: 'helper' },
         { path: '/ferie', labelKey: 'vacation', emoji: '🏖️', minRole: 'helper' },
         { path: '/team', labelKey: 'team', emoji: '👥', minRole: 'foreman' },
@@ -76,13 +135,13 @@ export default function Layout({ children }) {
       emoji: '🏗️',
       items: [
         { path: '/materiali', labelKey: 'materials', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
-        { path: '/work-packages', labelKey: 'workPackages', emoji: '📦', minRole: 'foreman', specialAccess: 'work-packages' },
+        { path: '/work-packages', labelKey: 'workPackages', emoji: '📦', minRole: 'supervisor', specialAccess: 'work-packages' }, // MODIFICATO: supervisor invece di foreman
         { path: '/test-packages', labelKey: 'testPackages', emoji: '💧', minRole: 'foreman', specialAccess: 'test-packages' },
+        { path: '/attivita', labelKey: 'activities', emoji: '📋', minRole: 'foreman' }, // NUOVO - path corretto
         { path: '/avanzamento', labelKey: 'progress', emoji: '📊', minRole: 'foreman', specialAccess: 'avanzamento' },
         { path: '/pianificazione', labelKey: 'planning', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
         { path: '/foreman', labelKey: 'field', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
         { path: '/ore-componenti', labelKey: 'workHours', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
-        { path: '/activities', labelKey: 'activities', emoji: '📋', minRole: 'foreman', specialAccess: 'activities' },
         { path: '/warehouse', labelKey: 'warehouse', emoji: '📦', minRole: 'warehouse', specialAccess: 'warehouse' },
       ]
     },
@@ -119,11 +178,13 @@ export default function Layout({ children }) {
     localStorage.setItem('menu_sections', JSON.stringify(newSections))
   }
   
-  // Toggle collapsed
+  // Toggle collapsed (MODIFICATO: aggiorna anche sidebarWidth)
   const toggleCollapsed = () => {
     const newCollapsed = !isCollapsed
     setIsCollapsed(newCollapsed)
+    setSidebarWidth(newCollapsed ? MIN_WIDTH : 256)
     localStorage.setItem('sidebar_collapsed', newCollapsed.toString())
+    localStorage.setItem('sidebar_width', (newCollapsed ? MIN_WIDTH : 256).toString())
   }
 
   // Lista ruoli
@@ -232,8 +293,8 @@ export default function Layout({ children }) {
     setIsMobileOpen(false)
   }, [location.pathname])
 
-  // Larghezza sidebar
-  const sidebarWidth = isCollapsed ? 72 : 256
+  // Larghezza sidebar effettiva (MODIFICATO: usa state invece di calcolo)
+  const effectiveSidebarWidth = isCollapsed ? MIN_WIDTH : sidebarWidth
 
   return (
     <>
@@ -243,7 +304,7 @@ export default function Layout({ children }) {
           className="fixed bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg"
           style={{ 
             top: isMobile ? '72px' : '0px',
-            left: isMobile ? '0' : `${sidebarWidth}px`,
+            left: isMobile ? '0' : `${effectiveSidebarWidth}px`,
             right: '0',
             zIndex: 9999
           }}
@@ -299,7 +360,8 @@ export default function Layout({ children }) {
 
       {/* Sidebar */}
       <aside
-        style={{ width: sidebarWidth }}
+        ref={sidebarRef}
+        style={{ width: effectiveSidebarWidth }}
         className={`
           ${isMobile ? 'fixed inset-y-0 left-0 z-50' : 'relative'}
           ${isMobile && !isMobileOpen ? '-translate-x-full' : 'translate-x-0'}
@@ -536,6 +598,18 @@ export default function Layout({ children }) {
               ▶
             </span>
           </button>
+        )}
+
+        {/* === NUOVO: Resize Handle (desktop only) === */}
+        {!isMobile && !isCollapsed && (
+          <div
+            onMouseDown={startResizing}
+            onDoubleClick={toggleCollapsed}
+            className={`absolute top-0 right-0 w-1.5 h-full cursor-col-resize transition-colors ${
+              isResizing ? 'bg-blue-500' : 'bg-transparent hover:bg-blue-300'
+            }`}
+            title="Trascina per ridimensionare, doppio click per collassare"
+          />
         )}
       </aside>
 
