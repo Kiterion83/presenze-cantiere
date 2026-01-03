@@ -124,15 +124,26 @@ function ProgettoTab() {
     setSaving(true)
     setMessage(null)
     try {
-      const { error } = await supabase.from('progetti').update({
+      const updateData = {
         nome: formData.nome, codice: formData.codice, indirizzo: formData.indirizzo, citta: formData.citta,
         data_inizio: formData.data_inizio || null, data_fine_prevista: formData.data_fine_prevista || null,
         latitudine: formData.latitudine ? parseFloat(formData.latitudine) : null,
         longitudine: formData.longitudine ? parseFloat(formData.longitudine) : null,
         raggio_checkin: parseInt(formData.raggio_checkin) || 200
-      }).eq('id', progetto.id)
+      }
+      
+      const { error } = await supabase.from('progetti').update(updateData).eq('id', progetto.id)
       if (error) throw error
-      setMessage({ type: 'success', text: t('projectUpdated') })
+      
+      // AGGIORNA IL CONTEXT - forza reload della pagina per aggiornare i dati
+      // Questo è necessario perché il context AuthContext non ha un metodo per refreshare il progetto
+      setMessage({ type: 'success', text: t('projectUpdated') + ' - Ricaricamento...' })
+      
+      // Ricarica dopo 1 secondo per mostrare il messaggio
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+      
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
