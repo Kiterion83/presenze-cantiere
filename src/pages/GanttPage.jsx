@@ -30,6 +30,10 @@ export default function GanttPage() {
   // Filtro vista
   const [viewFilter, setViewFilter] = useState('all') // all, wp, tp
   
+  // Sezioni collassabili
+  const [showWPSection, setShowWPSection] = useState(false)
+  const [showTPSection, setShowTPSection] = useState(false)
+  
   // Scroll ref
   const ganttRef = useRef(null)
 
@@ -744,125 +748,98 @@ export default function GanttPage() {
         </div>
       )}
 
-      {/* Work Packages Summary */}
+      {/* Work Packages Summary - Collapsabile */}
       {workPackages.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border p-6 mt-6">
-          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            📦 Work Packages ({workPackages.length})
-          </h3>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {workPackages.map((wp, idx) => {
-              const wpPianificazioni = pianificazioni.filter(p => p.work_package_id === wp.id)
-              const completati = wpPianificazioni.filter(p => p.stato === 'completato').length
-              const progress = wpPianificazioni.length > 0 ? Math.round((completati / wpPianificazioni.length) * 100) : 0
-              
-              return (
-                <div key={idx} className="border rounded-xl p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <span className="font-mono font-bold text-purple-600">{wp.codice}</span>
-                      <p className="text-sm text-gray-600 mt-0.5">{wp.nome}</p>
-                    </div>
-                    <span 
-                      className="px-2 py-1 rounded-full text-xs font-medium"
-                      style={{ 
-                        backgroundColor: (wp.disciplina?.colore || '#6B7280') + '20',
-                        color: wp.disciplina?.colore || '#6B7280'
-                      }}
+        <div className="bg-white rounded-2xl shadow-sm border mt-6 overflow-hidden">
+          <button
+            onClick={() => setShowWPSection(!showWPSection)}
+            className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+          >
+            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+              📦 Work Packages ({workPackages.length})
+            </h3>
+            <span className="text-gray-400 text-xl">{showWPSection ? '▼' : '▶'}</span>
+          </button>
+          
+          {showWPSection && (
+            <div className="px-4 pb-4">
+              <div className="flex flex-wrap gap-2">
+                {workPackages.map((wp, idx) => {
+                  const wpPianificazioni = pianificazioni.filter(p => p.work_package_id === wp.id)
+                  const completati = wpPianificazioni.filter(p => p.stato === 'completato').length
+                  const progress = wpPianificazioni.length > 0 ? Math.round((completati / wpPianificazioni.length) * 100) : 0
+                  
+                  return (
+                    <div 
+                      key={idx} 
+                      className="px-3 py-2 border rounded-lg hover:shadow-sm transition-shadow flex items-center gap-2"
+                      title={`${wp.codice} - ${wp.nome}\n${wp.disciplina?.nome || 'N/D'}\nProgresso: ${progress}%`}
                     >
-                      {wp.disciplina?.nome || 'N/D'}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 mb-2 space-y-1">
-                    {wp.squadra && <div>👥 {wp.squadra.nome}</div>}
-                    {wp.foreman && <div>👷 {wp.foreman.nome} {wp.foreman.cognome}</div>}
-                    {wp.data_inizio_pianificata && (
-                      <div>📅 {new Date(wp.data_inizio_pianificata).toLocaleDateString('it-IT')} - {wp.data_fine_pianificata ? new Date(wp.data_fine_pianificata).toLocaleDateString('it-IT') : '?'}</div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-500 ${progress === 100 ? 'bg-green-500' : 'bg-purple-500'}`}
-                        style={{ width: `${progress}%` }}
-                      ></div>
+                      <span className="font-mono text-sm font-bold text-purple-600">{wp.codice}</span>
+                      <span className="text-sm text-gray-600 max-w-[150px] truncate">{wp.nome}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{progress}%</span>
                     </div>
-                    <span className="text-sm font-medium text-gray-600">{progress}%</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Test Packages Summary */}
+      {/* Test Packages Summary - Collapsabile */}
       {testPackages.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border p-6 mt-6">
-          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            💧 Test Packages ({testPackages.length})
-          </h3>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {testPackages.map((tp, idx) => {
-              const getTPStatoBadge = (stato) => {
-                const badges = {
-                  draft: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Bozza' },
-                  planned: { bg: 'bg-blue-100', text: 'text-blue-600', label: 'Pianificato' },
-                  ready: { bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Pronto' },
-                  in_progress: { bg: 'bg-amber-100', text: 'text-amber-600', label: 'In Corso' },
-                  holding: { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Holding' },
-                  passed: { bg: 'bg-green-100', text: 'text-green-600', label: 'Superato' },
-                  failed: { bg: 'bg-red-100', text: 'text-red-600', label: 'Fallito' }
-                }
-                return badges[stato] || badges.draft
-              }
-              
-              const statoBadge = getTPStatoBadge(tp.stato)
-              
-              return (
-                <div 
-                  key={idx} 
-                  className="border rounded-xl p-4 hover:shadow-md transition-shadow"
-                  style={{ borderLeftWidth: '4px', borderLeftColor: tp.colore || '#06B6D4' }}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{getTipoTestIcon(tp.tipo)}</span>
-                      <div>
-                        <span className="font-mono font-bold text-cyan-600">{tp.codice}</span>
-                        <p className="text-sm text-gray-600 mt-0.5">{tp.nome}</p>
-                      </div>
+        <div className="bg-white rounded-2xl shadow-sm border mt-6 overflow-hidden">
+          <button
+            onClick={() => setShowTPSection(!showTPSection)}
+            className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+          >
+            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+              💧 Test Packages ({testPackages.length})
+            </h3>
+            <span className="text-gray-400 text-xl">{showTPSection ? '▼' : '▶'}</span>
+          </button>
+          
+          {showTPSection && (
+            <div className="px-4 pb-4">
+              <div className="flex flex-wrap gap-2">
+                {testPackages.map((tp, idx) => {
+                  const getTPStatoColor = (stato) => {
+                    const colors = {
+                      draft: 'bg-gray-100 text-gray-600',
+                      planned: 'bg-blue-100 text-blue-600',
+                      ready: 'bg-indigo-100 text-indigo-600',
+                      in_progress: 'bg-amber-100 text-amber-600',
+                      holding: 'bg-purple-100 text-purple-600',
+                      passed: 'bg-green-100 text-green-600',
+                      failed: 'bg-red-100 text-red-600'
+                    }
+                    return colors[stato] || colors.draft
+                  }
+                  
+                  return (
+                    <div 
+                      key={idx} 
+                      className="px-3 py-2 border rounded-lg hover:shadow-sm transition-shadow flex items-center gap-2"
+                      style={{ borderLeftWidth: '3px', borderLeftColor: tp.colore || '#06B6D4' }}
+                      title={`${tp.codice} - ${tp.nome}\n${tp.pressione_test ? tp.pressione_test + ' bar / ' + tp.durata_holding_minuti + ' min' : ''}\n${tp.disciplina?.nome || 'N/D'}`}
+                    >
+                      <span className="text-lg">{getTipoTestIcon(tp.tipo)}</span>
+                      <span className="font-mono text-sm font-bold text-cyan-600">{tp.codice}</span>
+                      <span className="text-sm text-gray-600 max-w-[150px] truncate">{tp.nome}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${getTPStatoColor(tp.stato)}`}>
+                        {tp.stato === 'planned' ? 'Plan' : 
+                         tp.stato === 'in_progress' ? 'In Corso' : 
+                         tp.stato === 'passed' ? '✓' : 
+                         tp.stato === 'failed' ? '✗' : 
+                         tp.stato}
+                      </span>
                     </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statoBadge.bg} ${statoBadge.text}`}>
-                      {statoBadge.label}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 mb-2 space-y-1">
-                    {tp.pressione_test && <div>⏲️ {tp.pressione_test} bar / {tp.durata_holding_minuti} min</div>}
-                    {tp.squadra && <div>👥 {tp.squadra.nome}</div>}
-                    {tp.foreman && <div>👷 {tp.foreman.nome} {tp.foreman.cognome}</div>}
-                    {tp.data_inizio_pianificata && (
-                      <div>📅 {new Date(tp.data_inizio_pianificata).toLocaleDateString('it-IT')} - {tp.data_fine_pianificata ? new Date(tp.data_fine_pianificata).toLocaleDateString('it-IT') : '?'}</div>
-                    )}
-                  </div>
-                  {tp.fase_corrente && (
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full transition-all duration-500"
-                          style={{ 
-                            width: `${(tp.fase_corrente.ordine / 11) * 100}%`,
-                            backgroundColor: tp.stato === 'passed' ? '#22C55E' : (tp.colore || '#06B6D4')
-                          }}
-                        ></div>
-                      </div>
-                      <span className="text-xs text-gray-500">{tp.fase_corrente.ordine}/11</span>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
