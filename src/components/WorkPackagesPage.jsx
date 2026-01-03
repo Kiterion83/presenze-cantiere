@@ -710,6 +710,30 @@ export default function WorkPackagesPage() {
       {/* === TAB WORK PACKAGES === */}
       {activeTab === 'wp' && (
         <div className="space-y-6">
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <p className="text-2xl font-bold text-gray-800">{workPackages.length}</p>
+              <p className="text-sm text-gray-500">📦 Totale WP</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <p className="text-2xl font-bold text-gray-400">{workPackages.filter(wp => wp.stato === 'draft' || !wp.stato).length}</p>
+              <p className="text-sm text-gray-500">📝 Bozza</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-cyan-200 bg-cyan-50">
+              <p className="text-2xl font-bold text-cyan-600">{workPackages.filter(wp => wp.stato === 'pianificato').length}</p>
+              <p className="text-sm text-gray-500">📋 Pianificati</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-amber-200 bg-amber-50">
+              <p className="text-2xl font-bold text-amber-600">{workPackages.filter(wp => wp.stato === 'in_corso').length}</p>
+              <p className="text-sm text-gray-500">🔄 In Corso</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-green-200 bg-green-50">
+              <p className="text-2xl font-bold text-green-600">{workPackages.filter(wp => wp.stato === 'completato').length}</p>
+              <p className="text-sm text-gray-500">✅ Completati</p>
+            </div>
+          </div>
+
           {/* Toolbar */}
           <div className="bg-white rounded-2xl shadow-sm border p-4">
             <div className="flex flex-col lg:flex-row gap-4">
@@ -895,6 +919,30 @@ export default function WorkPackagesPage() {
       {/* === TAB AZIONI === */}
       {activeTab === 'azioni' && (
         <div className="space-y-6">
+          {/* KPI Cards Azioni */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <p className="text-2xl font-bold text-gray-800">{azioni.length}</p>
+              <p className="text-sm text-gray-500">⚡ Totale Azioni</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border">
+              <p className="text-2xl font-bold text-gray-400">{azioni.filter(az => az.stato === 'da_fare' || !az.stato).length}</p>
+              <p className="text-sm text-gray-500">📝 Da Fare</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-amber-200 bg-amber-50">
+              <p className="text-2xl font-bold text-amber-600">{azioni.filter(az => az.stato === 'in_corso').length}</p>
+              <p className="text-sm text-gray-500">🔄 In Corso</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-green-200 bg-green-50">
+              <p className="text-2xl font-bold text-green-600">{azioni.filter(az => az.stato === 'completato').length}</p>
+              <p className="text-sm text-gray-500">✅ Completate</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-red-200 bg-red-50">
+              <p className="text-2xl font-bold text-red-600">{azioni.filter(az => az.stato === 'bloccato').length}</p>
+              <p className="text-sm text-gray-500">🚫 Bloccate</p>
+            </div>
+          </div>
+
           {/* Toolbar */}
           <div className="bg-white rounded-2xl shadow-sm border p-4">
             <div className="flex flex-col lg:flex-row gap-4 justify-between">
