@@ -15,6 +15,10 @@ export default function GanttPage() {
   const [testPackages, setTestPackages] = useState([])
   const [pianificazioni, setPianificazioni] = useState([])
   
+  // IDs assegnati a CW (per distinzione visiva)
+  const [wpAssegnatiCW, setWpAssegnatiCW] = useState(new Set())
+  const [tpAssegnatiCW, setTpAssegnatiCW] = useState(new Set())
+  
   // Range date
   const [rangePreset, setRangePreset] = useState('activities')
   const [customRange, setCustomRange] = useState({ startDate: '', endDate: '' })
@@ -97,12 +101,10 @@ export default function GanttPage() {
     
     switch (rangePreset) {
       case '3months':
-        // Parte 2 settimane prima della prima attività, finisce 3 mesi dopo
         start = new Date(minDate)
         start.setDate(start.getDate() - 14)
         end = new Date(maxDate)
         end.setMonth(end.getMonth() + 1)
-        // Ma almeno 3 mesi di range
         const min3m = new Date(start)
         min3m.setMonth(min3m.getMonth() + 3)
         if (end < min3m) end = min3m
@@ -132,7 +134,6 @@ export default function GanttPage() {
         end.setMonth(end.getMonth() + 1)
         break
       case 'activities':
-        // Mostra solo il range delle attività
         start = new Date(minDate)
         start.setDate(start.getDate() - 14)
         end = new Date(maxDate)
@@ -149,7 +150,6 @@ export default function GanttPage() {
         end.setMonth(end.getMonth() + 2)
     }
     
-    // Imposta al primo del mese per start
     start.setDate(1)
     
     setDateRange({ start, end })
@@ -194,7 +194,7 @@ export default function GanttPage() {
 
       setTestPackages(tpData || [])
 
-      // Pianificazioni CW (per componenti)
+      // Pianificazioni CW
       const { data: pianData } = await supabase
         .from('pianificazione_cw')
         .select(`
@@ -224,6 +224,16 @@ export default function GanttPage() {
         .order('settimana')
 
       setPianificazioni(pianData || [])
+      
+      // === NUOVO: Estrai WP e TP assegnati a CW ===
+      const wpIds = new Set()
+      const tpIds = new Set()
+      ;(pianData || []).forEach(p => {
+        if (p.work_package_id) wpIds.add(p.work_package_id)
+        if (p.test_package_id) tpIds.add(p.test_package_id)
+      })
+      setWpAssegnatiCW(wpIds)
+      setTpAssegnatiCW(tpIds)
 
     } catch (error) {
       console.error('Errore caricamento:', error)
@@ -292,15 +302,30 @@ export default function GanttPage() {
   const tpConDate = useMemo(() => {
     return testPackages.filter(tp => tp.data_inizio_pianificata)
   }, [testPackages])
+  
+  // === NUOVO KPI: WP/TP in CW vs Da Assegnare ===
+  const wpConDate = useMemo(() => {
+    return workPackages.filter(wp => wp.data_inizio_pianificata)
+  }, [workPackages])
+  
+  const inCWCount = useMemo(() => {
+    return wpAssegnatiCW.size + tpAssegnatiCW.size
+  }, [wpAssegnatiCW, tpAssegnatiCW])
+  
+  const daAssegnareCount = useMemo(() => {
+    const wpDaAssegnare = wpConDate.filter(wp => !wpAssegnatiCW.has(wp.id)).length
+    const tpDaAssegnare = tpConDate.filter(tp => !tpAssegnatiCW.has(tp.id)).length
+    return wpDaAssegnare + tpDaAssegnare
+  }, [wpConDate, tpConDate, wpAssegnatiCW, tpAssegnatiCW])
 
-  // Raggruppa per disciplina - ORA INCLUDE WP E TP DIRETTAMENTE DALLE DATE
+  // Raggruppa per disciplina - CON FLAG assegnatoCW
   const ganttRows = useMemo(() => {
     const byDiscipline = {}
     
     // === 1. AGGIUNGI WP DIRETTAMENTE DALLE DATE ===
     if (viewFilter === 'all' || viewFilter === 'wp') {
       workPackages.forEach(wp => {
-        if (!wp.data_inizio_pianificata) return // Skip WP senza date
+        if (!wp.data_inizio_pianificata) return
         if (!showCompleted && wp.stato === 'completato') return
         
         const startYW = getYearWeekFromDate(wp.data_inizio_pianificata)
@@ -335,7 +360,8 @@ export default function GanttPage() {
           foreman: wp.foreman ? `${wp.foreman.nome} ${wp.foreman.cognome}` : null,
           disciplina: wp.disciplina,
           colore: wp.colore || '#8B5CF6',
-          priorita: wp.priorita
+          priorita: wp.priorita,
+          assegnatoCW: wpAssegnatiCW.has(wp.id) // NUOVO FLAG
         })
       })
     }
@@ -343,7 +369,7 @@ export default function GanttPage() {
     // === 2. AGGIUNGI TP DIRETTAMENTE DALLE DATE ===
     if (viewFilter === 'all' || viewFilter === 'tp') {
       testPackages.forEach(tp => {
-        if (!tp.data_inizio_pianificata) return // Skip TP senza date
+        if (!tp.data_inizio_pianificata) return
         if (!showCompleted && (tp.stato === 'passed' || tp.stato === 'failed')) return
         
         const startYW = getYearWeekFromDate(tp.data_inizio_pianificata)
@@ -382,15 +408,15 @@ export default function GanttPage() {
           durata_holding: tp.durata_holding_minuti,
           fluido_test: tp.fluido_test,
           tipoTest: tp.tipo,
-          priorita: tp.priorita
+          priorita: tp.priorita,
+          assegnatoCW: tpAssegnatiCW.has(tp.id) // NUOVO FLAG
         })
       })
     }
     
-    // === 3. AGGIUNGI COMPONENTI DA PIANIFICAZIONE_CW (se viewFilter = all) ===
+    // === 3. AGGIUNGI COMPONENTI DA PIANIFICAZIONE_CW ===
     if (viewFilter === 'all') {
       pianificazioni.forEach(p => {
-        // Solo componenti singoli (non WP e non TP che sono già aggiunti dalle date)
         if (!p.componente_id || p.work_package_id || p.test_package_id) return
         if (!showCompleted && p.stato === 'completato') return
         
@@ -423,7 +449,8 @@ export default function GanttPage() {
           foreman: null,
           disciplina: comp.disciplina,
           colore: null,
-          fase: p.fase
+          fase: p.fase,
+          assegnatoCW: true // COMP sono sempre da CW
         })
       })
     }
@@ -437,7 +464,7 @@ export default function GanttPage() {
     })
     
     return Object.values(byDiscipline).sort((a, b) => a.name.localeCompare(b.name))
-  }, [workPackages, testPackages, pianificazioni, viewFilter, showCompleted])
+  }, [workPackages, testPackages, pianificazioni, viewFilter, showCompleted, wpAssegnatiCW, tpAssegnatiCW])
 
   // Scroll to today
   const scrollToToday = () => {
@@ -454,41 +481,22 @@ export default function GanttPage() {
     }
   }, [weeks])
 
-  // Colori stato - MIGLIORATI per distinguere bozza/pianificato
+  // Colori stato
   const getStatusColor = (stato) => {
     const colors = {
-      // TP Stati
-      draft: 'bg-gray-400',           // Grigio - Bozza
-      planned: 'bg-cyan-500',         // Cyan - Pianificato
-      ready: 'bg-indigo-500',         // Indigo - Pronto per test
-      in_progress: 'bg-amber-500',    // Amber - In corso
-      holding: 'bg-purple-500',       // Viola - Holding (pressione)
-      passed: 'bg-green-500',         // Verde - Superato
-      failed: 'bg-red-500',           // Rosso - Fallito
-      // WP/Componenti Stati
+      draft: 'bg-gray-400',
+      planned: 'bg-cyan-500',
+      ready: 'bg-indigo-500',
+      in_progress: 'bg-amber-500',
+      holding: 'bg-purple-500',
+      passed: 'bg-green-500',
+      failed: 'bg-red-500',
       completato: 'bg-green-500',
       in_corso: 'bg-blue-500',
       pianificato: 'bg-cyan-500',
       da_fare: 'bg-gray-400'
     }
     return colors[stato] || 'bg-gray-400'
-  }
-  
-  // Colore bordo per stato (per le barre del Gantt)
-  const getStatusBorderColor = (stato) => {
-    const colors = {
-      draft: '#9CA3AF',      // Grigio
-      planned: '#06B6D4',    // Cyan
-      ready: '#6366F1',      // Indigo
-      in_progress: '#F59E0B', // Amber
-      holding: '#8B5CF6',    // Viola
-      passed: '#22C55E',     // Verde
-      failed: '#EF4444',     // Rosso
-      completato: '#22C55E',
-      in_corso: '#3B82F6',
-      pianificato: '#06B6D4'
-    }
-    return colors[stato] || '#9CA3AF'
   }
   
   // Label stato in italiano
@@ -578,6 +586,10 @@ export default function GanttPage() {
             )}
             <div className="pt-1 border-t border-gray-700">
               Stato: <span className="font-medium text-white">{getStatusLabel(tooltip.content.statoTP || tooltip.content.stato)}</span>
+            </div>
+            {/* NUOVO: Mostra se assegnato a CW */}
+            <div className={tooltip.content.assegnatoCW ? 'text-green-400' : 'text-orange-400'}>
+              {tooltip.content.assegnatoCW ? '✅ Assegnato a CW' : '⏳ Da assegnare a CW'}
             </div>
           </div>
           <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full">
@@ -694,8 +706,8 @@ export default function GanttPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+      {/* Stats Cards - AGGIORNATE */}
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4 mb-6">
         <div className="bg-white rounded-xl p-4 shadow-sm border">
           <p className="text-2xl font-bold text-gray-800">{workPackages.length}</p>
           <p className="text-sm text-gray-500">📦 Work Packages</p>
@@ -704,9 +716,25 @@ export default function GanttPage() {
           <p className="text-2xl font-bold text-cyan-600">{testPackages.length}</p>
           <p className="text-sm text-gray-500">💧 Test Packages</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border">
-          <p className="text-2xl font-bold text-green-600">{tpConDate.length}</p>
-          <p className="text-sm text-gray-500">📅 TP Pianificati</p>
+        {/* NUOVO KPI: In CW */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-green-200 bg-green-50">
+          <p className="text-2xl font-bold text-green-600">{inCWCount}</p>
+          <p className="text-sm text-gray-500">📅 In CW</p>
+          <p className="text-xs text-green-500">Assegnati</p>
+        </div>
+        {/* NUOVO KPI: Da Assegnare */}
+        <div 
+          className={`bg-white rounded-xl p-4 shadow-sm border cursor-pointer hover:shadow-md transition-shadow ${
+            daAssegnareCount > 0 ? 'border-amber-300 bg-amber-50' : ''
+          }`}
+        >
+          <p className={`text-2xl font-bold ${daAssegnareCount > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+            {daAssegnareCount}
+          </p>
+          <p className="text-sm text-gray-500">⏳ Da Assegnare</p>
+          {daAssegnareCount > 0 && (
+            <p className="text-xs text-amber-500">Solo date</p>
+          )}
         </div>
         {/* KPI: TP senza date - CLICCABILE */}
         <div 
@@ -718,9 +746,9 @@ export default function GanttPage() {
           <p className={`text-2xl font-bold ${tpSenzaDate.length > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
             {tpSenzaDate.length}
           </p>
-          <p className="text-sm text-gray-500">⚠️ TP Senza Date</p>
+          <p className="text-sm text-gray-500">⚠️ Senza Date</p>
           {tpSenzaDate.length > 0 && (
-            <p className="text-xs text-orange-500 mt-1">Clicca per vedere</p>
+            <p className="text-xs text-orange-500">Clicca per vedere</p>
           )}
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border">
@@ -761,7 +789,7 @@ export default function GanttPage() {
       ) : (
         /* Gantt Chart */
         <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          {/* Legend */}
+          {/* Legend - AGGIORNATA */}
           <div className="p-4 border-b bg-gray-50 flex flex-wrap items-center gap-4">
             <span className="text-sm font-medium text-gray-600">Tipo:</span>
             <div className="flex items-center gap-1">
@@ -799,6 +827,19 @@ export default function GanttPage() {
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-red-500 rounded"></div>
                 <span>Fallito</span>
+              </div>
+            </div>
+            <span className="text-gray-300">|</span>
+            {/* NUOVA LEGENDA: Assegnazione CW */}
+            <span className="text-sm font-medium text-gray-600">Assegnazione:</span>
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-8 h-3 bg-cyan-500 rounded"></div>
+                <span>In CW</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-8 h-3 bg-cyan-300 rounded border-2 border-dashed border-cyan-500"></div>
+                <span>Solo Date</span>
               </div>
             </div>
           </div>
@@ -891,6 +932,10 @@ export default function GanttPage() {
                           {item.pressione_test && (
                             <span className="text-xs text-cyan-500">{item.pressione_test} bar</span>
                           )}
+                          {/* NUOVO: Indicatore assegnazione CW */}
+                          {!item.assegnatoCW && (
+                            <span className="text-xs text-amber-500" title="Da assegnare a CW">⏳</span>
+                          )}
                         </div>
                         
                         {/* Timeline */}
@@ -908,12 +953,20 @@ export default function GanttPage() {
                               >
                                 {isInRange && (
                                   <div 
-                                    className={`absolute top-1 bottom-1 flex items-center justify-center text-white text-xs font-medium ${getStatusColor(item.statoTP || item.stato)} ${
+                                    className={`absolute top-1 bottom-1 flex items-center justify-center text-white text-xs font-medium ${
+                                      // NUOVO: Stile diverso se NON assegnato a CW
+                                      item.assegnatoCW 
+                                        ? getStatusColor(item.statoTP || item.stato) 
+                                        : `${getStatusColor(item.statoTP || item.stato)} opacity-50`
+                                    } ${
                                       isStart && isEnd ? 'left-1 right-1 rounded-lg' :
                                       isStart ? 'left-1 right-0 rounded-l-lg' :
                                       isEnd ? 'left-0 right-1 rounded-r-lg' :
                                       'left-0 right-0'
                                     }`}
+                                    style={!item.assegnatoCW ? {
+                                      backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)'
+                                    } : {}}
                                     onMouseEnter={(e) => showTooltip(e, item)}
                                     onMouseLeave={hideTooltip}
                                   >
@@ -949,28 +1002,37 @@ export default function GanttPage() {
             onClick={() => setShowWPSection(!showWPSection)}
             className="w-full p-4 flex items-center justify-between hover:bg-gray-50"
           >
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-              📦 Work Packages ({workPackages.length})
-            </h3>
-            <span className="text-gray-400 text-xl">{showWPSection ? '▼' : '▶'}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xl">📦</span>
+              <span className="font-medium">Work Packages</span>
+              <span className="text-sm text-gray-500">({workPackages.length})</span>
+            </div>
+            <span className={`transition-transform ${showWPSection ? 'rotate-180' : ''}`}>▼</span>
           </button>
           
           {showWPSection && (
-            <div className="px-4 pb-4">
-              <div className="flex flex-wrap gap-2">
+            <div className="border-t p-4">
+              <div className="grid gap-2 max-h-[400px] overflow-y-auto">
                 {workPackages.map((wp, idx) => (
                   <div 
-                    key={idx} 
-                    className={`px-3 py-2 border rounded-lg flex items-center gap-2 ${
-                      !wp.data_inizio_pianificata ? 'border-orange-300 bg-orange-50' : ''
+                    key={idx}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      wpAssegnatiCW.has(wp.id) ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'
                     }`}
-                    title={`${wp.codice} - ${wp.nome}\n${wp.disciplina?.nome || 'N/D'}\n${wp.data_inizio_pianificata ? new Date(wp.data_inizio_pianificata).toLocaleDateString('it-IT') : '⚠️ Senza date'}`}
                   >
-                    <span className="font-mono text-sm font-bold text-purple-600">{wp.codice}</span>
-                    <span className="text-sm text-gray-600 max-w-[150px] truncate">{wp.nome}</span>
-                    {!wp.data_inizio_pianificata && (
-                      <span className="text-xs text-orange-500">⚠️</span>
-                    )}
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-bold text-purple-600">{wp.codice}</span>
+                      <span className="text-sm text-gray-600 truncate">{wp.nome}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {wpAssegnatiCW.has(wp.id) ? (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">✅ In CW</span>
+                      ) : wp.data_inizio_pianificata ? (
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs">⏳ Solo Date</span>
+                      ) : (
+                        <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs">❌ Nessuna Data</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -986,35 +1048,42 @@ export default function GanttPage() {
             onClick={() => setShowTPSection(!showTPSection)}
             className="w-full p-4 flex items-center justify-between hover:bg-gray-50"
           >
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-              💧 Test Packages ({testPackages.length})
-              {tpSenzaDate.length > 0 && (
-                <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full">
-                  {tpSenzaDate.length} senza date
-                </span>
-              )}
-            </h3>
-            <span className="text-gray-400 text-xl">{showTPSection ? '▼' : '▶'}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xl">💧</span>
+              <span className="font-medium">Test Packages</span>
+              <span className="text-sm text-gray-500">({testPackages.length})</span>
+            </div>
+            <span className={`transition-transform ${showTPSection ? 'rotate-180' : ''}`}>▼</span>
           </button>
           
           {showTPSection && (
-            <div className="px-4 pb-4">
-              <div className="flex flex-wrap gap-2">
+            <div className="border-t p-4">
+              <div className="grid gap-2 max-h-[400px] overflow-y-auto">
                 {testPackages.map((tp, idx) => (
                   <div 
-                    key={idx} 
-                    className={`px-3 py-2 border rounded-lg flex items-center gap-2 ${
-                      !tp.data_inizio_pianificata ? 'border-orange-300 bg-orange-50' : ''
+                    key={idx}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      tpAssegnatiCW.has(tp.id) ? 'bg-green-50 border-green-200' : 
+                      tp.data_inizio_pianificata ? 'bg-amber-50 border-amber-200' : 'bg-orange-50 border-orange-200'
                     }`}
-                    style={{ borderLeftWidth: '3px', borderLeftColor: tp.colore || '#06B6D4' }}
-                    title={`${tp.codice} - ${tp.nome}\n${tp.pressione_test ? tp.pressione_test + ' bar / ' + tp.durata_holding_minuti + ' min' : ''}\n${tp.data_inizio_pianificata ? new Date(tp.data_inizio_pianificata).toLocaleDateString('it-IT') : '⚠️ Senza date'}`}
                   >
-                    <span className="text-lg">{getTipoTestIcon(tp.tipo)}</span>
-                    <span className="font-mono text-sm font-bold text-cyan-600">{tp.codice}</span>
-                    <span className="text-sm text-gray-600 max-w-[150px] truncate">{tp.nome}</span>
-                    {!tp.data_inizio_pianificata && (
-                      <span className="text-xs text-orange-500">⚠️</span>
-                    )}
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">{getTipoTestIcon(tp.tipo)}</span>
+                      <span className="font-mono font-bold text-cyan-600">{tp.codice}</span>
+                      <span className="text-sm text-gray-600 truncate">{tp.nome}</span>
+                      {tp.pressione_test && (
+                        <span className="text-xs text-cyan-500">{tp.pressione_test} bar</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {tpAssegnatiCW.has(tp.id) ? (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">✅ In CW</span>
+                      ) : tp.data_inizio_pianificata ? (
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs">⏳ Solo Date</span>
+                      ) : (
+                        <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">⚠️ Senza Date</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1129,8 +1198,6 @@ export default function GanttPage() {
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               {(() => {
                 const cwItems = ganttRows.flatMap(d => d.items.filter(i => {
-                  // Item è in questa CW se:
-                  // (annoInizio, settimanaInizio) <= CW <= (annoFine, settimanaFine)
                   const startOK = i.annoInizio < selectedCW.year || 
                     (i.annoInizio === selectedCW.year && i.settimanaInizio <= selectedCW.week)
                   const endOK = !i.annoFine || i.annoFine > selectedCW.year ||
@@ -1158,8 +1225,10 @@ export default function GanttPage() {
                     {cwItems.map((item, idx) => (
                       <div 
                         key={idx}
-                        className="border rounded-xl p-4 hover:shadow-md"
-                        style={item.tipo === 'TP' ? { borderLeftWidth: '4px', borderLeftColor: item.colore } : {}}
+                        className={`border rounded-xl p-4 hover:shadow-md ${
+                          item.assegnatoCW ? '' : 'border-dashed border-amber-300 bg-amber-50'
+                        }`}
+                        style={item.tipo === 'TP' && item.assegnatoCW ? { borderLeftWidth: '4px', borderLeftColor: item.colore } : {}}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
@@ -1168,9 +1237,17 @@ export default function GanttPage() {
                             </span>
                             <span className="font-mono font-semibold">{item.codice}</span>
                           </div>
-                          <span className={`px-2 py-1 rounded-full text-xs text-white ${getStatusColor(item.statoTP || item.stato)}`}>
-                            {getStatusLabel(item.statoTP || item.stato)}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            {/* Badge assegnazione CW */}
+                            {item.assegnatoCW ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">✅</span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">⏳</span>
+                            )}
+                            <span className={`px-2 py-1 rounded-full text-xs text-white ${getStatusColor(item.statoTP || item.stato)}`}>
+                              {getStatusLabel(item.statoTP || item.stato)}
+                            </span>
+                          </div>
                         </div>
                         {item.nome && <p className="text-sm text-gray-600 mb-2">{item.nome}</p>}
                         <div className="text-xs text-gray-500 space-y-1">
