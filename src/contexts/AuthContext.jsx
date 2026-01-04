@@ -36,23 +36,33 @@ export function AuthProvider({ children }) {
   // Funzione per caricare dati utente
   const loadUserData = async (authUser) => {
     try {
+      console.log('🔍 Cercando persona con email:', authUser.email)
+      
       // Trova persona collegata all'email
       const { data: personaData, error: personaError } = await supabase
         .from('persone')
         .select('*')
-        .eq('email', authUser.email)
+        .ilike('email', authUser.email) // ilike per case-insensitive
         .single()
 
       if (personaError || !personaData) {
-        console.warn('Persona non trovata per:', authUser.email)
+        console.warn('⚠️ Persona non trovata per:', authUser.email)
+        console.warn('Errore:', personaError)
+        
+        // IN DEV MODE: Carica comunque tutti i progetti
+        if (DEV_BYPASS_LOGIN) {
+          console.log('🔧 DEV MODE: Carico tutti i progetti...')
+          await loadAllProjects()
+        }
         setLoading(false)
         return
       }
 
+      console.log('✅ Persona trovata:', personaData.nome, personaData.cognome)
       setPersona(personaData)
 
       // Trova assegnazioni attive
-      const { data: assegnazioniData } = await supabase
+      const { data: assegnazioniData, error: assError } = await supabase
         .from('assegnazioni')
         .select(`
           *,
@@ -61,17 +71,75 @@ export function AuthProvider({ children }) {
         .eq('persona_id', personaData.id)
         .eq('attivo', true)
 
+      console.log('📋 Assegnazioni trovate:', assegnazioniData?.length || 0)
+      
+      if (assError) {
+        console.warn('⚠️ Errore caricamento assegnazioni:', assError)
+      }
+
       if (assegnazioniData && assegnazioniData.length > 0) {
         // Prendi la prima assegnazione attiva
         const primaAssegnazione = assegnazioniData[0]
         setAssegnazione(primaAssegnazione)
         setProgetto(primaAssegnazione.progetto)
-        setProgetti(assegnazioniData.map(a => a.progetto))
+        setProgetti(assegnazioniData.map(a => a.progetto).filter(Boolean))
+        console.log('✅ Progetto attivo:', primaAssegnazione.progetto?.nome)
+      } else if (DEV_BYPASS_LOGIN) {
+        // IN DEV MODE: Se non ha assegnazioni, carica tutti i progetti
+        console.log('🔧 DEV MODE: Nessuna assegnazione, carico tutti i progetti...')
+        await loadAllProjects()
       }
     } catch (error) {
-      console.error('Errore caricamento dati utente:', error)
+      console.error('❌ Errore caricamento dati utente:', error)
+      if (DEV_BYPASS_LOGIN) {
+        await loadAllProjects()
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Carica TUTTI i progetti (per dev mode)
+  const loadAllProjects = async () => {
+    try {
+      const { data: tuttiProgetti, error } = await supabase
+        .from('progetti')
+        .select('*')
+        .eq('attivo', true)
+        .order('nome')
+
+      if (error) {
+        console.error('❌ Errore caricamento progetti:', error)
+        return
+      }
+
+      console.log('📦 Progetti caricati:', tuttiProgetti?.length || 0)
+      
+      if (tuttiProgetti && tuttiProgetti.length > 0) {
+        setProgetti(tuttiProgetti)
+        setProgetto(tuttiProgetti[0])
+        
+        // Crea assegnazione fittizia per dev
+        setAssegnazione({
+          id: 'dev-assegnazione',
+          ruolo: 'admin',
+          progetto: tuttiProgetti[0]
+        })
+        
+        // Crea persona fittizia se non esiste
+        if (!persona) {
+          setPersona({
+            id: 'dev-persona',
+            nome: 'Dev',
+            cognome: 'User',
+            email: DEV_USER_EMAIL
+          })
+        }
+        
+        console.log('✅ Progetto selezionato:', tuttiProgetti[0].nome)
+      }
+    } catch (e) {
+      console.error('❌ Errore loadAllProjects:', e)
     }
   }
 
@@ -80,7 +148,8 @@ export function AuthProvider({ children }) {
     const init = async () => {
       // ========== BYPASS LOGIN ==========
       if (DEV_BYPASS_LOGIN) {
-        console.warn('⚠️ BYPASS LOGIN ATTIVO - Caricamento utente di sviluppo...')
+        console.log('⚠️ BYPASS LOGIN ATTIVO')
+        console.log('📧 Email configurata:', DEV_USER_EMAIL)
         
         // Simula utente auth
         const fakeAuthUser = {
@@ -149,24 +218,41 @@ export function AuthProvider({ children }) {
 
   // Cambia progetto attivo
   const switchProgetto = async (progettoId) => {
-    if (!persona) return false
+    console.log('🔄 Switching to progetto:', progettoId)
+    
+    // Cerca il progetto nella lista
+    const nuovoProgetto = progetti.find(p => p.id === progettoId)
+    
+    if (nuovoProgetto) {
+      setProgetto(nuovoProgetto)
+      
+      // Se non in bypass, cerca anche l'assegnazione
+      if (!DEV_BYPASS_LOGIN && persona) {
+        const { data: nuovaAssegnazione } = await supabase
+          .from('assegnazioni')
+          .select(`*, progetto:progetti(*)`)
+          .eq('persona_id', persona.id)
+          .eq('progetto_id', progettoId)
+          .eq('attivo', true)
+          .single()
 
-    const { data: nuovaAssegnazione } = await supabase
-      .from('assegnazioni')
-      .select(`
-        *,
-        progetto:progetti(*)
-      `)
-      .eq('persona_id', persona.id)
-      .eq('progetto_id', progettoId)
-      .eq('attivo', true)
-      .single()
-
-    if (nuovaAssegnazione) {
-      setAssegnazione(nuovaAssegnazione)
-      setProgetto(nuovaAssegnazione.progetto)
+        if (nuovaAssegnazione) {
+          setAssegnazione(nuovaAssegnazione)
+        }
+      } else {
+        // In dev mode, aggiorna assegnazione fittizia
+        setAssegnazione({
+          id: 'dev-assegnazione',
+          ruolo: 'admin',
+          progetto: nuovoProgetto
+        })
+      }
+      
+      console.log('✅ Progetto cambiato:', nuovoProgetto.nome)
       return true
     }
+    
+    console.warn('⚠️ Progetto non trovato:', progettoId)
     return false
   }
 
