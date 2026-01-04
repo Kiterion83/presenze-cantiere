@@ -16,7 +16,7 @@ const DEV_BYPASS_LOGIN = true  // ⚠️ CAMBIA A false IN PRODUZIONE!
 // Se bypass attivo, quale utente simulare?
 const DEV_USER = {
   id: 'dev-user-id',
-  email: 'dev@test.com',
+  email: 'giuseppe.pasquale@outlook.com',
   role: 'admin'  // admin | cm | supervisor | foreman | worker | helper
 }
 // ============================================================
