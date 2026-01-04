@@ -275,6 +275,7 @@ export default function Layout({ children }) {
         { path: '/gantt', labelKey: 'gantt', IconComponent: IconGantt, minRole: 'supervisor' }, // ICONA SVG
         { path: '/ai-insights', labelKey: 'aiInsights', emoji: '📑', minRole: 'supervisor' },
         { path: '/dashboard', labelKey: 'dashboard', IconComponent: IconDashboard, minRole: 'supervisor' }, // ICONA SVG
+        { path: '/qr-generator', labelKey: 'qrGenerator', emoji: '📱', minRole: 'supervisor' }, // NUOVO - QR Check-in
         { path: '/impostazioni', labelKey: 'settings', emoji: '⚙️', minRole: 'admin' },
       ]
     }
