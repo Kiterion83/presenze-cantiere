@@ -101,6 +101,27 @@ const IconDiscipline = ({ className = "w-5 h-5" }) => (
   </svg>
 )
 
+const IconPianificazione = ({ className = "w-5 h-5" }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="12" width="44" height="40" rx="4" fill="currentColor"/>
+    <rect x="4" y="12" width="44" height="12" rx="4" fill="currentColor"/>
+    <rect x="14" y="8" width="4" height="10" rx="2" fill="currentColor" stroke="currentColor" strokeWidth="1.5"/>
+    <rect x="26" y="8" width="4" height="10" rx="2" fill="currentColor" stroke="currentColor" strokeWidth="1.5"/>
+    <rect x="38" y="8" width="4" height="10" rx="2" fill="currentColor" stroke="currentColor" strokeWidth="1.5"/>
+    <rect x="10" y="28" width="8" height="8" rx="2" fill="#3B82F6"/>
+    <rect x="22" y="28" width="8" height="8" rx="2" fill="#3B82F6"/>
+    <rect x="34" y="28" width="8" height="8" rx="2" fill="#F1F5F9" stroke="currentColor" strokeWidth="1"/>
+    <rect x="10" y="40" width="8" height="8" rx="2" fill="#3B82F6"/>
+    <rect x="22" y="40" width="8" height="8" rx="2" fill="#F1F5F9" stroke="currentColor" strokeWidth="1"/>
+    <circle cx="48" cy="44" r="14" fill="#F1F5F9" stroke="currentColor" strokeWidth="2.5"/>
+    <circle cx="48" cy="44" r="10" fill="white" stroke="#3B82F6" strokeWidth="2"/>
+    <circle cx="48" cy="44" r="2" fill="#3B82F6"/>
+    <line x1="48" y1="44" x2="48" y2="37" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+    <line x1="48" y1="44" x2="54" y2="47" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"/>
+    <circle cx="58" cy="30" r="2" fill="#3B82F6"/>
+  </svg>
+)
+
 export default function Layout({ children }) {
   const location = useLocation()
   const { persona, progetto, assegnazioni, assegnazione, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast, canAccess, cambiaProgetto } = useAuth()
@@ -238,7 +259,7 @@ export default function Layout({ children }) {
         { path: '/test-packages', labelKey: 'testPackages', emoji: '💧', minRole: 'foreman', specialAccess: 'test-packages' },
         { path: '/attivita', labelKey: 'activities', IconComponent: IconAttivita, minRole: 'foreman' }, // ICONA SVG
         { path: '/avanzamento', labelKey: 'progress', IconComponent: IconAvanzamento, minRole: 'foreman', specialAccess: 'avanzamento' }, // ICONA SVG
-        { path: '/pianificazione', labelKey: 'planning', emoji: '📆', minRole: 'foreman', specialAccess: 'pianificazione' },
+        { path: '/pianificazione', labelKey: 'planning', IconComponent: IconPianificazione, minRole: 'foreman', specialAccess: 'pianificazione' }, // ICONA SVG
         { path: '/foreman', labelKey: 'field', emoji: '👷', minRole: 'foreman', specialAccess: 'foreman' },
         { path: '/ore-componenti', labelKey: 'workHours', emoji: '⏱️', minRole: 'foreman', specialAccess: 'ore-componenti' },
         { path: '/warehouse', labelKey: 'warehouse', emoji: '📦', minRole: 'warehouse', specialAccess: 'warehouse' },
