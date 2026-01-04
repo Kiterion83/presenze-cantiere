@@ -108,8 +108,42 @@ function ProgettoTab() {
 
   const loadAree = async () => {
     setLoadingAree(true)
-    const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', progettoId).order('nome')
-    setAree(data || [])
+    try {
+      // Prima prova qr_codes (usata da QRGeneratorPage)
+      const { data: qrCodes, error: qrErr } = await supabase
+        .from('qr_codes')
+        .select('*')
+        .eq('progetto_id', progettoId)
+        .order('nome')
+
+      if (!qrErr && qrCodes && qrCodes.length > 0) {
+        // Mappa qr_codes al formato aree
+        setAree(qrCodes.map(qr => ({
+          id: qr.id,
+          nome: qr.nome || qr.descrizione || qr.codice,
+          descrizione: qr.descrizione || qr.gate || qr.posizione,
+          latitudine: qr.latitudine,
+          longitudine: qr.longitudine,
+          raggio_metri: qr.raggio_metri || 100,
+          colore: qr.colore || '#3B82F6',
+          codice: qr.codice,
+          // Flag per sapere da quale tabella viene
+          _source: 'qr_codes'
+        })))
+      } else {
+        // Fallback: prova aree_lavoro
+        const { data: areeData } = await supabase
+          .from('aree_lavoro')
+          .select('*')
+          .eq('progetto_id', progettoId)
+          .order('nome')
+        
+        setAree((areeData || []).map(a => ({ ...a, _source: 'aree_lavoro' })))
+      }
+    } catch (e) {
+      console.error('Errore caricamento aree:', e)
+      setAree([])
+    }
     setLoadingAree(false)
   }
 
@@ -155,9 +189,27 @@ function ProgettoTab() {
     if (!areaForm.nome || !areaForm.latitudine || !areaForm.longitudine) { setAreaMessage({ type: 'error', text: t('fillNameAndCoords') }); return }
     setSavingArea(true); setAreaMessage(null)
     try {
-      const payload = { progetto_id: progettoId, nome: areaForm.nome, descrizione: areaForm.descrizione || null, latitudine: parseFloat(areaForm.latitudine), longitudine: parseFloat(areaForm.longitudine), raggio_metri: parseInt(areaForm.raggio_metri), colore: areaForm.colore }
-      if (editingArea) { await supabase.from('aree_lavoro').update(payload).eq('id', editingArea.id) }
-      else { await supabase.from('aree_lavoro').insert(payload) }
+      // Genera codice automatico se non presente
+      const codice = editingArea?.codice || `AREA-${Date.now().toString(36).toUpperCase()}`
+      
+      const payload = { 
+        progetto_id: progettoId, 
+        nome: areaForm.nome, 
+        descrizione: areaForm.descrizione || null, 
+        gate: areaForm.descrizione || null, // QRGeneratorPage usa 'gate'
+        latitudine: parseFloat(areaForm.latitudine), 
+        longitudine: parseFloat(areaForm.longitudine), 
+        raggio_metri: parseInt(areaForm.raggio_metri), 
+        colore: areaForm.colore,
+        codice: codice
+      }
+      
+      // Usa qr_codes (stessa tabella di QRGeneratorPage)
+      if (editingArea) { 
+        await supabase.from('qr_codes').update(payload).eq('id', editingArea.id) 
+      } else { 
+        await supabase.from('qr_codes').insert(payload) 
+      }
       setAreaMessage({ type: 'success', text: editingArea ? t('areaUpdated') : t('areaCreated') })
       loadAree(); setTimeout(resetAreaForm, 1000)
     } catch (err) { setAreaMessage({ type: 'error', text: err.message }) }
@@ -166,8 +218,8 @@ function ProgettoTab() {
 
   const handleDeleteArea = async (id) => { 
     if (!confirm(t('deleteAreaConfirm'))) return
-    await supabase.from('qr_codes').delete().eq('area_lavoro_id', id)
-    await supabase.from('aree_lavoro').delete().eq('id', id)
+    // Cancella da qr_codes (stessa tabella di QRGeneratorPage)
+    await supabase.from('qr_codes').delete().eq('id', id)
     loadAree(); loadQrCodes()
   }
 
