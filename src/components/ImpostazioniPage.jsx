@@ -75,7 +75,7 @@ export default function ImpostazioniPage() {
 
 // ==================== PROGETTO + AREE LAVORO + QR CODES TAB ====================
 function ProgettoTab() {
-  const { progetto, assegnazione } = useAuth()
+  const { progetto, assegnazione, progettoId } = useAuth()
   const { t, language } = useI18n()
   const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 })
   const [saving, setSaving] = useState(false)
@@ -100,21 +100,21 @@ function ProgettoTab() {
         raggio_checkin: progetto.raggio_checkin || 200
       })
     }
-    if (assegnazione?.progetto_id) {
+    if (progettoId) {
       loadAree()
       loadQrCodes()
     }
-  }, [progetto, assegnazione?.progetto_id])
+  }, [progetto, progettoId])
 
   const loadAree = async () => {
     setLoadingAree(true)
-    const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome')
+    const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', progettoId).order('nome')
     setAree(data || [])
     setLoadingAree(false)
   }
 
   const loadQrCodes = async () => {
-    const { data } = await supabase.from('qr_codes').select('*').eq('progetto_id', assegnazione.progetto_id)
+    const { data } = await supabase.from('qr_codes').select('*').eq('progetto_id', progettoId)
     const qrMap = {}
     data?.forEach(qr => { if (qr.area_lavoro_id) qrMap[qr.area_lavoro_id] = qr })
     setQrCodes(qrMap)
@@ -155,7 +155,7 @@ function ProgettoTab() {
     if (!areaForm.nome || !areaForm.latitudine || !areaForm.longitudine) { setAreaMessage({ type: 'error', text: t('fillNameAndCoords') }); return }
     setSavingArea(true); setAreaMessage(null)
     try {
-      const payload = { progetto_id: assegnazione.progetto_id, nome: areaForm.nome, descrizione: areaForm.descrizione || null, latitudine: parseFloat(areaForm.latitudine), longitudine: parseFloat(areaForm.longitudine), raggio_metri: parseInt(areaForm.raggio_metri), colore: areaForm.colore }
+      const payload = { progetto_id: progettoId, nome: areaForm.nome, descrizione: areaForm.descrizione || null, latitudine: parseFloat(areaForm.latitudine), longitudine: parseFloat(areaForm.longitudine), raggio_metri: parseInt(areaForm.raggio_metri), colore: areaForm.colore }
       if (editingArea) { await supabase.from('aree_lavoro').update(payload).eq('id', editingArea.id) }
       else { await supabase.from('aree_lavoro').insert(payload) }
       setAreaMessage({ type: 'success', text: editingArea ? t('areaUpdated') : t('areaCreated') })
@@ -188,7 +188,7 @@ function ProgettoTab() {
   const handleGenerateQR = async (area) => {
     try {
       const { error } = await supabase.from('qr_codes').insert({
-        progetto_id: assegnazione.progetto_id,
+        progetto_id: progettoId,
         area_lavoro_id: area.id,
         codice: generateQrCode(),
         nome: area.nome,
@@ -218,7 +218,7 @@ function ProgettoTab() {
     const workAreaText = t('workArea')
     const qrData = JSON.stringify({
       code: qr.codice,
-      project: assegnazione.progetto_id,
+      project: progettoId,
       area: area.id,
       type: 'checkin_checkout'
     })
@@ -461,6 +461,7 @@ function TuttiProgettiTab() {
     )
   }
 
+  // ========== CREAZIONE PROGETTO ==========
   const handleCreate = async () => {
     if (!formData.nome) { setMessage({ type: 'error', text: t('nameRequired') }); return }
     setSaving(true); setMessage(null)
@@ -560,10 +561,13 @@ function TuttiProgettiTab() {
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-6">
           <h3 className="font-semibold text-blue-800 mb-4">➕ {t('newProject')}</h3>
           <div className="grid gap-4">
+            {/* Nome e Codice */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div><label className="block text-sm font-medium mb-1">{t('name')} *</label><input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               <div><label className="block text-sm font-medium mb-1">{t('projectCode')}</label><input type="text" value={formData.codice} onChange={(e) => setFormData({...formData, codice: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
+            
+            {/* Indirizzo con Autocomplete */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div className="relative"><label className="block text-sm font-medium mb-1">{t('address')}</label>
                 <input type="text" value={formData.indirizzo} onChange={(e) => { setFormData({...formData, indirizzo: e.target.value}); searchAddress(e.target.value) }} className="w-full px-4 py-3 border rounded-xl" placeholder={t('search')}/>
@@ -575,6 +579,8 @@ function TuttiProgettiTab() {
               </div>
               <div><label className="block text-sm font-medium mb-1">{t('city')}</label><input type="text" value={formData.citta} onChange={(e) => setFormData({...formData, citta: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
             </div>
+            
+            {/* Date */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div><label className="block text-sm font-medium mb-1">{t('startDate')}</label><input type="date" value={formData.data_inizio} onChange={(e) => setFormData({...formData, data_inizio: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
               <div><label className="block text-sm font-medium mb-1">{t('endDate')}</label><input type="date" value={formData.data_fine_prevista} onChange={(e) => setFormData({...formData, data_fine_prevista: e.target.value})} className="w-full px-4 py-3 border rounded-xl" /></div>
@@ -660,7 +666,7 @@ function TuttiProgettiTab() {
 
 // ==================== PERSONE TAB ====================
 function PersoneTab() {
-  const { assegnazione } = useAuth()
+  const { assegnazione, progettoId } = useAuth()
   const { t } = useI18n()
   const [persone, setPersone] = useState([])
   const [ditte, setDitte] = useState([])
@@ -675,11 +681,11 @@ function PersoneTab() {
   const ruoli = ['helper', 'warehouse', 'office', 'foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
   const ruoliLabels = { helper: t('roleHelper'), warehouse: t('roleWarehouse'), office: t('roleOffice'), foreman: t('roleForeman'), engineer: t('roleEngineer'), dept_manager: t('roleDeptManager'), supervisor: t('roleSupervisor'), cm: t('roleCM'), pm: t('rolePM'), admin: t('roleAdmin') }
 
-  useEffect(() => { if (assegnazione?.progetto_id) { loadPersone(); loadDitte(); loadSquadre() } }, [assegnazione?.progetto_id])
+  useEffect(() => { if (progettoId) { loadPersone(); loadDitte(); loadSquadre() } }, [progettoId])
 
-  const loadPersone = async () => { setLoading(true); const { data } = await supabase.from('assegnazioni_progetto').select('*, persona:persone(*), ditta:ditte(nome), squadra:squadre(nome)').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('created_at', { ascending: false }); setPersone(data || []); setLoading(false) }
+  const loadPersone = async () => { setLoading(true); const { data } = await supabase.from('assegnazioni_progetto').select('*, persona:persone(*), ditta:ditte(nome), squadra:squadre(nome)').eq('progetto_id', progettoId).eq('attivo', true).order('created_at', { ascending: false }); setPersone(data || []); setLoading(false) }
   const loadDitte = async () => { const { data } = await supabase.from('ditte').select('*').eq('attivo', true).order('nome'); setDitte(data || []) }
-  const loadSquadre = async () => { const { data } = await supabase.from('squadre').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('nome'); setSquadre(data || []) }
+  const loadSquadre = async () => { const { data } = await supabase.from('squadre').select('*').eq('progetto_id', progettoId).eq('attivo', true).order('nome'); setSquadre(data || []) }
 
   const resetForm = () => { setFormData({ nome: '', cognome: '', email: '', telefono: '', ruolo: 'helper', ditta_id: '', squadra_id: '' }); setEditingPersona(null); setShowForm(false); setMessage(null) }
 
@@ -698,7 +704,7 @@ function PersoneTab() {
       } else {
         const { data: newPersona, error: errP } = await supabase.from('persone').insert({ nome: formData.nome, cognome: formData.cognome, email: formData.email || null, telefono: formData.telefono || null }).select().single()
         if (errP) throw errP
-        await supabase.from('assegnazioni_progetto').insert({ persona_id: newPersona.id, progetto_id: assegnazione.progetto_id, ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null, attivo: true })
+        await supabase.from('assegnazioni_progetto').insert({ persona_id: newPersona.id, progetto_id: progettoId, ruolo: formData.ruolo, ditta_id: formData.ditta_id || null, squadra_id: formData.squadra_id || null, attivo: true })
       }
       setMessage({ type: 'success', text: t('personSaved') }); loadPersone(); setTimeout(resetForm, 1000)
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
@@ -845,7 +851,7 @@ function DitteTab() {
 
 // ==================== SQUADRE TAB ====================
 function SquadreTab() {
-  const { assegnazione } = useAuth()
+  const { assegnazione, progettoId } = useAuth()
   const { t } = useI18n()
   const [squadre, setSquadre] = useState([])
   const [loading, setLoading] = useState(true)
@@ -856,9 +862,9 @@ function SquadreTab() {
   const [message, setMessage] = useState(null)
   const colori = ['#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16']
 
-  useEffect(() => { if (assegnazione?.progetto_id) loadSquadre() }, [assegnazione?.progetto_id])
+  useEffect(() => { if (progettoId) loadSquadre() }, [progettoId])
 
-  const loadSquadre = async () => { setLoading(true); const { data } = await supabase.from('squadre').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('nome'); setSquadre(data || []); setLoading(false) }
+  const loadSquadre = async () => { setLoading(true); const { data } = await supabase.from('squadre').select('*').eq('progetto_id', progettoId).eq('attivo', true).order('nome'); setSquadre(data || []); setLoading(false) }
   const resetForm = () => { setFormData({ nome: '', colore: '#3B82F6' }); setEditingSquadra(null); setShowForm(false); setMessage(null) }
   const handleEdit = (s) => { setFormData({ nome: s.nome || '', colore: s.colore || '#3B82F6' }); setEditingSquadra(s); setShowForm(true) }
 
@@ -866,7 +872,7 @@ function SquadreTab() {
     if (!formData.nome) { setMessage({ type: 'error', text: `${t('name')} ${t('required').toLowerCase()}` }); return }
     setSaving(true); setMessage(null)
     try {
-      const payload = { nome: formData.nome, colore: formData.colore, progetto_id: assegnazione.progetto_id }
+      const payload = { nome: formData.nome, colore: formData.colore, progetto_id: progettoId }
       if (editingSquadra) { await supabase.from('squadre').update(payload).eq('id', editingSquadra.id) }
       else { await supabase.from('squadre').insert({ ...payload, attivo: true }) }
       setMessage({ type: 'success', text: t('teamSaved') }); loadSquadre(); setTimeout(resetForm, 1000)
@@ -914,7 +920,7 @@ function SquadreTab() {
 
 // ==================== CENTRI COSTO TAB ====================
 function CentriCostoTab() {
-  const { assegnazione } = useAuth()
+  const { assegnazione, progettoId } = useAuth()
   const { t } = useI18n()
   const [centri, setCentri] = useState([])
   const [loading, setLoading] = useState(true)
@@ -924,9 +930,9 @@ function CentriCostoTab() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
-  useEffect(() => { if (assegnazione?.progetto_id) loadCentri() }, [assegnazione?.progetto_id])
+  useEffect(() => { if (progettoId) loadCentri() }, [progettoId])
 
-  const loadCentri = async () => { setLoading(true); const { data } = await supabase.from('centri_costo').select('*').eq('progetto_id', assegnazione.progetto_id).eq('attivo', true).order('codice'); setCentri(data || []); setLoading(false) }
+  const loadCentri = async () => { setLoading(true); const { data } = await supabase.from('centri_costo').select('*').eq('progetto_id', progettoId).eq('attivo', true).order('codice'); setCentri(data || []); setLoading(false) }
   const resetForm = () => { setFormData({ codice: '', descrizione: '', budget_ore: '', budget_euro: '' }); setEditingCentro(null); setShowForm(false); setMessage(null) }
   const handleEdit = (cc) => { setFormData({ codice: cc.codice || '', descrizione: cc.descrizione || '', budget_ore: cc.budget_ore?.toString() || '', budget_euro: cc.budget_euro?.toString() || '' }); setEditingCentro(cc); setShowForm(true) }
 
@@ -934,7 +940,7 @@ function CentriCostoTab() {
     if (!formData.codice || !formData.descrizione) { setMessage({ type: 'error', text: `${t('code')} & ${t('description')} ${t('required').toLowerCase()}` }); return }
     setSaving(true); setMessage(null)
     try {
-      const payload = { codice: formData.codice, descrizione: formData.descrizione, budget_ore: formData.budget_ore ? parseFloat(formData.budget_ore) : null, budget_euro: formData.budget_euro ? parseFloat(formData.budget_euro) : null, progetto_id: assegnazione.progetto_id }
+      const payload = { codice: formData.codice, descrizione: formData.descrizione, budget_ore: formData.budget_ore ? parseFloat(formData.budget_ore) : null, budget_euro: formData.budget_euro ? parseFloat(formData.budget_euro) : null, progetto_id: progettoId }
       if (editingCentro) { await supabase.from('centri_costo').update(payload).eq('id', editingCentro.id) }
       else { await supabase.from('centri_costo').insert({ ...payload, attivo: true }) }
       setMessage({ type: 'success', text: t('costCenterSaved') }); loadCentri(); setTimeout(resetForm, 1000)
@@ -988,7 +994,7 @@ function CentriCostoTab() {
 
 // ==================== DIPARTIMENTI TAB ====================
 function DipartimentiTab() {
-  const { assegnazione } = useAuth()
+  const { assegnazione, progettoId } = useAuth()
   const { t } = useI18n()
   const [dipartimenti, setDipartimenti] = useState([])
   const [loading, setLoading] = useState(true)
@@ -998,9 +1004,9 @@ function DipartimentiTab() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
-  useEffect(() => { if (assegnazione?.progetto_id) loadDipartimenti() }, [assegnazione?.progetto_id])
+  useEffect(() => { if (progettoId) loadDipartimenti() }, [progettoId])
 
-  const loadDipartimenti = async () => { setLoading(true); const { data } = await supabase.from('dipartimenti').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome'); setDipartimenti(data || []); setLoading(false) }
+  const loadDipartimenti = async () => { setLoading(true); const { data } = await supabase.from('dipartimenti').select('*').eq('progetto_id', progettoId).order('nome'); setDipartimenti(data || []); setLoading(false) }
   const resetForm = () => { setFormData({ nome: '', codice: '', descrizione: '' }); setEditingDip(null); setShowForm(false); setMessage(null) }
   const handleEdit = (d) => { setFormData({ nome: d.nome || '', codice: d.codice || '', descrizione: d.descrizione || '' }); setEditingDip(d); setShowForm(true) }
 
@@ -1008,7 +1014,7 @@ function DipartimentiTab() {
     if (!formData.nome) { setMessage({ type: 'error', text: `${t('name')} ${t('required').toLowerCase()}` }); return }
     setSaving(true); setMessage(null)
     try {
-      const payload = { nome: formData.nome, codice: formData.codice || null, descrizione: formData.descrizione || null, progetto_id: assegnazione.progetto_id }
+      const payload = { nome: formData.nome, codice: formData.codice || null, descrizione: formData.descrizione || null, progetto_id: progettoId }
       if (editingDip) { await supabase.from('dipartimenti').update(payload).eq('id', editingDip.id) }
       else { await supabase.from('dipartimenti').insert(payload) }
       setMessage({ type: 'success', text: t('departmentSaved') }); loadDipartimenti(); setTimeout(resetForm, 1000)
@@ -1063,7 +1069,7 @@ function DipartimentiTab() {
 
 // ==================== DATI TEST TAB ====================
 function DatiTestTab() {
-  const { assegnazione } = useAuth()
+  const { assegnazione, progettoId } = useAuth()
   const { t } = useI18n()
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
@@ -1081,8 +1087,8 @@ function DatiTestTab() {
       await supabase.from('ditte').insert(ditteTest)
 
       const squadreTest = [
-        { nome: 'Squadra Alpha', colore: '#3B82F6', progetto_id: assegnazione.progetto_id, attivo: true },
-        { nome: 'Squadra Beta', colore: '#22C55E', progetto_id: assegnazione.progetto_id, attivo: true }
+        { nome: 'Squadra Alpha', colore: '#3B82F6', progetto_id: progettoId, attivo: true },
+        { nome: 'Squadra Beta', colore: '#22C55E', progetto_id: progettoId, attivo: true }
       ]
       await supabase.from('squadre').insert(squadreTest)
 
