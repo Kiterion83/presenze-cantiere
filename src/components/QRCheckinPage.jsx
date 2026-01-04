@@ -39,7 +39,7 @@ export default function QRCheckinPage() {
 
       // Carica persone assegnate al progetto
       const { data: assegnazioni } = await supabase
-        .from('assegnazioni')
+        .from('assegnazioni_progetto')
         .select(`
           persona:persone(id, nome, cognome)
         `)
@@ -176,7 +176,7 @@ export default function QRCheckinPage() {
 
       // Crea assegnazione al progetto
       const { error: assErr } = await supabase
-        .from('assegnazioni')
+        .from('assegnazioni_progetto')
         .insert({
           persona_id: nuovaPersona.id,
           progetto_id: progettoId,
