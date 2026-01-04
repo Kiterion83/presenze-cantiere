@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function QRCheckinPage() {
   const { progettoId } = useParams()
+  const [searchParams] = useSearchParams()
+  const areaId = searchParams.get('area')
   
   // Stati
   const [loading, setLoading] = useState(true)
   const [progetto, setProgetto] = useState(null)
+  const [area, setArea] = useState(null)
   const [persone, setPersone] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedPersona, setSelectedPersona] = useState(null)
@@ -19,11 +22,11 @@ export default function QRCheckinPage() {
   const [gpsPosition, setGpsPosition] = useState(null)
   const [gpsError, setGpsError] = useState(null)
 
-  // Carica progetto e persone
+  // Carica progetto, area e persone
   useEffect(() => {
     loadData()
     requestGPS()
-  }, [progettoId])
+  }, [progettoId, areaId])
 
   const loadData = async () => {
     try {
@@ -36,6 +39,43 @@ export default function QRCheckinPage() {
       
       if (projErr) throw new Error('Progetto non trovato')
       setProgetto(proj)
+
+      // Carica area se specificata
+      if (areaId) {
+        // Prova prima qr_codes
+        const { data: qrCode, error: qrErr } = await supabase
+          .from('qr_codes')
+          .select('*')
+          .eq('id', areaId)
+          .single()
+
+        if (!qrErr && qrCode) {
+          setArea({
+            id: qrCode.id,
+            nome: qrCode.nome || qrCode.descrizione,
+            gate: qrCode.gate || qrCode.posizione,
+            codice: qrCode.codice,
+            tipo: 'qr_code'
+          })
+        } else {
+          // Fallback: prova zone_gps
+          const { data: zona, error: zoneErr } = await supabase
+            .from('zone_gps')
+            .select('*')
+            .eq('id', areaId)
+            .single()
+
+          if (!zoneErr && zona) {
+            setArea({
+              id: zona.id,
+              nome: zona.nome,
+              gate: zona.gate || zona.descrizione,
+              codice: zona.codice,
+              tipo: 'zona'
+            })
+          }
+        }
+      }
 
       // Carica persone assegnate al progetto
       const { data: assegnazioni } = await supabase
@@ -92,6 +132,29 @@ export default function QRCheckinPage() {
     setSearchTerm(`${persona.cognome} ${persona.nome}`)
   }
 
+  // Costruisce i dati extra per la presenza
+  const getPresenzaData = () => {
+    const baseData = {
+      progetto_id: progettoId,
+      latitudine_checkin: gpsPosition?.lat || null,
+      longitudine_checkin: gpsPosition?.lng || null,
+      accuracy_checkin: gpsPosition?.accuracy || null
+    }
+
+    // Aggiungi info area se presente
+    if (area) {
+      // Prova a usare campi specifici se esistono nella tabella
+      return {
+        ...baseData,
+        zona_id: area.tipo === 'zona' ? area.id : null,
+        qr_code_id: area.tipo === 'qr_code' ? area.id : null,
+        note_checkin: `Ingresso: ${area.nome}${area.gate ? ' - ' + area.gate : ''}`
+      }
+    }
+
+    return baseData
+  }
+
   // Check-in per persona esistente
   const handleCheckin = async () => {
     if (!selectedPersona) return
@@ -114,30 +177,57 @@ export default function QRCheckinPage() {
         .single()
 
       if (existing) {
-        setError('Hai già fatto check-in oggi!')
+        setError('Hai gia fatto check-in oggi!')
         setSaving(false)
         return
       }
 
+      // Prepara dati presenza
+      const presenzaData = {
+        ...getPresenzaData(),
+        persona_id: selectedPersona.id,
+        data: oggi,
+        ora_checkin: oraCheckin,
+        metodo_checkin: 'qr_code'
+      }
+
+      // Rimuovi campi null che potrebbero non esistere nella tabella
+      Object.keys(presenzaData).forEach(key => {
+        if (presenzaData[key] === null || presenzaData[key] === undefined) {
+          delete presenzaData[key]
+        }
+      })
+
       // Crea presenza
       const { error: insErr } = await supabase
         .from('presenze')
-        .insert({
-          progetto_id: progettoId,
-          persona_id: selectedPersona.id,
-          data: oggi,
-          ora_checkin: oraCheckin,
-          latitudine_checkin: gpsPosition?.lat || null,
-          longitudine_checkin: gpsPosition?.lng || null,
-          accuracy_checkin: gpsPosition?.accuracy || null,
-          metodo_checkin: 'qr_code'
-        })
+        .insert(presenzaData)
 
-      if (insErr) throw insErr
+      if (insErr) {
+        // Se fallisce per campo mancante, riprova senza campi extra
+        if (insErr.message.includes('zona_id') || insErr.message.includes('qr_code_id')) {
+          const { error: retryErr } = await supabase
+            .from('presenze')
+            .insert({
+              progetto_id: progettoId,
+              persona_id: selectedPersona.id,
+              data: oggi,
+              ora_checkin: oraCheckin,
+              latitudine_checkin: gpsPosition?.lat || null,
+              longitudine_checkin: gpsPosition?.lng || null,
+              accuracy_checkin: gpsPosition?.accuracy || null,
+              metodo_checkin: 'qr_code'
+            })
+          if (retryErr) throw retryErr
+        } else {
+          throw insErr
+        }
+      }
 
       setSuccess({
         nome: `${selectedPersona.nome} ${selectedPersona.cognome}`,
-        ora: oraCheckin
+        ora: oraCheckin,
+        area: area?.nome
       })
     } catch (e) {
       setError(e.message)
@@ -210,8 +300,8 @@ export default function QRCheckinPage() {
           .insert({
             progetto_id: progettoId,
             tipo: 'nuovo_operaio',
-            titolo: '🆕 Nuovo operaio registrato',
-            messaggio: `${nuovoForm.cognome.trim()} ${nuovoForm.nome.trim()} si è registrato tramite QR code. Da assegnare a una squadra.`,
+            titolo: 'Nuovo operaio registrato',
+            messaggio: `${nuovoForm.cognome.trim()} ${nuovoForm.nome.trim()} si e registrato tramite QR code${area ? ' da ' + area.nome : ''}. Da assegnare a una squadra.`,
             priorita: 'alta',
             link: '/team',
             letta: false,
@@ -220,18 +310,19 @@ export default function QRCheckinPage() {
               nome: nuovoForm.nome.trim(),
               cognome: nuovoForm.cognome.trim(),
               data_registrazione: oggi,
-              ora_registrazione: oraCheckin
+              ora_registrazione: oraCheckin,
+              area: area?.nome || null
             })
           })
       } catch (notifErr) {
         console.warn('Notifica non creata:', notifErr)
-        // Non bloccare il check-in se la notifica fallisce
       }
 
       setSuccess({
         nome: `${nuovoForm.nome} ${nuovoForm.cognome}`,
         ora: oraCheckin,
-        nuovo: true
+        nuovo: true,
+        area: area?.nome
       })
     } catch (e) {
       setError(e.message)
@@ -250,54 +341,61 @@ export default function QRCheckinPage() {
     setNuovoForm({ nome: '', cognome: '' })
   }
 
-  // === RENDER ===
-
+  // Loading
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl p-8 shadow-2xl text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Caricamento...</p>
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">Caricamento...</p>
         </div>
       </div>
     )
   }
 
+  // Errore progetto
   if (error && !progetto) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl p-8 shadow-2xl text-center max-w-sm">
-          <div className="text-6xl mb-4">❌</div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Errore</h1>
-          <p className="text-gray-600">{error}</p>
+      <div className="min-h-screen bg-gradient-to-b from-red-50 to-white flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-4xl">!</span>
+          </div>
+          <h1 className="text-2xl font-bold text-red-800 mb-2">Errore</h1>
+          <p className="text-red-600">{error}</p>
         </div>
       </div>
     )
   }
 
-  // Schermata successo
+  // Successo
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl p-8 shadow-2xl text-center max-w-sm w-full">
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center">
           <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-5xl">✅</span>
+            <svg className="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Check-in Completato!</h1>
-          <p className="text-xl text-gray-700 mb-1">{success.nome}</p>
-          <p className="text-3xl font-bold text-green-600 mb-4">{success.ora}</p>
-          {success.nuovo && (
-            <p className="text-sm text-blue-600 bg-blue-50 rounded-lg p-2 mb-4">
-              🆕 Registrato come nuovo nel sistema
+          <h1 className="text-2xl font-bold text-green-800 mb-2">Check-in Completato!</h1>
+          <p className="text-lg text-gray-700 mb-1">{success.nome}</p>
+          <p className="text-gray-500 mb-2">Ore {success.ora}</p>
+          {success.area && (
+            <p className="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full inline-block mb-4">
+              {success.area}
             </p>
           )}
-          <p className="text-gray-500 text-sm mb-6">{progetto?.nome}</p>
-          
+          {success.nuovo && (
+            <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-xl mb-6">
+              Sei stato registrato come nuovo! Un responsabile ti assegnera a una squadra.
+            </div>
+          )}
           <button
             onClick={handleReset}
-            className="w-full py-4 bg-gray-100 text-gray-700 rounded-2xl font-semibold hover:bg-gray-200 transition-colors"
+            className="w-full py-4 bg-green-600 text-white rounded-2xl font-semibold hover:bg-green-700 transition-colors"
           >
-            ← Nuovo Check-in
+            Nuovo Check-in
           </button>
         </div>
       </div>
@@ -305,69 +403,80 @@ export default function QRCheckinPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white text-center">
-          <div className="text-4xl mb-2">📍</div>
-          <h1 className="text-2xl font-bold">Check-in Cantiere</h1>
-          <p className="text-blue-100 text-sm mt-1">{progetto?.nome}</p>
-          {gpsPosition && (
-            <p className="text-xs text-blue-200 mt-2">📡 GPS attivo</p>
-          )}
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      {/* Header */}
+      <div className="bg-white shadow-sm">
+        <div className="max-w-md mx-auto px-4 py-6">
+          <div className="text-center">
+            <div className="text-4xl mb-2">
+              {area ? '📍' : '🏗️'}
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              {area ? area.nome : 'Check-in Cantiere'}
+            </h1>
+            {area?.gate && (
+              <p className="text-gray-500">{area.gate}</p>
+            )}
+            <p className="text-blue-600 font-medium mt-1">{progetto?.nome}</p>
+            {area?.codice && (
+              <span className="inline-block mt-2 px-3 py-1 bg-gray-100 rounded-full text-xs font-mono text-gray-600">
+                {area.codice}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-md mx-auto px-4 py-6">
+        {/* GPS Status */}
+        <div className={`mb-4 px-4 py-2 rounded-xl text-sm flex items-center gap-2 ${
+          gpsPosition ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+        }`}>
+          <span>{gpsPosition ? 'GPS attivo' : (gpsError || 'Rilevamento GPS...')}</span>
         </div>
 
-        <div className="p-6">
-          {/* Errore */}
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
-              ⚠️ {error}
-            </div>
-          )}
+        {/* Errore */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+            {error}
+          </div>
+        )}
 
-          {!showNuovo ? (
-            <>
-              {/* Ricerca persona */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🔍 Cerca il tuo nome
-                </label>
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value)
-                    setSelectedPersona(null)
-                  }}
-                  placeholder="Scrivi nome o cognome..."
-                  className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-blue-500 focus:ring-0 outline-none transition-colors"
-                  autoFocus
-                  autoComplete="off"
-                />
-              </div>
+        {/* Form Check-in o Nuovo */}
+        {!showNuovo ? (
+          <>
+            {/* Cerca persona */}
+            <div className="bg-white rounded-2xl shadow-sm border p-4 mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Cerca il tuo nome
+              </label>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setSelectedPersona(null)
+                }}
+                placeholder="Cognome Nome..."
+                className="w-full px-4 py-3 border rounded-xl text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                autoComplete="off"
+              />
 
               {/* Lista risultati */}
               {searchTerm.length >= 2 && !selectedPersona && (
-                <div className="mb-4 max-h-64 overflow-y-auto rounded-2xl border-2 border-gray-100">
+                <div className="mt-3 max-h-60 overflow-y-auto">
                   {filteredPersone.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500">
-                      <p className="mb-2">Nessun risultato per "{searchTerm}"</p>
-                      <button
-                        onClick={() => setShowNuovo(true)}
-                        className="text-blue-600 font-semibold"
-                      >
-                        → Registrati come nuovo
-                      </button>
-                    </div>
+                    <p className="text-gray-500 text-center py-4">Nessun risultato</p>
                   ) : (
                     filteredPersone.map(p => (
                       <button
                         key={p.id}
                         onClick={() => handleSelectPersona(p)}
-                        className="w-full p-4 text-left hover:bg-blue-50 border-b border-gray-100 last:border-0 transition-colors"
+                        className="w-full text-left px-4 py-3 hover:bg-blue-50 rounded-xl transition-colors"
                       >
-                        <span className="font-semibold text-gray-800">{p.cognome}</span>
-                        <span className="text-gray-600 ml-2">{p.nome}</span>
+                        <span className="font-medium">{p.cognome}</span>{' '}
+                        <span className="text-gray-600">{p.nome}</span>
                       </button>
                     ))
                   )}
@@ -376,126 +485,99 @@ export default function QRCheckinPage() {
 
               {/* Persona selezionata */}
               {selectedPersona && (
-                <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold">
-                      {selectedPersona.nome[0]}{selectedPersona.cognome[0]}
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-800">{selectedPersona.cognome} {selectedPersona.nome}</p>
-                      <p className="text-sm text-blue-600">Pronto per il check-in</p>
-                    </div>
+                <div className="mt-3 p-3 bg-blue-50 rounded-xl flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+                    {selectedPersona.cognome[0]}
+                  </div>
+                  <div>
+                    <p className="font-medium">{selectedPersona.cognome} {selectedPersona.nome}</p>
+                    <p className="text-sm text-blue-600">Pronto per il check-in</p>
                   </div>
                 </div>
               )}
+            </div>
 
-              {/* Bottone Check-in */}
-              <button
-                onClick={handleCheckin}
-                disabled={!selectedPersona || saving}
-                className={`w-full py-5 rounded-2xl text-xl font-bold transition-all ${
-                  selectedPersona && !saving
-                    ? 'bg-green-500 text-white hover:bg-green-600 active:scale-98 shadow-lg'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                {saving ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    Registrazione...
-                  </span>
-                ) : (
-                  '✅ Conferma Check-in'
-                )}
-              </button>
+            {/* Bottone Check-in */}
+            <button
+              onClick={handleCheckin}
+              disabled={!selectedPersona || saving}
+              className={`w-full py-4 rounded-2xl font-bold text-lg transition-all ${
+                selectedPersona && !saving
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {saving ? 'Check-in in corso...' : 'Conferma Check-in'}
+            </button>
 
-              {/* Divider */}
-              <div className="flex items-center gap-4 my-6">
-                <div className="flex-1 h-px bg-gray-200"></div>
-                <span className="text-gray-400 text-sm">oppure</span>
-                <div className="flex-1 h-px bg-gray-200"></div>
-              </div>
-
-              {/* Bottone Nuovo */}
+            {/* Link nuovo */}
+            <div className="text-center mt-6">
               <button
                 onClick={() => setShowNuovo(true)}
-                className="w-full py-4 bg-gray-100 text-gray-700 rounded-2xl font-semibold hover:bg-gray-200 transition-colors"
+                className="text-blue-600 font-medium hover:underline"
               >
-                🆕 Sono nuovo, registrami
+                Sono nuovo, non trovo il mio nome
               </button>
-            </>
-          ) : (
-            <>
-              {/* Form nuovo utente */}
-              <div className="mb-4">
-                <button
-                  onClick={() => setShowNuovo(false)}
-                  className="text-blue-600 text-sm font-medium mb-4 flex items-center gap-1"
-                >
-                  ← Torna alla ricerca
-                </button>
-                
-                <h2 className="text-lg font-bold text-gray-800 mb-4">🆕 Registrazione Nuovo</h2>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-                    <input
-                      type="text"
-                      value={nuovoForm.nome}
-                      onChange={(e) => setNuovoForm({ ...nuovoForm, nome: e.target.value })}
-                      placeholder="Mario"
-                      className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-xl focus:border-blue-500 outline-none"
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cognome *</label>
-                    <input
-                      type="text"
-                      value={nuovoForm.cognome}
-                      onChange={(e) => setNuovoForm({ ...nuovoForm, cognome: e.target.value })}
-                      placeholder="Rossi"
-                      className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-xl focus:border-blue-500 outline-none"
-                      autoComplete="off"
-                    />
-                  </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Form nuovo */}
+            <div className="bg-white rounded-2xl shadow-sm border p-4 mb-4">
+              <h2 className="font-semibold text-gray-800 mb-4">Registrazione Nuovo</h2>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                  <input
+                    type="text"
+                    value={nuovoForm.nome}
+                    onChange={(e) => setNuovoForm({ ...nuovoForm, nome: e.target.value })}
+                    placeholder="Il tuo nome..."
+                    className="w-full px-4 py-3 border rounded-xl text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cognome</label>
+                  <input
+                    type="text"
+                    value={nuovoForm.cognome}
+                    onChange={(e) => setNuovoForm({ ...nuovoForm, cognome: e.target.value })}
+                    placeholder="Il tuo cognome..."
+                    className="w-full px-4 py-3 border rounded-xl text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
                 </div>
               </div>
+            </div>
 
-              {/* Bottone registra e check-in */}
+            {/* Bottone registra */}
+            <button
+              onClick={handleNuovoCheckin}
+              disabled={saving || !nuovoForm.nome.trim() || !nuovoForm.cognome.trim()}
+              className={`w-full py-4 rounded-2xl font-bold text-lg transition-all ${
+                nuovoForm.nome.trim() && nuovoForm.cognome.trim() && !saving
+                  ? 'bg-green-600 text-white hover:bg-green-700 shadow-lg'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {saving ? 'Registrazione...' : 'Registrati e Check-in'}
+            </button>
+
+            {/* Link torna indietro */}
+            <div className="text-center mt-6">
               <button
-                onClick={handleNuovoCheckin}
-                disabled={!nuovoForm.nome.trim() || !nuovoForm.cognome.trim() || saving}
-                className={`w-full py-5 rounded-2xl text-xl font-bold transition-all ${
-                  nuovoForm.nome.trim() && nuovoForm.cognome.trim() && !saving
-                    ? 'bg-green-500 text-white hover:bg-green-600 shadow-lg'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
+                onClick={() => setShowNuovo(false)}
+                className="text-gray-600 font-medium hover:underline"
               >
-                {saving ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    Registrazione...
-                  </span>
-                ) : (
-                  '✅ Registra e Check-in'
-                )}
+                Torna alla ricerca
               </button>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
 
         {/* Footer */}
-        <div className="px-6 pb-6">
-          <p className="text-center text-xs text-gray-400">
-            {new Date().toLocaleDateString('it-IT', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long', 
-              year: 'numeric' 
-            })}
-          </p>
+        <div className="mt-8 text-center text-xs text-gray-400">
+          {progetto?.codice} {area && `- ${area.codice || area.nome}`}
         </div>
       </div>
     </div>
