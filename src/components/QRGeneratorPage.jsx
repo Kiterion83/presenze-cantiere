@@ -24,7 +24,7 @@ export default function QRGeneratorPage() {
   if (!isAtLeast || !isAtLeast('supervisor')) {
     return (
       <div className="p-6 text-center">
-        <div className="text-6xl mb-4">🔒</div>
+        <div className="text-6xl mb-4">X</div>
         <h1 className="text-xl font-bold text-gray-700">Accesso non autorizzato</h1>
         <p className="text-gray-500">Devi essere almeno Supervisor</p>
       </div>
@@ -34,7 +34,7 @@ export default function QRGeneratorPage() {
   if (!progettoId) {
     return (
       <div className="p-6 text-center">
-        <div className="text-6xl mb-4">📱</div>
+        <div className="text-6xl mb-4">!</div>
         <h1 className="text-xl font-bold text-gray-700">Nessun progetto</h1>
         <p className="text-gray-500">Seleziona un progetto prima</p>
       </div>
@@ -45,7 +45,7 @@ export default function QRGeneratorPage() {
     <div className="p-6 max-w-2xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">📱 QR Code Check-in</h1>
+        <h1 className="text-2xl font-bold text-gray-800">QR Code Check-in</h1>
         <p className="text-gray-500">Stampa questo QR per il check-in rapido</p>
       </div>
 
@@ -75,7 +75,7 @@ export default function QRGeneratorPage() {
             onClick={() => window.print()}
             className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700"
           >
-            🖨️ Stampa
+            Stampa
           </button>
           
           <a
@@ -83,7 +83,7 @@ export default function QRGeneratorPage() {
             download={`QR-${progetto?.codice || 'checkin'}.png`}
             className="w-full py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 text-center"
           >
-            💾 Scarica PNG
+            Scarica PNG
           </a>
           
           <button
@@ -92,14 +92,14 @@ export default function QRGeneratorPage() {
               copied ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {copied ? '✅ Copiato!' : '📋 Copia Link'}
+            {copied ? 'Copiato!' : 'Copia Link'}
           </button>
         </div>
       </div>
 
       {/* Test Link */}
       <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
-        <h3 className="font-semibold text-amber-800 mb-2">🧪 Testa il link</h3>
+        <h3 className="font-semibold text-amber-800 mb-2">Testa il link</h3>
         <a
           href={qrUrl}
           target="_blank"
@@ -112,10 +112,10 @@ export default function QRGeneratorPage() {
 
       {/* Istruzioni */}
       <div className="mt-6 bg-blue-50 rounded-xl p-4 border border-blue-200">
-        <h3 className="font-semibold text-blue-800 mb-2">💡 Come usare</h3>
+        <h3 className="font-semibold text-blue-800 mb-2">Come usare</h3>
         <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
           <li>Stampa o scarica il QR</li>
-          <li>Appendi all'ingresso del cantiere</li>
+          <li>Appendi all ingresso del cantiere</li>
           <li>Gli operai inquadrano con il telefono</li>
           <li>Cercano il nome e fanno check-in</li>
         </ol>
