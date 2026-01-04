@@ -190,8 +190,7 @@ export default function TestPackagesPage() {
         .from('test_package_avanzamento')
         .select(`
           *,
-          fase:test_package_fasi(*),
-          firmato_da:persone!test_package_avanzamento_firmato_da_fkey(id, nome, cognome)
+          fase:test_package_fasi(*)
         `)
         .eq('test_package_id', tpId)
         .order('created_at')
@@ -450,14 +449,22 @@ export default function TestPackagesPage() {
     if (!selectedFase || !showDetail) return
     setSaving(true)
     try {
-      // Inserisci avanzamento
+      // Costruisci nome completo firmante
+      const nomeFirmante = persona 
+        ? `${persona.nome || ''} ${persona.cognome || ''}`.trim() || 'Utente'
+        : 'Utente'
+      
+      // Inserisci avanzamento con nome leggibile
       const { error: avanzError } = await supabase.from('test_package_avanzamento').insert({
         test_package_id: showDetail.id,
         fase_id: selectedFase.id,
         stato: firmaForm.esito,
         note: firmaForm.note || null,
-        firmato_da: persona?.id,
-        data_firma: new Date().toISOString()
+        esito: firmaForm.esito,
+        firmato_da: nomeFirmante,
+        firmato_da_id: persona?.id || null,
+        data_firma: new Date().toISOString().split('T')[0],
+        note_firma: firmaForm.note || null
       })
       if (avanzError) throw avanzError
 
@@ -675,30 +682,22 @@ export default function TestPackagesPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-xl p-4 shadow-sm border">
           <p className="text-2xl font-bold text-gray-800">{testPackages.length}</p>
-          <p className="text-sm text-gray-500">🧪 Totale TP</p>
+          <p className="text-sm text-gray-500">Totale</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border">
-          <p className="text-2xl font-bold text-gray-400">{testPackages.filter(t => t.stato === 'draft' || !t.stato).length}</p>
-          <p className="text-sm text-gray-500">📝 Bozza</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-cyan-200 bg-cyan-50">
           <p className="text-2xl font-bold text-cyan-600">{testPackages.filter(t => t.stato === 'planned').length}</p>
-          <p className="text-sm text-gray-500">📋 Pianificati</p>
+          <p className="text-sm text-gray-500">Pianificati</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-amber-200 bg-amber-50">
-          <p className="text-2xl font-bold text-amber-600">{testPackages.filter(t => ['in_progress', 'holding', 'ready'].includes(t.stato)).length}</p>
-          <p className="text-sm text-gray-500">🔄 In Corso</p>
+        <div className="bg-white rounded-xl p-4 shadow-sm border">
+          <p className="text-2xl font-bold text-amber-600">{testPackages.filter(t => ['in_progress', 'holding'].includes(t.stato)).length}</p>
+          <p className="text-sm text-gray-500">In Corso</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-green-200 bg-green-50">
+        <div className="bg-white rounded-xl p-4 shadow-sm border">
           <p className="text-2xl font-bold text-green-600">{testPackages.filter(t => t.stato === 'passed').length}</p>
-          <p className="text-sm text-gray-500">✅ Superati</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-red-200 bg-red-50">
-          <p className="text-2xl font-bold text-red-600">{testPackages.filter(t => t.stato === 'failed').length}</p>
-          <p className="text-sm text-gray-500">❌ Falliti</p>
+          <p className="text-sm text-gray-500">Completati</p>
         </div>
       </div>
 
@@ -878,36 +877,9 @@ export default function TestPackagesPage() {
                 <div><label className="block text-sm font-medium mb-1">📅 Data Fine Pianificata</label><input type="date" value={form.data_fine_pianificata} onChange={e => setForm({...form, data_fine_pianificata: e.target.value})} className="w-full px-3 py-2 border rounded-lg" /></div>
               </div>
 
-              {/* Disciplina con Bottoni */}
-              <div className="p-4 bg-purple-50 rounded-xl border border-purple-200">
-                <label className="block text-sm font-medium mb-2 text-purple-800">
-                  🎯 Disciplina
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {discipline.map(disc => (
-                    <button
-                      key={disc.id}
-                      type="button"
-                      onClick={() => setForm({ ...form, disciplina_id: disc.id })}
-                      className={`px-4 py-2 rounded-xl text-sm flex items-center gap-2 transition-all border-2 ${
-                        form.disciplina_id === disc.id 
-                          ? 'border-purple-500 shadow-md' 
-                          : 'border-transparent bg-white hover:bg-gray-50'
-                      }`}
-                      style={{ 
-                        backgroundColor: form.disciplina_id === disc.id ? (disc.colore || '#8B5CF6') + '20' : undefined,
-                        borderColor: form.disciplina_id === disc.id ? disc.colore : undefined
-                      }}
-                    >
-                      <span className="text-lg">{disc.icona}</span>
-                      <span>{disc.nome}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Assegnazioni */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div><label className="block text-sm font-medium mb-1">Disciplina</label><select value={form.disciplina_id} onChange={e => setForm({...form, disciplina_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg"><option value="">Seleziona...</option>{discipline.map(d => <option key={d.id} value={d.id}>{d.icona} {d.nome}</option>)}</select></div>
                 <div><label className="block text-sm font-medium mb-1">Squadra</label><select value={form.squadra_id} onChange={e => setForm({...form, squadra_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg"><option value="">Seleziona...</option>{squadre.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
                 <div><label className="block text-sm font-medium mb-1">Foreman</label><select value={form.foreman_id} onChange={e => setForm({...form, foreman_id: e.target.value})} className="w-full px-3 py-2 border rounded-lg"><option value="">Seleziona...</option>{persone.map(p => <option key={p.id} value={p.id}>{p.nome} {p.cognome}</option>)}</select></div>
                 <div className="flex items-center pt-6"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.client_witness_required} onChange={e => setForm({...form, client_witness_required: e.target.checked})} className="w-4 h-4" /><span className="text-sm">Witness Cliente Richiesto</span></label></div>
@@ -1069,10 +1041,24 @@ export default function TestPackagesPage() {
                               {fase.richiede_firma_qc && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">QC</span>}
                               {fase.richiede_witness && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">Witness</span>}
                             </div>
-                            {avanzamento && (
-                              <p className="text-xs text-gray-400 mt-1">
-                                ✓ Firmato da {avanzamento.firmato_da?.nome} {avanzamento.firmato_da?.cognome} il {new Date(avanzamento.data_firma).toLocaleDateString('it-IT')}
-                              </p>
+                            {avanzamento && avanzamento.firmato_da && (
+                              <div className="mt-2 p-2 bg-green-100 rounded-lg text-xs">
+                                <p className="text-green-700">
+                                  ✓ <span className="font-medium">Firmato da:</span> {avanzamento.firmato_da}
+                                </p>
+                                {avanzamento.data_firma && (
+                                  <p className="text-green-600">
+                                    📅 {new Date(avanzamento.data_firma).toLocaleDateString('it-IT', {
+                                      day: '2-digit',
+                                      month: 'long', 
+                                      year: 'numeric'
+                                    })}
+                                  </p>
+                                )}
+                                {avanzamento.note_firma && (
+                                  <p className="text-gray-500 mt-1">📝 {avanzamento.note_firma}</p>
+                                )}
+                              </div>
                             )}
                           </div>
                           {isCurrent && isAtLeast('foreman') && (
