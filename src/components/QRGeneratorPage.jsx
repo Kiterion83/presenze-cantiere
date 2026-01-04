@@ -1,51 +1,43 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { QRCodeSVG } from 'qrcode.react'
 
 export default function QRGeneratorPage() {
   const { progetto, progettoId, isAtLeast } = useAuth()
-  const qrRef = useRef(null)
   const [size, setSize] = useState(256)
   const [showInstructions, setShowInstructions] = useState(true)
+  const [copied, setCopied] = useState(false)
 
   // URL per il QR
   const baseUrl = window.location.origin
   const qrUrl = `${baseUrl}/qr-checkin/${progettoId}`
+  
+  // URL per generare QR tramite API gratuita
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(qrUrl)}&color=1E40AF&bgcolor=FFFFFF`
 
   // Scarica QR come immagine
-  const downloadQR = () => {
-    const svg = qrRef.current?.querySelector('svg')
-    if (!svg) return
-
-    const svgData = new XMLSerializer().serializeToString(svg)
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const img = new Image()
-    
-    img.onload = () => {
-      canvas.width = size
-      canvas.height = size
-      ctx.fillStyle = 'white'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      ctx.drawImage(img, 0, 0)
-      
-      const pngUrl = canvas.toDataURL('image/png')
+  const downloadQR = async () => {
+    try {
+      const response = await fetch(qrImageUrl)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.download = `QR-Checkin-${progetto?.codice || 'progetto'}.png`
-      link.href = pngUrl
+      link.href = url
       link.click()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      // Fallback: apri in nuova tab
+      window.open(qrImageUrl, '_blank')
     }
-    
-    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)))
   }
 
   // Stampa QR
   const printQR = () => {
     const printWindow = window.open('', '_blank')
-    const svg = qrRef.current?.querySelector('svg')
-    if (!svg || !printWindow) return
-
-    const svgData = new XMLSerializer().serializeToString(svg)
+    if (!printWindow) {
+      alert('Abilita i popup per stampare')
+      return
+    }
     
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -83,6 +75,9 @@ export default function QRGeneratorPage() {
               border-radius: 16px;
               box-shadow: 0 4px 20px rgba(0,0,0,0.1);
             }
+            .qr-container img {
+              display: block;
+            }
             .instructions {
               margin-top: 30px;
               text-align: left;
@@ -115,7 +110,7 @@ export default function QRGeneratorPage() {
             <p class="project-name">${progetto?.nome || 'Progetto'}</p>
             
             <div class="qr-container">
-              ${svgData}
+              <img src="${qrImageUrl}" alt="QR Code" width="${size}" height="${size}" />
             </div>
             
             ${showInstructions ? `
@@ -131,7 +126,7 @@ export default function QRGeneratorPage() {
             ` : ''}
             
             <p class="footer">
-              ${progetto?.codice || ''} • ${progetto?.indirizzo || ''}
+              ${progetto?.codice || ''} ${progetto?.indirizzo ? '• ' + progetto.indirizzo : ''}
             </p>
           </div>
         </body>
@@ -139,24 +134,59 @@ export default function QRGeneratorPage() {
     `)
     
     printWindow.document.close()
-    printWindow.focus()
-    setTimeout(() => {
-      printWindow.print()
-    }, 500)
+    
+    // Aspetta che l'immagine si carichi prima di stampare
+    const img = printWindow.document.querySelector('img')
+    if (img) {
+      img.onload = () => {
+        printWindow.focus()
+        printWindow.print()
+      }
+      // Fallback se l'immagine è già cached
+      if (img.complete) {
+        setTimeout(() => {
+          printWindow.focus()
+          printWindow.print()
+        }, 500)
+      }
+    }
   }
 
   // Copia URL
-  const copyUrl = () => {
-    navigator.clipboard.writeText(qrUrl)
-    alert('✅ Link copiato!')
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(qrUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (e) {
+      // Fallback per browser vecchi
+      const textArea = document.createElement('textarea')
+      textArea.value = qrUrl
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   if (!isAtLeast('supervisor')) {
     return (
       <div className="p-6 text-center">
-        <div className="text-4xl mb-4">🔒</div>
+        <div className="text-6xl mb-4">🔒</div>
         <h1 className="text-xl font-bold text-gray-700">Accesso non autorizzato</h1>
         <p className="text-gray-500">Devi essere almeno Supervisor per generare QR code</p>
+      </div>
+    )
+  }
+
+  if (!progettoId) {
+    return (
+      <div className="p-6 text-center">
+        <div className="text-6xl mb-4">📱</div>
+        <h1 className="text-xl font-bold text-gray-700">Nessun progetto selezionato</h1>
+        <p className="text-gray-500">Seleziona un progetto per generare il QR code</p>
       </div>
     )
   }
@@ -178,17 +208,13 @@ export default function QRGeneratorPage() {
           
           <div className="flex flex-col items-center">
             {/* QR Code */}
-            <div 
-              ref={qrRef}
-              className="bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 mb-4"
-            >
-              <QRCodeSVG
-                value={qrUrl}
-                size={size}
-                level="H"
-                includeMargin={true}
-                bgColor="#FFFFFF"
-                fgColor="#1E40AF"
+            <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 mb-4">
+              <img 
+                src={qrImageUrl} 
+                alt="QR Code Check-in"
+                width={size}
+                height={size}
+                className="block"
               />
             </div>
 
@@ -209,9 +235,9 @@ export default function QRGeneratorPage() {
         <div className="space-y-6">
           {/* Dimensione */}
           <div className="bg-white rounded-2xl shadow-sm border p-6">
-            <h2 className="font-semibold text-gray-700 mb-4">Dimensione QR</h2>
-            <div className="flex gap-2">
-              {[128, 192, 256, 320, 400].map(s => (
+            <h2 className="font-semibold text-gray-700 mb-4">📐 Dimensione QR</h2>
+            <div className="flex flex-wrap gap-2">
+              {[150, 200, 256, 300, 400].map(s => (
                 <button
                   key={s}
                   onClick={() => setSize(s)}
@@ -229,7 +255,7 @@ export default function QRGeneratorPage() {
 
           {/* Opzioni stampa */}
           <div className="bg-white rounded-2xl shadow-sm border p-6">
-            <h2 className="font-semibold text-gray-700 mb-4">Opzioni Stampa</h2>
+            <h2 className="font-semibold text-gray-700 mb-4">🖨️ Opzioni Stampa</h2>
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -243,7 +269,7 @@ export default function QRGeneratorPage() {
 
           {/* Azioni */}
           <div className="bg-white rounded-2xl shadow-sm border p-6">
-            <h2 className="font-semibold text-gray-700 mb-4">Azioni</h2>
+            <h2 className="font-semibold text-gray-700 mb-4">⚡ Azioni</h2>
             <div className="space-y-3">
               <button
                 onClick={printQR}
@@ -259,9 +285,13 @@ export default function QRGeneratorPage() {
               </button>
               <button
                 onClick={copyUrl}
-                className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                className={`w-full py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${
+                  copied 
+                    ? 'bg-green-100 text-green-700' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
               >
-                📋 Copia Link
+                {copied ? '✅ Copiato!' : '📋 Copia Link'}
               </button>
             </div>
           </div>
@@ -276,6 +306,22 @@ export default function QRGeneratorPage() {
               <li>Cercano il loro nome e fanno check-in</li>
               <li>Se sono nuovi, si registrano al volo</li>
             </ol>
+          </div>
+
+          {/* Test Link */}
+          <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100">
+            <h3 className="font-semibold text-amber-800 mb-3">🧪 Prova il Link</h3>
+            <p className="text-sm text-amber-700 mb-3">
+              Clicca per vedere come appare la pagina di check-in:
+            </p>
+            <a
+              href={qrUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-200 transition-colors"
+            >
+              🔗 Apri pagina Check-in →
+            </a>
           </div>
         </div>
       </div>
