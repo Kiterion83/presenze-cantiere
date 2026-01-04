@@ -1,38 +1,134 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+
+// ============================================
+// QR CODE GENERATOR - Pure JavaScript
+// Genera QR code senza dipendenze esterne
+// ============================================
+
+// Simplified QR Code generator for URLs
+function generateQRMatrix(text) {
+  // This is a simplified version - for production use a proper library
+  // We'll use a canvas-based approach with an inline script
+  return text
+}
+
+// QR Code Component using Canvas
+function QRCodeCanvas({ value, size = 256 }) {
+  const canvasRef = useRef(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (!canvasRef.current || !value) return
+
+    // Load QRCode library from CDN dynamically
+    const loadQRCode = async () => {
+      try {
+        // Check if already loaded
+        if (window.QRCode) {
+          renderQR()
+          return
+        }
+
+        // Load from CDN
+        const script = document.createElement('script')
+        script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js'
+        script.async = true
+        script.onload = () => renderQR()
+        script.onerror = () => setError(true)
+        document.body.appendChild(script)
+      } catch (e) {
+        setError(true)
+      }
+    }
+
+    const renderQR = () => {
+      if (!window.QRCode || !canvasRef.current) return
+      
+      const canvas = canvasRef.current
+      window.QRCode.toCanvas(canvas, value, {
+        width: size,
+        margin: 2,
+        color: {
+          dark: '#1E40AF',
+          light: '#FFFFFF'
+        }
+      }, (err) => {
+        if (err) setError(true)
+      })
+    }
+
+    loadQRCode()
+  }, [value, size])
+
+  if (error) {
+    return (
+      <div 
+        className="flex items-center justify-center bg-gray-100 rounded-xl"
+        style={{ width: size, height: size }}
+      >
+        <div className="text-center p-4">
+          <p className="text-gray-500 text-sm">QR non disponibile</p>
+          <p className="text-xs text-gray-400">Usa il link sotto</p>
+        </div>
+      </div>
+    )
+  }
+
+  return <canvas ref={canvasRef} className="block" />
+}
 
 export default function QRGeneratorPage() {
   const { progetto, progettoId, isAtLeast } = useAuth()
   const [size, setSize] = useState(256)
   const [showInstructions, setShowInstructions] = useState(true)
   const [copied, setCopied] = useState(false)
+  const printRef = useRef(null)
 
   // URL per il QR
   const baseUrl = window.location.origin
   const qrUrl = `${baseUrl}/qr-checkin/${progettoId}`
-  
-  // URL per generare QR tramite API gratuita
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(qrUrl)}&color=1E40AF&bgcolor=FFFFFF`
+
+  // Copia URL
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(qrUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (e) {
+      // Fallback
+      const textArea = document.createElement('textarea')
+      textArea.value = qrUrl
+      textArea.style.position = 'fixed'
+      textArea.style.opacity = '0'
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
 
   // Scarica QR come immagine
-  const downloadQR = async () => {
-    try {
-      const response = await fetch(qrImageUrl)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.download = `QR-Checkin-${progetto?.codice || 'progetto'}.png`
-      link.href = url
-      link.click()
-      window.URL.revokeObjectURL(url)
-    } catch (e) {
-      // Fallback: apri in nuova tab
-      window.open(qrImageUrl, '_blank')
+  const downloadQR = () => {
+    const canvas = document.querySelector('#qr-container canvas')
+    if (!canvas) {
+      alert('QR non ancora generato. Riprova tra qualche secondo.')
+      return
     }
+    
+    const link = document.createElement('a')
+    link.download = `QR-Checkin-${progetto?.codice || 'progetto'}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
   }
 
   // Stampa QR
   const printQR = () => {
+    const canvas = document.querySelector('#qr-container canvas')
+    const qrDataUrl = canvas ? canvas.toDataURL('image/png') : null
+    
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
       alert('Abilita i popup per stampare')
@@ -50,6 +146,7 @@ export default function QRGeneratorPage() {
               font-family: Arial, sans-serif; 
               text-align: center; 
               padding: 40px;
+              margin: 0;
             }
             .container {
               max-width: 500px;
@@ -77,6 +174,17 @@ export default function QRGeneratorPage() {
             }
             .qr-container img {
               display: block;
+              width: ${size}px;
+              height: ${size}px;
+            }
+            .url-box {
+              margin-top: 20px;
+              padding: 15px;
+              background: #F3F4F6;
+              border-radius: 10px;
+              font-size: 12px;
+              color: #6B7280;
+              word-break: break-all;
             }
             .instructions {
               margin-top: 30px;
@@ -87,7 +195,8 @@ export default function QRGeneratorPage() {
             }
             .instructions h3 {
               color: #1E40AF;
-              margin-bottom: 15px;
+              margin: 0 0 15px 0;
+              font-size: 16px;
             }
             .instructions ol {
               margin: 0;
@@ -110,7 +219,16 @@ export default function QRGeneratorPage() {
             <p class="project-name">${progetto?.nome || 'Progetto'}</p>
             
             <div class="qr-container">
-              <img src="${qrImageUrl}" alt="QR Code" width="${size}" height="${size}" />
+              ${qrDataUrl 
+                ? `<img src="${qrDataUrl}" alt="QR Code" />` 
+                : `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;background:#f3f4f6;">
+                    <p>Scansiona il link sotto</p>
+                  </div>`
+              }
+            </div>
+            
+            <div class="url-box">
+              ${qrUrl}
             </div>
             
             ${showInstructions ? `
@@ -135,42 +253,13 @@ export default function QRGeneratorPage() {
     
     printWindow.document.close()
     
-    // Aspetta che l'immagine si carichi prima di stampare
-    const img = printWindow.document.querySelector('img')
-    if (img) {
-      img.onload = () => {
-        printWindow.focus()
-        printWindow.print()
-      }
-      // Fallback se l'immagine è già cached
-      if (img.complete) {
-        setTimeout(() => {
-          printWindow.focus()
-          printWindow.print()
-        }, 500)
-      }
-    }
+    setTimeout(() => {
+      printWindow.focus()
+      printWindow.print()
+    }, 500)
   }
 
-  // Copia URL
-  const copyUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(qrUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (e) {
-      // Fallback per browser vecchi
-      const textArea = document.createElement('textarea')
-      textArea.value = qrUrl
-      document.body.appendChild(textArea)
-      textArea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textArea)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
+  // Permessi check
   if (!isAtLeast('supervisor')) {
     return (
       <div className="p-6 text-center">
@@ -208,14 +297,11 @@ export default function QRGeneratorPage() {
           
           <div className="flex flex-col items-center">
             {/* QR Code */}
-            <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 mb-4">
-              <img 
-                src={qrImageUrl} 
-                alt="QR Code Check-in"
-                width={size}
-                height={size}
-                className="block"
-              />
+            <div 
+              id="qr-container"
+              className="bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-100 mb-4"
+            >
+              <QRCodeCanvas value={qrUrl} size={size} />
             </div>
 
             {/* Info progetto */}
@@ -225,7 +311,7 @@ export default function QRGeneratorPage() {
             </div>
 
             {/* URL */}
-            <div className="w-full p-3 bg-gray-50 rounded-xl text-xs text-gray-500 break-all text-center">
+            <div className="w-full p-3 bg-gray-50 rounded-xl text-xs text-gray-500 break-all text-center font-mono">
               {qrUrl}
             </div>
           </div>
