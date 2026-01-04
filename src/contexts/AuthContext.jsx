@@ -1,261 +1,203 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+// AuthContext.jsx - CON SUPPORTO BYPASS LOGIN
+// Aggiungi questo al tuo AuthContext esistente o sostituiscilo temporaneamente
+
+import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+
+// ============================================================
+// CONFIGURAZIONE SVILUPPO
+// ============================================================
+const DEV_BYPASS_LOGIN = true  // ⚠️ CAMBIA A false IN PRODUZIONE!
+
+// Utente simulato in sviluppo - DEVE esistere nel DB!
+const DEV_USER_EMAIL = 'admin@test.com' // Cambia con una email esistente nel tuo DB
+// ============================================================
 
 const AuthContext = createContext({})
 
-export const useAuth = () => useContext(AuthContext)
+// Gerarchia ruoli
+const ROLE_HIERARCHY = {
+  admin: 6,
+  cm: 5,
+  supervisor: 4,
+  foreman: 3,
+  worker: 2,
+  helper: 1
+}
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [persona, setPersona] = useState(null)
-  const [assegnazioni, setAssegnazioni] = useState([]) // Assegnazioni reali dell'utente
-  const [tuttiProgetti, setTuttiProgetti] = useState([]) // TUTTI i progetti (per admin)
-  const [assegnazione, setAssegnazione] = useState(null) // Assegnazione corrente
+  const [assegnazione, setAssegnazione] = useState(null)
   const [progetto, setProgetto] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [testRoleOverride, setTestRoleOverride] = useState(null)
+  const [progetti, setProgetti] = useState([])
 
-  useEffect(() => {
-    const savedTestRole = sessionStorage.getItem('test_role_override')
-    if (savedTestRole) {
-      setTestRoleOverride(savedTestRole)
-    }
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user)
-        loadPersona(session.user.id)
-      } else {
-        setLoading(false)
-      }
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        setUser(session.user)
-        loadPersona(session.user.id)
-      } else {
-        setUser(null)
-        setPersona(null)
-        setAssegnazioni([])
-        setTuttiProgetti([])
-        setAssegnazione(null)
-        setProgetto(null)
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const loadPersona = async (authUserId) => {
+  // Funzione per caricare dati utente
+  const loadUserData = async (authUser) => {
     try {
-      const { data: p, error: e1 } = await supabase
+      // Trova persona collegata all'email
+      const { data: personaData, error: personaError } = await supabase
         .from('persone')
         .select('*')
-        .eq('auth_user_id', authUserId)
+        .eq('email', authUser.email)
         .single()
 
-      if (e1 || !p) {
+      if (personaError || !personaData) {
+        console.warn('Persona non trovata per:', authUser.email)
         setLoading(false)
         return
       }
 
-      setPersona(p)
+      setPersona(personaData)
 
-      // Carica le assegnazioni dell'utente
-      const { data: allAssegnazioni, error: e2 } = await supabase
-        .from('assegnazioni_progetto')
-        .select('*, progetto:progetti(*), ditta:ditte(*), dipartimento:dipartimenti(*)')
-        .eq('persona_id', p.id)
+      // Trova assegnazioni attive
+      const { data: assegnazioniData } = await supabase
+        .from('assegnazioni')
+        .select(`
+          *,
+          progetto:progetti(*)
+        `)
+        .eq('persona_id', personaData.id)
         .eq('attivo', true)
-        .order('created_at', { ascending: false })
 
-      // Verifica se l'utente è admin in almeno un progetto
-      const isAdminSomewhere = allAssegnazioni?.some(a => a.ruolo === 'admin')
-
-      // Se è admin, carica TUTTI i progetti
-      let progettiDisponibili = []
-      if (isAdminSomewhere) {
-        const { data: allProjects } = await supabase
-          .from('progetti')
-          .select('*')
-          .eq('stato', 'attivo')
-          .order('nome')
-        
-        setTuttiProgetti(allProjects || [])
-        
-        // Per admin, crea assegnazioni "virtuali" per progetti non assegnati
-        progettiDisponibili = (allProjects || []).map(proj => {
-          const realAssegnazione = allAssegnazioni?.find(a => a.progetto_id === proj.id)
-          if (realAssegnazione) {
-            return realAssegnazione
-          }
-          // Assegnazione virtuale per admin
-          return {
-            id: `virtual-${proj.id}`,
-            persona_id: p.id,
-            progetto_id: proj.id,
-            progetto: proj,
-            ruolo: 'admin', // Admin su tutti i progetti
-            attivo: true,
-            ditta: null,
-            dipartimento: null,
-            isVirtual: true // Flag per identificare assegnazioni virtuali
-          }
-        })
-      } else {
-        progettiDisponibili = allAssegnazioni || []
+      if (assegnazioniData && assegnazioniData.length > 0) {
+        // Prendi la prima assegnazione attiva
+        const primaAssegnazione = assegnazioniData[0]
+        setAssegnazione(primaAssegnazione)
+        setProgetto(primaAssegnazione.progetto)
+        setProgetti(assegnazioniData.map(a => a.progetto))
       }
-
-      setAssegnazioni(progettiDisponibili)
-
-      if (progettiDisponibili.length > 0) {
-        // Recupera progetto salvato o usa il primo
-        const savedProgettoId = localStorage.getItem('selected_progetto_id')
-        const savedAssegnazione = savedProgettoId 
-          ? progettiDisponibili.find(a => a.progetto_id === savedProgettoId)
-          : null
-
-        const activeAssegnazione = savedAssegnazione || progettiDisponibili[0]
-        setAssegnazione(activeAssegnazione)
-        setProgetto(activeAssegnazione.progetto)
-      }
-    } catch (err) {
-      console.error('Errore:', err)
+    } catch (error) {
+      console.error('Errore caricamento dati utente:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  // Funzione per cambiare progetto
-  const cambiaProgetto = (progettoId) => {
-    const nuovaAssegnazione = assegnazioni.find(a => a.progetto_id === progettoId)
+  // Inizializzazione
+  useEffect(() => {
+    const init = async () => {
+      // ========== BYPASS LOGIN ==========
+      if (DEV_BYPASS_LOGIN) {
+        console.warn('⚠️ BYPASS LOGIN ATTIVO - Caricamento utente di sviluppo...')
+        
+        // Simula utente auth
+        const fakeAuthUser = {
+          id: 'dev-bypass-id',
+          email: DEV_USER_EMAIL
+        }
+        
+        setUser(fakeAuthUser)
+        await loadUserData(fakeAuthUser)
+        return
+      }
+      // ==================================
+
+      // Flusso normale
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session?.user) {
+        setUser(session.user)
+        await loadUserData(session.user)
+      } else {
+        setLoading(false)
+      }
+    }
+
+    init()
+
+    // Listener per cambi auth (solo se non in bypass)
+    if (!DEV_BYPASS_LOGIN) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (session?.user) {
+            setUser(session.user)
+            await loadUserData(session.user)
+          } else {
+            setUser(null)
+            setPersona(null)
+            setAssegnazione(null)
+            setProgetto(null)
+            setLoading(false)
+          }
+        }
+      )
+
+      return () => subscription.unsubscribe()
+    }
+  }, [])
+
+  // Verifica se utente ha almeno un certo ruolo
+  const isAtLeast = (minRole) => {
+    if (DEV_BYPASS_LOGIN) return true // In dev, permetti tutto
+    
+    const userRole = assegnazione?.ruolo || 'helper'
+    const userLevel = ROLE_HIERARCHY[userRole] || 0
+    const minLevel = ROLE_HIERARCHY[minRole] || 0
+    return userLevel >= minLevel
+  }
+
+  // Verifica accesso a moduli speciali
+  const canAccess = (module) => {
+    if (DEV_BYPASS_LOGIN) return true // In dev, permetti tutto
+    
+    // Implementa logica basata su permessi specifici
+    // Per ora ritorna true se ha almeno ruolo foreman
+    return isAtLeast('foreman')
+  }
+
+  // Cambia progetto attivo
+  const switchProgetto = async (progettoId) => {
+    if (!persona) return false
+
+    const { data: nuovaAssegnazione } = await supabase
+      .from('assegnazioni')
+      .select(`
+        *,
+        progetto:progetti(*)
+      `)
+      .eq('persona_id', persona.id)
+      .eq('progetto_id', progettoId)
+      .eq('attivo', true)
+      .single()
+
     if (nuovaAssegnazione) {
       setAssegnazione(nuovaAssegnazione)
       setProgetto(nuovaAssegnazione.progetto)
-      localStorage.setItem('selected_progetto_id', progettoId)
+      return true
     }
+    return false
   }
 
-  const signIn = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-    return data
-  }
-
-  const signOut = async () => {
-    sessionStorage.removeItem('test_role_override')
-    localStorage.removeItem('selected_progetto_id')
-    setTestRoleOverride(null)
+  // Logout
+  const logout = async () => {
+    if (DEV_BYPASS_LOGIN) {
+      window.location.href = '/login'
+      return
+    }
+    
     await supabase.auth.signOut()
     setUser(null)
     setPersona(null)
-    setAssegnazioni([])
-    setTuttiProgetti([])
     setAssegnazione(null)
     setProgetto(null)
-  }
-
-  const setTestRole = (role) => {
-    if (role) {
-      sessionStorage.setItem('test_role_override', role)
-      setTestRoleOverride(role)
-    } else {
-      sessionStorage.removeItem('test_role_override')
-      setTestRoleOverride(null)
-    }
-  }
-
-  const effectiveRole = testRoleOverride || assegnazione?.ruolo || null
-
-  // AGGIORNATO: Gerarchia ruoli con warehouse e engineer
-  const isAtLeast = (role) => {
-    if (!effectiveRole) return false
-    const hierarchy = ['helper', 'warehouse', 'office', 'foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
-    return hierarchy.indexOf(effectiveRole) >= hierarchy.indexOf(role)
-  }
-
-  const isRole = (role) => {
-    return effectiveRole === role
-  }
-
-  const isOfficePath = () => {
-    return effectiveRole === 'office' || effectiveRole === 'dept_manager'
-  }
-
-  const getPercorso = () => {
-    if (effectiveRole === 'office' || effectiveRole === 'dept_manager') {
-      return 'office'
-    }
-    return 'site'
-  }
-
-  const canApproveDirectly = () => {
-    return effectiveRole === 'cm' || effectiveRole === 'pm' || effectiveRole === 'admin'
-  }
-
-  // Verifica se l'utente è admin globale (admin in almeno un progetto)
-  const isGlobalAdmin = () => {
-    return assegnazioni.some(a => a.ruolo === 'admin' && !a.isVirtual)
-  }
-
-  // NUOVO: Verifica accesso a pagine speciali (per warehouse, activities, construction)
-  const canAccess = (page) => {
-    if (!effectiveRole) return false
-    
-    const pagePermissions = {
-      // Activities: foreman+ e ruoli superiori
-      'activities': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
-      // Warehouse: solo warehouse e ruoli di gestione (cm, pm, admin)
-      'warehouse': ['warehouse', 'cm', 'pm', 'admin'],
-      // Construction settings: engineer e ruoli superiori di gestione
-      'construction': ['engineer', 'cm', 'pm', 'admin'],
-      // Componenti: engineer+ per gestione, foreman può solo visualizzare (gestito separatamente)
-      'componenti': ['engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
-      // Work Packages: foreman+ può gestire WP, pianificare e segnare completamenti
-      'work-packages': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
-      // Dashboard Avanzamento: foreman+ può vedere, supervisor+ per report completi
-      'avanzamento': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
-      // Pianificazione CW: engineer+ può pianificare, foreman può visualizzare
-      'pianificazione': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
-      // Foreman mobile view: foreman e superiori
-      'foreman': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin'],
-      // Ore componenti: foreman può registrare, engineer+ può vedere report completo
-      'ore-componenti': ['foreman', 'engineer', 'dept_manager', 'supervisor', 'cm', 'pm', 'admin']
-    }
-
-    const allowedRoles = pagePermissions[page]
-    if (!allowedRoles) return isAtLeast('helper') // Default: tutti
-
-    return allowedRoles.includes(effectiveRole)
   }
 
   const value = {
     user,
     persona,
-    assegnazioni,
-    tuttiProgetti,
     assegnazione,
     progetto,
+    progettoId: progetto?.id,
+    progetti,
     loading,
-    signIn,
-    signOut,
     isAtLeast,
-    isRole,
-    isOfficePath,
-    getPercorso,
-    canApproveDirectly,
-    isGlobalAdmin,
-    canAccess,  // NUOVO
-    setTestRole,
-    testRoleOverride,
-    cambiaProgetto,
-    ruolo: effectiveRole,
-    realRuolo: assegnazione?.ruolo || null,
-    progettoId: assegnazione?.progetto_id || null,
-    ditta: assegnazione?.ditta || null,
-    dipartimento: assegnazione?.dipartimento || null
+    canAccess,
+    switchProgetto,
+    logout,
+    // Flag per sapere se siamo in bypass
+    isDevMode: DEV_BYPASS_LOGIN
   }
 
   return (
@@ -264,3 +206,13 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   )
 }
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider')
+  }
+  return context
+}
+
+export default AuthContext
