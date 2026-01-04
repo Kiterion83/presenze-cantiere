@@ -30,6 +30,7 @@ const translations = {
     confirmAttendance: 'Conferma Presenze', // NUOVO
     
     // Menu Items - Construction
+    isometrics: 'Isometrici',
     materials: 'Materiali',
     workPackages: 'Work Packages',
     testPackages: 'Test Packages',
@@ -47,6 +48,7 @@ const translations = {
     settings: 'Impostazioni',
     gantt: 'Gantt',
     aiInsights: 'Report & Analisi',
+    qrGenerator: 'QR Check-in',
     
     // User Section
     testRole: 'Test Ruolo',
