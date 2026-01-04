@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase'
 const DEV_BYPASS_LOGIN = true  // ⚠️ CAMBIA A false IN PRODUZIONE!
 
 // Utente simulato in sviluppo - DEVE esistere nel DB!
-const DEV_USER_EMAIL = 'admin@test.com' // Cambia con una email esistente nel tuo DB
+const DEV_USER_EMAIL = 'giuseppe.pasquale@outlook.com'
 // ============================================================
 
 const AuthContext = createContext({})
