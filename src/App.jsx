@@ -1,7 +1,25 @@
+// App.jsx - CON BYPASS LOGIN PER SVILUPPO
+// ============================================================
+// IMPORTANTE: Imposta DEV_BYPASS_LOGIN = false prima del deploy!
+// ============================================================
+
 import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { I18nProvider } from './contexts/I18nContext'
+
+// ============================================================
+// CONFIGURAZIONE SVILUPPO - BYPASS LOGIN
+// ============================================================
+const DEV_BYPASS_LOGIN = true  // ⚠️ CAMBIA A false IN PRODUZIONE!
+
+// Se bypass attivo, quale utente simulare?
+const DEV_USER = {
+  id: 'dev-user-id',
+  email: 'dev@test.com',
+  role: 'admin'  // admin | cm | supervisor | foreman | worker | helper
+}
+// ============================================================
 
 // Pages
 import LoginPage from './pages/LoginPage'
@@ -28,7 +46,6 @@ import OreComponentiPage from './pages/OreComponentiPage'
 import AvanzamentoPage from './pages/AvanzamentoPage'
 import AttivitaPage from './pages/AttivitaPage'
 import ConfermaPresenzePage from './pages/ConfermaPresenzePage'
-import IsometriciPage from './pages/IsometriciPage'
 // NUOVE PAGINE - Statistiche e AI
 import GanttPage from './pages/GanttPage'
 import AIInsightsPage from './pages/AIInsightsPage'
@@ -38,13 +55,22 @@ import TestPackagesPage from './components/TestPackagesPage'
 // NUOVE PAGINE - QR Check-in
 import QRCheckinPage from './components/QRCheckinPage'
 import QRGeneratorPage from './components/QRGeneratorPage'
+// NUOVA PAGINA - Isometrici
+import IsometriciPage from './pages/IsometriciPage'
 
 // Components
 import Layout from './components/Layout'
 
-// Protected Route Component
+// Protected Route Component - CON BYPASS
 function ProtectedRoute({ children, minRole, requiredAccess }) {
   const { user, loading, isAtLeast, canAccess } = useAuth()
+
+  // ========== BYPASS LOGIN ==========
+  if (DEV_BYPASS_LOGIN) {
+    // In dev mode, mostra direttamente il contenuto
+    return <Layout>{children}</Layout>
+  }
+  // ==================================
 
   if (loading) {
     return (
@@ -82,7 +108,8 @@ function AppRoutes() {
     document.title = 'PTS - Project Tracking System'
   }, [])
 
-  if (loading) {
+  // ========== BYPASS LOADING ==========
+  if (!DEV_BYPASS_LOGIN && loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -94,11 +121,14 @@ function AppRoutes() {
       </div>
     )
   }
+  // ====================================
 
   return (
     <Routes>
       {/* ============ PUBLIC ROUTES ============ */}
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/login" element={
+        DEV_BYPASS_LOGIN ? <Navigate to="/" replace /> : (user ? <Navigate to="/" replace /> : <LoginPage />)
+      } />
       
       {/* QR Check-in - PUBBLICO (senza login!) */}
       <Route path="/qr-checkin/:progettoId" element={<QRCheckinPage />} />
@@ -130,6 +160,7 @@ function AppRoutes() {
       <Route path="/work-packages" element={<ProtectedRoute requiredAccess="work-packages"><WorkPackagesPage /></ProtectedRoute>} />
       <Route path="/test-packages" element={<ProtectedRoute requiredAccess="test-packages"><TestPackagesPage /></ProtectedRoute>} />
       <Route path="/avanzamento" element={<ProtectedRoute requiredAccess="avanzamento"><AvanzamentoPage /></ProtectedRoute>} />
+      {/* NUOVA PAGINA ISOMETRICI */}
       <Route path="/isometrici" element={<ProtectedRoute requiredAccess="isometrici"><IsometriciPage /></ProtectedRoute>} />
 
       {/* ============ PROTECTED - Supervisor+ ============ */}
@@ -150,11 +181,26 @@ function AppRoutes() {
 
 // Main App Component
 export default function App() {
+  // Banner di avviso se in modalità sviluppo
+  useEffect(() => {
+    if (DEV_BYPASS_LOGIN) {
+      console.warn('⚠️ DEV_BYPASS_LOGIN è ATTIVO! Ricorda di disattivarlo prima del deploy.')
+    }
+  }, [])
+
   return (
     <Router>
       <I18nProvider>
-        <AuthProvider>
-          <AppRoutes />
+        <AuthProvider devBypass={DEV_BYPASS_LOGIN} devUser={DEV_USER}>
+          {/* Banner visivo se bypass attivo */}
+          {DEV_BYPASS_LOGIN && (
+            <div className="fixed top-0 left-0 right-0 bg-amber-500 text-amber-900 text-center py-1 text-xs font-medium z-[9999]">
+              ⚠️ MODALITÀ SVILUPPO - Login bypassato come {DEV_USER.role}
+            </div>
+          )}
+          <div className={DEV_BYPASS_LOGIN ? 'pt-6' : ''}>
+            <AppRoutes />
+          </div>
         </AuthProvider>
       </I18nProvider>
     </Router>
