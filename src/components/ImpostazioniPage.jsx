@@ -109,15 +109,44 @@ function ProgettoTab() {
   const loadAree = async () => {
     setLoadingAree(true)
     try {
-      // Prima prova qr_codes (usata da QRGeneratorPage)
+      console.log('🔍 Caricamento aree per progetto:', progettoId)
+      
+      // 1. Prima prova zone_gps (dove sono effettivamente i dati!)
+      const { data: zoneGps, error: zoneErr } = await supabase
+        .from('zone_gps')
+        .select('*')
+        .eq('progetto_id', progettoId)
+        .order('nome')
+
+      console.log('📦 zone_gps:', zoneGps?.length || 0, 'errore:', zoneErr?.message)
+
+      if (!zoneErr && zoneGps && zoneGps.length > 0) {
+        setAree(zoneGps.map(z => ({
+          id: z.id,
+          nome: z.nome,
+          descrizione: z.descrizione,
+          latitudine: z.latitudine,
+          longitudine: z.longitudine,
+          raggio_metri: z.raggio_metri || 100,
+          colore: z.colore || '#3B82F6',
+          codice: z.codice,
+          attiva: z.attiva,
+          _source: 'zone_gps'
+        })))
+        setLoadingAree(false)
+        return
+      }
+
+      // 2. Fallback: prova qr_codes
       const { data: qrCodes, error: qrErr } = await supabase
         .from('qr_codes')
         .select('*')
         .eq('progetto_id', progettoId)
         .order('nome')
 
+      console.log('📦 qr_codes:', qrCodes?.length || 0, 'errore:', qrErr?.message)
+
       if (!qrErr && qrCodes && qrCodes.length > 0) {
-        // Mappa qr_codes al formato aree
         setAree(qrCodes.map(qr => ({
           id: qr.id,
           nome: qr.nome || qr.descrizione || qr.codice,
@@ -127,21 +156,25 @@ function ProgettoTab() {
           raggio_metri: qr.raggio_metri || 100,
           colore: qr.colore || '#3B82F6',
           codice: qr.codice,
-          // Flag per sapere da quale tabella viene
           _source: 'qr_codes'
         })))
-      } else {
-        // Fallback: prova aree_lavoro
-        const { data: areeData } = await supabase
-          .from('aree_lavoro')
-          .select('*')
-          .eq('progetto_id', progettoId)
-          .order('nome')
-        
-        setAree((areeData || []).map(a => ({ ...a, _source: 'aree_lavoro' })))
+        setLoadingAree(false)
+        return
       }
+
+      // 3. Ultimo fallback: aree_lavoro
+      const { data: areeData, error: areeErr } = await supabase
+        .from('aree_lavoro')
+        .select('*')
+        .eq('progetto_id', progettoId)
+        .order('nome')
+
+      console.log('📦 aree_lavoro:', areeData?.length || 0, 'errore:', areeErr?.message)
+      
+      setAree((areeData || []).map(a => ({ ...a, _source: 'aree_lavoro' })))
+      
     } catch (e) {
-      console.error('Errore caricamento aree:', e)
+      console.error('❌ Errore caricamento aree:', e)
       setAree([])
     }
     setLoadingAree(false)
@@ -189,38 +222,54 @@ function ProgettoTab() {
     if (!areaForm.nome || !areaForm.latitudine || !areaForm.longitudine) { setAreaMessage({ type: 'error', text: t('fillNameAndCoords') }); return }
     setSavingArea(true); setAreaMessage(null)
     try {
-      // Genera codice automatico se non presente
-      const codice = editingArea?.codice || `AREA-${Date.now().toString(36).toUpperCase()}`
+      // Determina quale tabella usare (default: zone_gps dove sono i dati)
+      const sourceTable = editingArea?._source || 'zone_gps'
       
       const payload = { 
         progetto_id: progettoId, 
         nome: areaForm.nome, 
         descrizione: areaForm.descrizione || null, 
-        gate: areaForm.descrizione || null, // QRGeneratorPage usa 'gate'
         latitudine: parseFloat(areaForm.latitudine), 
         longitudine: parseFloat(areaForm.longitudine), 
         raggio_metri: parseInt(areaForm.raggio_metri), 
         colore: areaForm.colore,
-        codice: codice
+        attiva: true
       }
       
-      // Usa qr_codes (stessa tabella di QRGeneratorPage)
+      console.log('💾 Salvataggio area in:', sourceTable, payload)
+      
       if (editingArea) { 
-        await supabase.from('qr_codes').update(payload).eq('id', editingArea.id) 
+        const { error } = await supabase.from(sourceTable).update(payload).eq('id', editingArea.id)
+        if (error) throw error
       } else { 
-        await supabase.from('qr_codes').insert(payload) 
+        // Per nuove aree, usa zone_gps
+        const { error } = await supabase.from('zone_gps').insert(payload) 
+        if (error) throw error
       }
       setAreaMessage({ type: 'success', text: editingArea ? t('areaUpdated') : t('areaCreated') })
       loadAree(); setTimeout(resetAreaForm, 1000)
-    } catch (err) { setAreaMessage({ type: 'error', text: err.message }) }
+    } catch (err) { 
+      console.error('❌ Errore salvataggio area:', err)
+      setAreaMessage({ type: 'error', text: err.message }) 
+    }
     finally { setSavingArea(false) }
   }
 
-  const handleDeleteArea = async (id) => { 
+  const handleDeleteArea = async (areaToDelete) => { 
     if (!confirm(t('deleteAreaConfirm'))) return
-    // Cancella da qr_codes (stessa tabella di QRGeneratorPage)
-    await supabase.from('qr_codes').delete().eq('id', id)
-    loadAree(); loadQrCodes()
+    try {
+      // Cancella dalla tabella corretta
+      const sourceTable = areaToDelete._source || 'qr_codes'
+      console.log('🗑️ Eliminazione area da:', sourceTable, areaToDelete.id)
+      
+      const { error } = await supabase.from(sourceTable).delete().eq('id', areaToDelete.id)
+      if (error) throw error
+      
+      loadAree(); loadQrCodes()
+    } catch (err) {
+      console.error('❌ Errore eliminazione area:', err)
+      setAreaMessage({ type: 'error', text: err.message })
+    }
   }
 
   const getAreaLocation = () => {
@@ -454,7 +503,7 @@ function ProgettoTab() {
                         </>
                       )}
                       <button onClick={() => handleEditArea(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title={t('edit')}>✏️</button>
-                      <button onClick={() => handleDeleteArea(area.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title={t('delete')}>🗑️</button>
+                      <button onClick={() => handleDeleteArea(area)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title={t('delete')}>🗑️</button>
                     </div>
                   </div>
                 </div>
