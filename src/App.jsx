@@ -28,6 +28,7 @@ import OreComponentiPage from './pages/OreComponentiPage'
 import AvanzamentoPage from './pages/AvanzamentoPage'
 import AttivitaPage from './pages/AttivitaPage'
 import ConfermaPresenzePage from './pages/ConfermaPresenzePage'
+import IsometriciPage from './pages/IsometriciPage'
 // NUOVE PAGINE - Statistiche e AI
 import GanttPage from './pages/GanttPage'
 import AIInsightsPage from './pages/AIInsightsPage'
@@ -129,6 +130,7 @@ function AppRoutes() {
       <Route path="/work-packages" element={<ProtectedRoute requiredAccess="work-packages"><WorkPackagesPage /></ProtectedRoute>} />
       <Route path="/test-packages" element={<ProtectedRoute requiredAccess="test-packages"><TestPackagesPage /></ProtectedRoute>} />
       <Route path="/avanzamento" element={<ProtectedRoute requiredAccess="avanzamento"><AvanzamentoPage /></ProtectedRoute>} />
+      <Route path="/isometrici" element={<ProtectedRoute requiredAccess="isometrici"><IsometriciPage /></ProtectedRoute>} />
 
       {/* ============ PROTECTED - Supervisor+ ============ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
