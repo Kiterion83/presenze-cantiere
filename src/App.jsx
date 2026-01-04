@@ -21,21 +21,26 @@ import MenuPage from './pages/MenuPage'
 // NUOVE PAGINE CONSTRUCTION
 import ActivitiesPage from './pages/ActivitiesPage'
 import WarehousePage from './pages/WarehousePage'
-import MaterialiPage from './pages/MaterialiPage'  // Rinominato da ComponentiPage
+import MaterialiPage from './pages/MaterialiPage'
 import PianificazionePage from './pages/PianificazionePage'
 import ForemanPage from './pages/ForemanPage'
 import OreComponentiPage from './pages/OreComponentiPage'
-import WorkPackagesPage from './components/WorkPackagesPage'  // Work Packages
-import TestPackagesPage from './components/TestPackagesPage'  // NUOVO - Test Packages & Commissioning
-import AvanzamentoPage from './pages/AvanzamentoPage'  // Dashboard Avanzamento
+import WorkPackagesPage from './components/WorkPackagesPage'
+import TestPackagesPage from './components/TestPackagesPage'
+import AvanzamentoPage from './pages/AvanzamentoPage'
+import AttivitaPage from './components/AttivitaPage'
+import ConfermaPresenzePage from './components/ConfermaPresenzePage'
 // NUOVE PAGINE - Statistiche e AI
 import GanttPage from './pages/GanttPage'
 import AIInsightsPage from './pages/AIInsightsPage'
+// NUOVE PAGINE - QR Check-in
+import QRCheckinPage from './components/QRCheckinPage'
+import QRGeneratorPage from './components/QRGeneratorPage'
 
 // Components
 import Layout from './components/Layout'
 
-// Protected Route Component - AGGIORNATO con supporto requiredAccess
+// Protected Route Component
 function ProtectedRoute({ children, minRole, requiredAccess }) {
   const { user, loading, isAtLeast, canAccess } = useAuth()
 
@@ -56,12 +61,10 @@ function ProtectedRoute({ children, minRole, requiredAccess }) {
     return <Navigate to="/login" replace />
   }
 
-  // Check special access (for warehouse, activities, etc.)
   if (requiredAccess && canAccess && !canAccess(requiredAccess)) {
     return <Navigate to="/" replace />
   }
 
-  // Check minimum role
   if (minRole && !isAtLeast(minRole)) {
     return <Navigate to="/" replace />
   }
@@ -73,7 +76,6 @@ function ProtectedRoute({ children, minRole, requiredAccess }) {
 function AppRoutes() {
   const { user, loading } = useAuth()
 
-  // Set document title
   useEffect(() => {
     document.title = 'PTS - Project Tracking System'
   }, [])
@@ -93,31 +95,33 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Public Routes */}
-      <Route 
-        path="/login" 
-        element={user ? <Navigate to="/" replace /> : <LoginPage />} 
-      />
+      {/* ============ PUBLIC ROUTES ============ */}
+      <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+      
+      {/* QR Check-in - PUBBLICO (senza login!) */}
+      <Route path="/qr-checkin/:progettoId" element={<QRCheckinPage />} />
 
-      {/* Protected Routes - All Users */}
+      {/* ============ PROTECTED - All Users ============ */}
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       <Route path="/checkin" element={<ProtectedRoute><CheckinPage /></ProtectedRoute>} />
       <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
       <Route path="/ferie" element={<ProtectedRoute><FeriePage /></ProtectedRoute>} />
       <Route path="/menu" element={<ProtectedRoute><MenuPage /></ProtectedRoute>} />
 
-      {/* Protected Routes - Foreman+ */}
+      {/* ============ PROTECTED - Foreman+ ============ */}
       <Route path="/team" element={<ProtectedRoute minRole="foreman"><TeamPage /></ProtectedRoute>} />
       <Route path="/rapportino" element={<ProtectedRoute minRole="foreman"><RapportinoPage /></ProtectedRoute>} />
       <Route path="/documenti" element={<ProtectedRoute minRole="foreman"><DocumentiPage /></ProtectedRoute>} />
       <Route path="/notifiche" element={<ProtectedRoute minRole="foreman"><NotifichePage /></ProtectedRoute>} />
       <Route path="/trasferimenti" element={<ProtectedRoute minRole="foreman"><TrasferimentiPage /></ProtectedRoute>} />
+      <Route path="/conferma-presenze" element={<ProtectedRoute minRole="foreman"><ConfermaPresenzePage /></ProtectedRoute>} />
+      <Route path="/attivita" element={<ProtectedRoute minRole="foreman"><AttivitaPage /></ProtectedRoute>} />
 
-      {/* NUOVE ROUTES - Construction Module */}
+      {/* ============ CONSTRUCTION MODULE ============ */}
       <Route path="/activities" element={<ProtectedRoute requiredAccess="activities"><ActivitiesPage /></ProtectedRoute>} />
       <Route path="/warehouse" element={<ProtectedRoute requiredAccess="warehouse"><WarehousePage /></ProtectedRoute>} />
       <Route path="/materiali" element={<ProtectedRoute requiredAccess="componenti"><MaterialiPage /></ProtectedRoute>} />
-      <Route path="/componenti" element={<Navigate to="/materiali" replace />} /> {/* Redirect per backward compatibility */}
+      <Route path="/componenti" element={<Navigate to="/materiali" replace />} />
       <Route path="/pianificazione" element={<ProtectedRoute requiredAccess="pianificazione"><PianificazionePage /></ProtectedRoute>} />
       <Route path="/foreman" element={<ProtectedRoute requiredAccess="foreman"><ForemanPage /></ProtectedRoute>} />
       <Route path="/ore-componenti" element={<ProtectedRoute requiredAccess="ore-componenti"><OreComponentiPage /></ProtectedRoute>} />
@@ -125,13 +129,14 @@ function AppRoutes() {
       <Route path="/test-packages" element={<ProtectedRoute requiredAccess="test-packages"><TestPackagesPage /></ProtectedRoute>} />
       <Route path="/avanzamento" element={<ProtectedRoute requiredAccess="avanzamento"><AvanzamentoPage /></ProtectedRoute>} />
 
-      {/* Protected Routes - Supervisor+ */}
+      {/* ============ PROTECTED - Supervisor+ ============ */}
       <Route path="/statistiche" element={<ProtectedRoute minRole="supervisor"><StatistichePage /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute minRole="supervisor"><DashboardPage /></ProtectedRoute>} />
       <Route path="/gantt" element={<ProtectedRoute minRole="supervisor"><GanttPage /></ProtectedRoute>} />
       <Route path="/ai-insights" element={<ProtectedRoute minRole="supervisor"><AIInsightsPage /></ProtectedRoute>} />
+      <Route path="/qr-generator" element={<ProtectedRoute><QRGeneratorPage /></ProtectedRoute>} />
 
-      {/* Protected Routes - Admin */}
+      {/* ============ PROTECTED - Admin ============ */}
       <Route path="/impostazioni" element={<ProtectedRoute minRole="admin"><ImpostazioniPage /></ProtectedRoute>} />
 
       {/* Catch all */}
