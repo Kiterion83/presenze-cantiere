@@ -122,6 +122,24 @@ const IconPianificazione = ({ className = "w-5 h-5" }) => (
   </svg>
 )
 
+
+const IconIsometrici = ({ className = "w-5 h-5" }) => (
+  <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="8" y="4" width="48" height="56" rx="3" fill="#F3F4F6" stroke="currentColor" strokeWidth="2.5"/>
+    <rect x="8" y="48" width="48" height="12" fill="#E5E7EB" stroke="currentColor" strokeWidth="2"/>
+    <line x1="32" y1="48" x2="32" y2="60" stroke="currentColor" strokeWidth="1.5"/>
+    <line x1="8" y1="54" x2="56" y2="54" stroke="currentColor" strokeWidth="1"/>
+    <path d="M16 20 L28 20 L28 32 L44 32" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round"/>
+    <rect x="12" y="17" width="4" height="6" fill="#3B82F6" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M28 20 Q28 26 28 26 Q28 32 34 32" stroke="#3B82F6" strokeWidth="3" fill="none"/>
+    <rect x="44" y="29" width="8" height="6" fill="#3B82F6" stroke="currentColor" strokeWidth="1.5"/>
+    <circle cx="36" cy="32" r="3" fill="#10B981" stroke="currentColor" strokeWidth="1.5"/>
+    <rect x="16" y="38" width="6" height="4" rx="1" fill="#F59E0B"/>
+    <rect x="26" y="38" width="6" height="4" rx="1" fill="#F59E0B"/>
+    <rect x="36" y="38" width="6" height="4" rx="1" fill="#F59E0B"/>
+  </svg>
+)
+
 export default function Layout({ children }) {
   const location = useLocation()
   const { persona, progetto, assegnazioni, assegnazione, ruolo, testRoleOverride, setTestRole, signOut, isAtLeast, canAccess, cambiaProgetto } = useAuth()
@@ -254,6 +272,7 @@ export default function Layout({ children }) {
       emoji: '🏗️',
       IconComponent: IconDiscipline, // NUOVA ICONA SVG
       items: [
+        { path: '/isometrici', labelKey: 'isometrics', IconComponent: IconIsometrici, minRole: 'engineer', specialAccess: 'isometrici' },
         { path: '/materiali', labelKey: 'materials', emoji: '🔩', minRole: 'engineer', specialAccess: 'componenti' },
         { path: '/work-packages', labelKey: 'workPackages', emoji: '📦', minRole: 'supervisor', specialAccess: 'work-packages' }, // MODIFICATO: supervisor invece di foreman
         { path: '/test-packages', labelKey: 'testPackages', emoji: '💧', minRole: 'foreman', specialAccess: 'test-packages' },
