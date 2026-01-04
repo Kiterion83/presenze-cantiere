@@ -31,7 +31,10 @@ export default function ConfermaPresenzePage() {
 
   // === LOAD SQUADRE FOREMAN ===
   const loadSquadreForeman = useCallback(async () => {
-    if (!progettoId || !persona?.id) return
+    if (!progettoId || !persona?.id) {
+      setLoading(false)
+      return
+    }
     
     try {
       // Trova squadre dove persona è foreman
@@ -48,9 +51,13 @@ export default function ConfermaPresenzePage() {
       // Se c'è solo una squadra, selezionala
       if (data && data.length === 1) {
         setSelectedSquadra(data[0])
+      } else {
+        // Nessuna squadra o più squadre: ferma il loading per mostrare UI
+        setLoading(false)
       }
     } catch (e) {
       console.error('Errore caricamento squadre:', e)
+      setLoading(false)
     }
   }, [progettoId, persona?.id])
 
@@ -102,9 +109,16 @@ export default function ConfermaPresenzePage() {
         .eq('attivo', true)
       
       if (error) throw error
-      setMembriSquadra(data?.map(a => a.persona).filter(Boolean) || [])
+      const membri = data?.map(a => a.persona).filter(Boolean) || []
+      setMembriSquadra(membri)
+      
+      // Se non ci sono membri, ferma il loading
+      if (membri.length === 0) {
+        setLoading(false)
+      }
     } catch (e) {
       console.error('Errore caricamento membri:', e)
+      setLoading(false)
     }
   }, [progettoId, selectedSquadra])
 
