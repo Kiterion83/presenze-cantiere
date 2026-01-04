@@ -1,5 +1,5 @@
 // AuthContext.jsx - CON SUPPORTO BYPASS LOGIN
-// Aggiungi questo al tuo AuthContext esistente o sostituiscilo temporaneamente
+// ALLINEATO ai nomi usati da Layout.jsx
 
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
@@ -31,7 +31,12 @@ export function AuthProvider({ children }) {
   const [assegnazione, setAssegnazione] = useState(null)
   const [progetto, setProgetto] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [progetti, setProgetti] = useState([])
+  
+  // IMPORTANTE: Layout.jsx usa "assegnazioni" (array), non "progetti"
+  const [assegnazioni, setAssegnazioni] = useState([])
+  
+  // Test role override per sviluppo
+  const [testRoleOverride, setTestRoleOverride] = useState(null)
 
   // Funzione per caricare dati utente
   const loadUserData = async (authUser) => {
@@ -42,12 +47,15 @@ export function AuthProvider({ children }) {
       const { data: personaData, error: personaError } = await supabase
         .from('persone')
         .select('*')
-        .ilike('email', authUser.email) // ilike per case-insensitive
-        .single()
+        .ilike('email', authUser.email)
+        .maybeSingle() // usa maybeSingle invece di single per evitare errori
 
-      if (personaError || !personaData) {
+      if (personaError) {
+        console.warn('⚠️ Errore query persona:', personaError)
+      }
+      
+      if (!personaData) {
         console.warn('⚠️ Persona non trovata per:', authUser.email)
-        console.warn('Errore:', personaError)
         
         // IN DEV MODE: Carica comunque tutti i progetti
         if (DEV_BYPASS_LOGIN) {
@@ -71,21 +79,27 @@ export function AuthProvider({ children }) {
         .eq('persona_id', personaData.id)
         .eq('attivo', true)
 
-      console.log('📋 Assegnazioni trovate:', assegnazioniData?.length || 0)
-      
       if (assError) {
         console.warn('⚠️ Errore caricamento assegnazioni:', assError)
       }
+      
+      console.log('📋 Assegnazioni trovate:', assegnazioniData?.length || 0)
 
       if (assegnazioniData && assegnazioniData.length > 0) {
+        // Formatta assegnazioni con progetto_id per Layout
+        const assegnazioniFormatted = assegnazioniData.map(a => ({
+          ...a,
+          progetto_id: a.progetto?.id || a.progetto_id
+        }))
+        
+        setAssegnazioni(assegnazioniFormatted)
+        
         // Prendi la prima assegnazione attiva
-        const primaAssegnazione = assegnazioniData[0]
+        const primaAssegnazione = assegnazioniFormatted[0]
         setAssegnazione(primaAssegnazione)
         setProgetto(primaAssegnazione.progetto)
-        setProgetti(assegnazioniData.map(a => a.progetto).filter(Boolean))
         console.log('✅ Progetto attivo:', primaAssegnazione.progetto?.nome)
       } else if (DEV_BYPASS_LOGIN) {
-        // IN DEV MODE: Se non ha assegnazioni, carica tutti i progetti
         console.log('🔧 DEV MODE: Nessuna assegnazione, carico tutti i progetti...')
         await loadAllProjects()
       }
@@ -102,56 +116,68 @@ export function AuthProvider({ children }) {
   // Carica TUTTI i progetti (per dev mode)
   const loadAllProjects = async () => {
     try {
+      // Query senza filtro 'attivo' per evitare errori se colonna non esiste
       const { data: tuttiProgetti, error } = await supabase
         .from('progetti')
         .select('*')
-        .eq('attivo', true)
         .order('nome')
 
       if (error) {
         console.error('❌ Errore caricamento progetti:', error)
+        // Prova query ancora più semplice
+        const { data: progetti2 } = await supabase.from('progetti').select('*')
+        if (progetti2 && progetti2.length > 0) {
+          setupDevProjects(progetti2)
+        }
         return
       }
 
       console.log('📦 Progetti caricati:', tuttiProgetti?.length || 0)
       
       if (tuttiProgetti && tuttiProgetti.length > 0) {
-        setProgetti(tuttiProgetti)
-        setProgetto(tuttiProgetti[0])
-        
-        // Crea assegnazione fittizia per dev
-        setAssegnazione({
-          id: 'dev-assegnazione',
-          ruolo: 'admin',
-          progetto: tuttiProgetti[0]
-        })
-        
-        // Crea persona fittizia se non esiste
-        if (!persona) {
-          setPersona({
-            id: 'dev-persona',
-            nome: 'Dev',
-            cognome: 'User',
-            email: DEV_USER_EMAIL
-          })
-        }
-        
-        console.log('✅ Progetto selezionato:', tuttiProgetti[0].nome)
+        setupDevProjects(tuttiProgetti)
       }
     } catch (e) {
       console.error('❌ Errore loadAllProjects:', e)
     }
   }
+  
+  // Setup progetti per dev mode
+  const setupDevProjects = (tuttiProgetti) => {
+    // Crea assegnazioni virtuali per ogni progetto (come fa l'admin nel sistema reale)
+    const assegnazioniVirtuali = tuttiProgetti.map(p => ({
+      id: `dev-ass-${p.id}`,
+      progetto_id: p.id,
+      progetto: p,
+      ruolo: 'admin',
+      attivo: true,
+      isVirtual: true // flag per indicare che è accesso admin
+    }))
+    
+    setAssegnazioni(assegnazioniVirtuali)
+    setProgetto(tuttiProgetti[0])
+    setAssegnazione(assegnazioniVirtuali[0])
+    
+    // Crea persona fittizia se non esiste
+    if (!persona) {
+      setPersona({
+        id: 'dev-persona',
+        nome: 'Dev',
+        cognome: 'Admin',
+        email: DEV_USER_EMAIL
+      })
+    }
+    
+    console.log('✅ DEV Setup completato con', tuttiProgetti.length, 'progetti')
+  }
 
   // Inizializzazione
   useEffect(() => {
     const init = async () => {
-      // ========== BYPASS LOGIN ==========
       if (DEV_BYPASS_LOGIN) {
         console.log('⚠️ BYPASS LOGIN ATTIVO')
         console.log('📧 Email configurata:', DEV_USER_EMAIL)
         
-        // Simula utente auth
         const fakeAuthUser = {
           id: 'dev-bypass-id',
           email: DEV_USER_EMAIL
@@ -161,9 +187,7 @@ export function AuthProvider({ children }) {
         await loadUserData(fakeAuthUser)
         return
       }
-      // ==================================
 
-      // Flusso normale
       const { data: { session } } = await supabase.auth.getSession()
       
       if (session?.user) {
@@ -176,7 +200,6 @@ export function AuthProvider({ children }) {
 
     init()
 
-    // Listener per cambi auth (solo se non in bypass)
     if (!DEV_BYPASS_LOGIN) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event, session) => {
@@ -188,6 +211,7 @@ export function AuthProvider({ children }) {
             setPersona(null)
             setAssegnazione(null)
             setProgetto(null)
+            setAssegnazioni([])
             setLoading(false)
           }
         }
@@ -197,58 +221,34 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // Ruolo corrente (con override per test)
+  const ruolo = testRoleOverride || assegnazione?.ruolo || 'admin'
+
   // Verifica se utente ha almeno un certo ruolo
   const isAtLeast = (minRole) => {
-    if (DEV_BYPASS_LOGIN) return true // In dev, permetti tutto
+    if (DEV_BYPASS_LOGIN) return true
     
-    const userRole = assegnazione?.ruolo || 'helper'
-    const userLevel = ROLE_HIERARCHY[userRole] || 0
+    const userLevel = ROLE_HIERARCHY[ruolo] || 0
     const minLevel = ROLE_HIERARCHY[minRole] || 0
     return userLevel >= minLevel
   }
 
   // Verifica accesso a moduli speciali
   const canAccess = (module) => {
-    if (DEV_BYPASS_LOGIN) return true // In dev, permetti tutto
-    
-    // Implementa logica basata su permessi specifici
-    // Per ora ritorna true se ha almeno ruolo foreman
+    if (DEV_BYPASS_LOGIN) return true
     return isAtLeast('foreman')
   }
 
-  // Cambia progetto attivo
-  const switchProgetto = async (progettoId) => {
-    console.log('🔄 Switching to progetto:', progettoId)
+  // Cambia progetto attivo - NOME: cambiaProgetto (come Layout si aspetta)
+  const cambiaProgetto = async (progettoId) => {
+    console.log('🔄 Cambio progetto a:', progettoId)
     
-    // Cerca il progetto nella lista
-    const nuovoProgetto = progetti.find(p => p.id === progettoId)
+    const nuovaAss = assegnazioni.find(a => a.progetto_id === progettoId || a.progetto?.id === progettoId)
     
-    if (nuovoProgetto) {
-      setProgetto(nuovoProgetto)
-      
-      // Se non in bypass, cerca anche l'assegnazione
-      if (!DEV_BYPASS_LOGIN && persona) {
-        const { data: nuovaAssegnazione } = await supabase
-          .from('assegnazioni')
-          .select(`*, progetto:progetti(*)`)
-          .eq('persona_id', persona.id)
-          .eq('progetto_id', progettoId)
-          .eq('attivo', true)
-          .single()
-
-        if (nuovaAssegnazione) {
-          setAssegnazione(nuovaAssegnazione)
-        }
-      } else {
-        // In dev mode, aggiorna assegnazione fittizia
-        setAssegnazione({
-          id: 'dev-assegnazione',
-          ruolo: 'admin',
-          progetto: nuovoProgetto
-        })
-      }
-      
-      console.log('✅ Progetto cambiato:', nuovoProgetto.nome)
+    if (nuovaAss) {
+      setProgetto(nuovaAss.progetto)
+      setAssegnazione(nuovaAss)
+      console.log('✅ Progetto cambiato:', nuovaAss.progetto?.nome)
       return true
     }
     
@@ -256,8 +256,8 @@ export function AuthProvider({ children }) {
     return false
   }
 
-  // Logout
-  const logout = async () => {
+  // Logout - NOME: signOut (come Layout si aspetta)
+  const signOut = async () => {
     if (DEV_BYPASS_LOGIN) {
       window.location.href = '/login'
       return
@@ -268,6 +268,12 @@ export function AuthProvider({ children }) {
     setPersona(null)
     setAssegnazione(null)
     setProgetto(null)
+    setAssegnazioni([])
+  }
+
+  // Funzione per test role
+  const setTestRole = (role) => {
+    setTestRoleOverride(role)
   }
 
   const value = {
@@ -276,13 +282,24 @@ export function AuthProvider({ children }) {
     assegnazione,
     progetto,
     progettoId: progetto?.id,
-    progetti,
+    
+    // IMPORTANTE: Layout.jsx usa questi nomi esatti
+    assegnazioni,        // array di assegnazioni (non "progetti")
+    ruolo,              // ruolo corrente
+    cambiaProgetto,     // funzione cambio progetto (non "switchProgetto")
+    signOut,            // funzione logout (non "logout")
+    testRoleOverride,   // per test ruoli
+    setTestRole,        // per cambiare ruolo test
+    
     loading,
     isAtLeast,
     canAccess,
-    switchProgetto,
-    logout,
-    // Flag per sapere se siamo in bypass
+    
+    // Alias per compatibilità
+    progetti: assegnazioni.map(a => a.progetto).filter(Boolean),
+    switchProgetto: cambiaProgetto,
+    logout: signOut,
+    
     isDevMode: DEV_BYPASS_LOGIN
   }
 
