@@ -20,16 +20,8 @@ export default function QRGeneratorPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Check permessi
-  if (!isAtLeast || !isAtLeast('supervisor')) {
-    return (
-      <div className="p-6 text-center">
-        <div className="text-6xl mb-4">X</div>
-        <h1 className="text-xl font-bold text-gray-700">Accesso non autorizzato</h1>
-        <p className="text-gray-500">Devi essere almeno Supervisor</p>
-      </div>
-    )
-  }
+  // Check permessi - rimosso, accessibile a tutti gli autenticati
+  // Il check del ruolo è già fatto in App.jsx se necessario
 
   if (!progettoId) {
     return (
