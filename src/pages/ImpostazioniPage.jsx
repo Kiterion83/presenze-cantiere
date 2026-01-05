@@ -75,8 +75,12 @@ export default function ImpostazioniPage() {
 
 // ==================== PROGETTO + AREE LAVORO + QR CODES TAB ====================
 function ProgettoTab() {
-  const { progetto, assegnazione } = useAuth()
+  const { progetto, assegnazione, progettoId } = useAuth()
   const { t, language } = useI18n()
+  
+  // Usa progettoId con fallback a progetto.id
+  const projectId = progettoId || progetto?.id
+  console.log('🏗️ ProgettoTab - projectId:', projectId, 'progetto:', progetto?.nome)
   const [formData, setFormData] = useState({ nome: '', codice: '', indirizzo: '', citta: '', data_inizio: '', data_fine_prevista: '', latitudine: '', longitudine: '', raggio_checkin: 200 })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
@@ -100,21 +104,53 @@ function ProgettoTab() {
         raggio_checkin: progetto.raggio_checkin || 200
       })
     }
-    if (assegnazione?.progetto_id) {
+    console.log('🔑 useEffect - projectId:', projectId)
+    if (projectId) {
       loadAree()
       loadQrCodes()
     }
-  }, [progetto, assegnazione?.progetto_id])
+  }, [progetto, projectId])
 
   const loadAree = async () => {
     setLoadingAree(true)
-    const { data } = await supabase.from('aree_lavoro').select('*').eq('progetto_id', assegnazione.progetto_id).order('nome')
-    setAree(data || [])
+    console.log('🔍 Caricamento aree per progetto:', projectId)
+    try {
+      // 1. Prima prova zone_gps (dove sono i dati!)
+      const { data: zoneGps, error: zoneErr } = await supabase
+        .from('zone_gps')
+        .select('*')
+        .eq('progetto_id', projectId)
+        .order('nome')
+
+      console.log('📦 zone_gps:', zoneGps?.length || 0, 'errore:', zoneErr?.message)
+
+      if (!zoneErr && zoneGps && zoneGps.length > 0) {
+        setAree(zoneGps.map(z => ({
+          ...z,
+          _source: 'zone_gps'
+        })))
+        setLoadingAree(false)
+        return
+      }
+
+      // 2. Fallback: prova aree_lavoro
+      const { data: areeData } = await supabase
+        .from('aree_lavoro')
+        .select('*')
+        .eq('progetto_id', projectId)
+        .order('nome')
+      
+      console.log('📦 aree_lavoro:', areeData?.length || 0)
+      setAree((areeData || []).map(a => ({ ...a, _source: 'aree_lavoro' })))
+    } catch (e) {
+      console.error('❌ Errore caricamento aree:', e)
+      setAree([])
+    }
     setLoadingAree(false)
   }
 
   const loadQrCodes = async () => {
-    const { data } = await supabase.from('qr_codes').select('*').eq('progetto_id', assegnazione.progetto_id)
+    const { data } = await supabase.from('qr_codes').select('*').eq('progetto_id', projectId)
     const qrMap = {}
     data?.forEach(qr => { if (qr.area_lavoro_id) qrMap[qr.area_lavoro_id] = qr })
     setQrCodes(qrMap)
@@ -124,26 +160,15 @@ function ProgettoTab() {
     setSaving(true)
     setMessage(null)
     try {
-      const updateData = {
+      const { error } = await supabase.from('progetti').update({
         nome: formData.nome, codice: formData.codice, indirizzo: formData.indirizzo, citta: formData.citta,
         data_inizio: formData.data_inizio || null, data_fine_prevista: formData.data_fine_prevista || null,
         latitudine: formData.latitudine ? parseFloat(formData.latitudine) : null,
         longitudine: formData.longitudine ? parseFloat(formData.longitudine) : null,
         raggio_checkin: parseInt(formData.raggio_checkin) || 200
-      }
-      
-      const { error } = await supabase.from('progetti').update(updateData).eq('id', progetto.id)
+      }).eq('id', progetto.id)
       if (error) throw error
-      
-      // AGGIORNA IL CONTEXT - forza reload della pagina per aggiornare i dati
-      // Questo è necessario perché il context AuthContext non ha un metodo per refreshare il progetto
-      setMessage({ type: 'success', text: t('projectUpdated') + ' - Ricaricamento...' })
-      
-      // Ricarica dopo 1 secondo per mostrare il messaggio
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
-      
+      setMessage({ type: 'success', text: t('projectUpdated') })
     } catch (err) { setMessage({ type: 'error', text: err.message }) }
     finally { setSaving(false) }
   }
@@ -166,20 +191,47 @@ function ProgettoTab() {
     if (!areaForm.nome || !areaForm.latitudine || !areaForm.longitudine) { setAreaMessage({ type: 'error', text: t('fillNameAndCoords') }); return }
     setSavingArea(true); setAreaMessage(null)
     try {
-      const payload = { progetto_id: assegnazione.progetto_id, nome: areaForm.nome, descrizione: areaForm.descrizione || null, latitudine: parseFloat(areaForm.latitudine), longitudine: parseFloat(areaForm.longitudine), raggio_metri: parseInt(areaForm.raggio_metri), colore: areaForm.colore }
-      if (editingArea) { await supabase.from('aree_lavoro').update(payload).eq('id', editingArea.id) }
-      else { await supabase.from('aree_lavoro').insert(payload) }
+      // Usa la tabella di origine o zone_gps per default
+      const sourceTable = editingArea?._source || 'zone_gps'
+      const payload = { 
+        progetto_id: projectId, 
+        nome: areaForm.nome, 
+        descrizione: areaForm.descrizione || null, 
+        latitudine: parseFloat(areaForm.latitudine), 
+        longitudine: parseFloat(areaForm.longitudine), 
+        raggio_metri: parseInt(areaForm.raggio_metri), 
+        colore: areaForm.colore,
+        attiva: true
+      }
+      console.log('💾 Salvataggio area in:', sourceTable, payload)
+      if (editingArea) { 
+        const { error } = await supabase.from(sourceTable).update(payload).eq('id', editingArea.id) 
+        if (error) throw error
+      } else { 
+        const { error } = await supabase.from('zone_gps').insert(payload) 
+        if (error) throw error
+      }
       setAreaMessage({ type: 'success', text: editingArea ? t('areaUpdated') : t('areaCreated') })
       loadAree(); setTimeout(resetAreaForm, 1000)
-    } catch (err) { setAreaMessage({ type: 'error', text: err.message }) }
+    } catch (err) { 
+      console.error('❌ Errore salvataggio:', err)
+      setAreaMessage({ type: 'error', text: err.message }) 
+    }
     finally { setSavingArea(false) }
   }
 
-  const handleDeleteArea = async (id) => { 
+  const handleDeleteArea = async (area) => { 
     if (!confirm(t('deleteAreaConfirm'))) return
-    await supabase.from('qr_codes').delete().eq('area_lavoro_id', id)
-    await supabase.from('aree_lavoro').delete().eq('id', id)
-    loadAree(); loadQrCodes()
+    try {
+      const sourceTable = area._source || 'zone_gps'
+      console.log('🗑️ Eliminazione area da:', sourceTable, area.id)
+      const { error } = await supabase.from(sourceTable).delete().eq('id', area.id)
+      if (error) throw error
+      loadAree(); loadQrCodes()
+    } catch (err) {
+      console.error('❌ Errore eliminazione:', err)
+      setAreaMessage({ type: 'error', text: err.message })
+    }
   }
 
   const getAreaLocation = () => {
@@ -413,7 +465,7 @@ function ProgettoTab() {
                         </>
                       )}
                       <button onClick={() => handleEditArea(area)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title={t('edit')}>✏️</button>
-                      <button onClick={() => handleDeleteArea(area.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title={t('delete')}>🗑️</button>
+                      <button onClick={() => handleDeleteArea(area)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title={t('delete')}>🗑️</button>
                     </div>
                   </div>
                 </div>
